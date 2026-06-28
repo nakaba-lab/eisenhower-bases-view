@@ -1,0 +1,86 @@
+name: Release Deploy
+
+# タグ push（v*）を起点にビルド→デプロイ→疎通確認（smoke）を行う、コメント主体のデプロイ雛形。
+# 設定されるまで安全に no-op: .claude/project-profile.json の commands.deploy が空のうちは
+# skip メッセージを出して成功する。/project-setup のデプロイヒアリング（デプロイ先・提供形態）で
+# commands.deploy を確定したときに有効化し、デプロイ先依存の中身（クラウド CLI・認証・smoke URL）を
+# 下のコメント雛形から埋める。デプロイしないプロジェクトはこのファイルを削除してよい。
+# profile の読み取りは共有スクリプト .claude/scripts/read_profile_command.py に依存する
+# （このファイル単体を別リポジトリへコピーする場合は同伴する）。
+# タグ運用（SemVer・release/hotfix からのタグ付け）は .claude/rules/git-workflow.md を参照。
+on:
+  push:
+    tags: ['v*']
+
+# GITHUB_TOKEN は読み取りのみ（least privilege）。デプロイ先が GitHub リソースを要する場合のみ
+# ジョブ単位で昇格する（例: OIDC クラウド認証 → id-token: write ／ GHCR へ push → packages: write。
+# その場合も permissions はジョブ側に書き、トップレベルは read のまま据え置く）。
+permissions:
+  contents: read
+
+jobs:
+  release-deploy:
+    runs-on: ubuntu-latest
+    # environment: production   # ← Environment secret を使う場合に有効化する（/project-setup が整える。
+    #                                下の Deploy ステップの認証コメントを参照）
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read deploy command from profile
+        id: profile
+        run: |
+          set -euo pipefail
+          # .claude/project-profile.json の commands を読む（プロファイルが正。読み取りは
+          # 共有スクリプト .claude/scripts/read_profile_command.py ＝ 4 CI 雛形で共通）
+          DEPLOY="$(python3 .claude/scripts/read_profile_command.py deploy)"
+          BUILD="$(python3 .claude/scripts/read_profile_command.py build)"
+          if [ -z "$DEPLOY" ]; then
+            echo "commands.deploy 未設定: skip（/project-setup のデプロイヒアリングで有効化する）"
+          fi
+          # 多行の commands.deploy / commands.build を壊さず渡すため heredoc 形式で書き込む
+          # （echo "key=value" は値に改行が入ると出力レコードを壊す。後続の if 判定は多行値でも機能する）。
+          { echo "deploy<<__PROFILE_EOF__"; printf '%s\n' "$DEPLOY"; echo "__PROFILE_EOF__"; } >> "$GITHUB_OUTPUT"
+          { echo "build<<__PROFILE_EOF__"; printf '%s\n' "$BUILD"; echo "__PROFILE_EOF__"; } >> "$GITHUB_OUTPUT"
+      # --- 言語セットアップ（コメント雛形。/project-setup が有効化時にスタックへ合わせて整える）---
+      # - uses: actions/setup-node@v5
+      #   with:
+      #     node-version: 24
+      #     cache: npm
+      - name: Build
+        if: steps.profile.outputs.deploy != ''
+        env:
+          BUILD_CMD: ${{ steps.profile.outputs.build }}
+        run: |
+          set -euo pipefail
+          if [ -n "$BUILD_CMD" ]; then
+            echo "+ build: $BUILD_CMD"
+            bash -c "$BUILD_CMD"
+          else
+            echo "commands.build 未設定: build skip（デプロイ前ビルドが要るなら commands.build を設定する）"
+          fi
+      - name: Deploy
+        if: steps.profile.outputs.deploy != ''
+        env:
+          DEPLOY_CMD: ${{ steps.profile.outputs.deploy }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # ここに環境別のデプロイ手順を足す（/project-setup のデプロイヒアリングで埋める）。例:
+          #   - クラウド CLI: aws / gcloud / az のセットアップ Action ＋ OIDC（または secrets）で認証
+          #   - コンテナ: docker build → レジストリへ push（タグは $RELEASE_TAG）→ 実行環境を更新
+          #   - パッケージ: レジストリへ publish（npm publish / twine upload 等）
+          # 認証は OIDC（短命トークン・credential を置かない）を第一候補にする（ジョブの permissions に
+          # id-token: write を足す）。長期 credential を置く場合は Environment secret（docs-deploy.yml の
+          # github-pages と同型）に置いて env: 経由で渡し、deployment protection rules（required reviewers・
+          # ブランチ/タグ制限）で守る（上の environment: 行を有効化する）。
+          # 注意: protection rules は public リポジトリは全プラン可・private は Pro/Team/Enterprise 限定
+          # （Free の private では使えない。その場合はリポジトリ secret に置き、rulesets で v* タグの作成者を
+          # 制限する次善策を採る）。
+          echo "+ deploy: $DEPLOY_CMD (tag: $RELEASE_TAG)"
+          bash -c "$DEPLOY_CMD"
+      - name: Smoke check
+        if: steps.profile.outputs.deploy != ''
+        run: |
+          set -euo pipefail
+          # ここに環境別の疎通確認を足す（デプロイ直後に主要導線が生きているかの最小確認）。例:
+          # curl -fsS --retry 3 --retry-delay 5 "$SMOKE_URL" >/dev/null && echo "smoke: ok"
+          echo "smoke: 疎通確認は未設定（/project-setup のデプロイヒアリングで整える）"

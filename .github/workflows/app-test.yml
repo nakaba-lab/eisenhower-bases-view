@@ -1,0 +1,115 @@
+name: App Test
+
+# アプリ本体のテスト・Lint・ビルドを PR / push で実行する CI 雛形。
+# 設定されるまで安全に no-op: .claude/project-profile.json の commands（test/build/lint）が
+# 空のうちは skip メッセージを出して成功する（/project-setup が commands 確定時に有効化する。
+# CI でのテスト実行が不要なプロジェクトはこのファイルを削除してよい）。
+# profile の読み取りは共有スクリプト .claude/scripts/read_profile_command.py に依存する
+# （このファイル単体を別リポジトリへコピーする場合は同伴する）。
+# あわせて feat/fix のテスト必須チェック（test-required ジョブ）も同居する:
+# feature/* ・ fix/* からの PR にテストらしき差分が無ければ fail する。
+# 逃がし: PR 本文に「Test: none」行、または「test:none」ラベル（design-doc-check の
+# 「Design: none」と同型）。
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# GITHUB_TOKEN は読み取りのみ（least privilege）。profile 読み・コマンド実行・diff 判定に write は不要
+# （新規リポジトリの既定は read-only だが、permissive な既定が残る組織もあるため明示して固定する）。
+permissions:
+  contents: read
+
+jobs:
+  # commands.test / build / lint を実行する（すべて空なら skip）。
+  app-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # --- 言語セットアップ（コメント雛形。/project-setup が有効化時にスタックへ合わせて整える）---
+      # - uses: actions/setup-node@v5
+      #   with:
+      #     node-version: 24
+      #     cache: npm
+      # - uses: actions/setup-python@v6
+      #   with:
+      #     python-version: "3.12"
+      # - uses: actions/setup-java@v5
+      #   with:
+      #     distribution: temurin
+      #     java-version: "21"
+      - name: Run lint / build / test from project profile
+        run: |
+          set -euo pipefail
+          # .claude/project-profile.json の commands を読む（プロファイルが正。読み取りは
+          # 共有スクリプト .claude/scripts/read_profile_command.py ＝ 4 CI 雛形で共通）
+          # マルチサービス（モノレポ）は profile の services[]（任意）で宣言する。サービス別に回すなら
+          # services[].dir を手がかりに matrix/サービス別ジョブへ展開する（指針は .claude/rules/scale.md）。
+          LINT="$(python3 .claude/scripts/read_profile_command.py lint)"
+          BUILD="$(python3 .claude/scripts/read_profile_command.py build)"
+          TEST="$(python3 .claude/scripts/read_profile_command.py test)"
+          INTEGRATION="$(python3 .claude/scripts/read_profile_command.py integrationTest)"
+          if [ -z "${LINT}${BUILD}${TEST}${INTEGRATION}" ]; then
+            echo "commands.test/build/lint/integrationTest が未設定: skip（/project-setup が確定時に有効化する）"
+            exit 0
+          fi
+          if [ -n "$LINT" ];  then echo "+ lint:  $LINT";  bash -c "$LINT";  fi
+          if [ -n "$BUILD" ]; then echo "+ build: $BUILD"; bash -c "$BUILD"; fi
+          # 注意: テスト収集 0 件で非ゼロ終了するランナーがある（pytest=exit 5／vitest=--passWithNoTests 未指定）。
+          # set -e で CI が落ちるため、初期は最低 1 テストを置くか commands.test 側で吸収する
+          # （例: pytest なら "pytest; rc=$?; [ $rc -eq 5 ] && exit 0 || exit $rc"、vitest なら --passWithNoTests を付ける）。
+          if [ -n "$TEST" ];  then echo "+ test:  $TEST";  bash -c "$TEST";  fi
+          # 結合テスト（commands.integrationTest 設定時のみ実行。体系は .claude/rules/testing-strategy.md）。
+          # 実 DB/外部サービスを要する結合テストは job レベルの service container（services:）が要る
+          # — service 雛形は db 論点（将来）or 利用者が追加する。未設定なら no-op。
+          if [ -n "$INTEGRATION" ]; then echo "+ integration: $INTEGRATION"; bash -c "$INTEGRATION"; fi
+          # --- カバレッジ計測（commands.coverage 設定時に有効化する。コメントを外す）---
+          # COVERAGE="$(python3 .claude/scripts/read_profile_command.py coverage)"
+          # if [ -n "$COVERAGE" ]; then echo "+ coverage: $COVERAGE"; bash -c "$COVERAGE"; fi
+      # --- カバレッジのアーティファクト化（commands.coverage 有効化時にコメントを外す）---
+      # - name: Upload coverage artifact
+      #   uses: actions/upload-artifact@v6
+      #   with:
+      #     name: coverage
+      #     path: coverage/   # ← プロジェクトのカバレッジ出力先に合わせる
+
+  # feature/* ・ fix/* の PR にテストの追加・更新を要求する（テストなしコミット禁止の CI 側ガード）。
+  test-required:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      # 「テストらしきパス」の判定正規表現（プロジェクトのテスト配置の流儀に合わせて調整可）
+      TEST_PATH_REGEX: 'test|spec'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Require test changes
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+          # feature/* ・ fix/* 以外（docs/chore 等）は対象外
+          case "$HEAD_REF" in
+            feature/*|fix/*) ;;
+            *) echo "対象ブランチ外（$HEAD_REF）: skip"; exit 0 ;;
+          esac
+          # 逃がし: test:none ラベル
+          case ",$PR_LABELS," in
+            *,test:none,*) echo "ラベル test:none: skip"; exit 0 ;;
+          esac
+          # 逃がし: PR 本文の Test: none（行頭・大文字小文字無視）
+          if printf '%s' "$PR_BODY" | grep -qiE '^[[:space:]]*test:[[:space:]]*none\b'; then
+            echo "PR 本文に Test: none: skip"; exit 0
+          fi
+          # テストらしきパスの差分があるか（三点＝merge-base 起点）
+          if git diff --name-only "origin/${BASE_REF}...HEAD" | grep -qiE "$TEST_PATH_REGEX"; then
+            echo "テストの追加・更新あり: ok"
+          else
+            echo "::error::feat/fix の PR にテストの追加・更新が見当たりません（パスに test|spec を含むファイルが diff にありません）。テストを追加するか、テスト不要な変更なら PR 本文に 'Test: none' を書くか 'test:none' ラベルを付けてください。"
+            exit 1
+          fi

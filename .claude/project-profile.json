@@ -1,0 +1,52 @@
+{
+  "$schema": "./project-profile.schema.json",
+  "templateVersion": "v1.9.0",
+  "templateOrigin": "",
+  "name": "Eisenhower Matrix",
+  "kind": "desktop",
+  "languages": ["typescript"],
+  "packageManager": "npm",
+  "commands": {
+    "build": "npm run build",
+    "test": "npm test",
+    "dev": "npm run dev",
+    "lint": "npm run lint",
+    "format": "npm run format",
+    "migration": "",
+    "integrationTest": "",
+    "coverage": "",
+    "deploy": ""
+  },
+  "vcsHost": "github",
+  "defaultBranch": "develop",
+  "protectedBranches": ["develop", "main"],
+  "protectedGlobs": ["main.js"],
+  "frontendDir": "src/ui",
+  "frontendDirs": [],
+  "checks": [
+    { "match": "**/*.ts", "command": "npx tsc --noEmit", "cwdFromRoot": true, "timeout": 60 },
+    { "match": "**/*.tsx", "command": "npx tsc --noEmit", "cwdFromRoot": true, "timeout": 60 }
+  ],
+  "services": [],
+  "commitMessage": {
+    "enabled": true,
+    "types": ["feat", "fix", "docs", "style", "refactor", "perf", "test", "chore", "build", "ci", "revert"],
+    "requireScope": true,
+    "requireBody": true,
+    "bodyExemptTypes": [],
+    "footer": "Refs",
+    "ticketBranchPattern": "^[a-z]+/(\\d+)-"
+  },
+  "designDoc": {
+    "enabled": true,
+    "dir": "docs/design",
+    "enforceTypes": ["feat", "fix"],
+    "escapeKeyword": "Design: none"
+  },
+  "docsSite": {
+    "enabled": true,
+    "dir": "docs-site",
+    "designGlob": "docs/design",
+    "checkCommand": ["npm", "run", "check"]
+  }
+}

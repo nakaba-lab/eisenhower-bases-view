@@ -24,7 +24,7 @@ jobs:
     # environment: production   # ← Environment secret を使う場合に有効化する（/project-setup が整える。
     #                                下の Deploy ステップの認証コメントを参照）
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Read deploy command from profile
         id: profile
         run: |

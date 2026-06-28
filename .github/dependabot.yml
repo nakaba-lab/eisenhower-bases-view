@@ -7,16 +7,23 @@
 # （.gitlab/ci/app-test.yml のコメント参照）。
 version: 2
 updates:
+  # プラグイン本体（ルート package.json）の依存更新。/project-setup がスタック確定時に有効化。
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+
   # docs-site（Astro+Starlight）の依存更新。docs サイトを使わない（docs-site/ を削除した）
   # プロジェクトはこのエントリも削除する。
   - package-ecosystem: npm
     directory: /docs-site
     schedule:
       interval: weekly
-    # 更新 PR をまとめたい場合は groups を使う（任意）:
-    # groups:
-    #   docs-site-deps:
-    #     patterns: ["*"]
+    # astro 本体と @astrojs/*・astro-* は peer 依存で密結合のため 1 PR にまとめる
+    # （個別昇格は npm ci の ERESOLVE で互いにブロックし合うため）。
+    groups:
+      astro:
+        patterns: ["astro", "@astrojs/*", "astro-*"]
 
   # 同梱 CI（.github/workflows/）と利用者が後から足すワークフローの Action 更新。
   # 同梱 CI はテンプレートが出荷するスタック非依存の資産のため、既定で有効にしている。

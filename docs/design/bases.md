@@ -1,15 +1,15 @@
 ---
 title: Bases アダプタ層 設計
 area: bases
-status: draft
+status: active
 relatedIssues: [18]
 updated: 2026-06-29
 kind: api
 ---
 
-# Bases アダプタ層 設計（draft）
+# Bases アダプタ層 設計
 
-> `status: draft`。Issue #18（F1）の実装前設計として先行作成。実装完了後に現状へ合わせて確定し `status: active` に更新する。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項（スパイク #16 確定）」に接地する。
+> Issue #18（F1）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項（スパイク #16 確定）」に接地する。軸値読み取り・象限配置（#19）、ドラッグ書き戻し（#20）、軸プロパティ設定（#21）は本領域に積み増す。
 
 ## 責務（このユニットは何をするか）
 
@@ -21,19 +21,20 @@ F1（#18）の範囲は **登録・graceful 失敗処理・描画経路・解除
 
 ```mermaid
 flowchart TD
-    main["src/main.ts<br/>onload: registerEisenhowerView()"] --> reg["src/bases/registerView.ts<br/>registerBasesView ラッパ（false を graceful 処理）"]
-    reg --> view["src/bases/EisenhowerBasesView.ts<br/>BasesView サブクラス"]
+    main["src/main.ts<br/>onload: safeRegisterBasesView 経由で<br/>registerBasesView を呼び factory に EisenhowerBasesView を配線"]
+    main -->|register コールバック注入| reg["src/bases/registerView.ts<br/>safeRegisterBasesView（false/例外を graceful 処理）＋VIEW_ID/NAME/ICON"]
+    main -->|factory| view["src/bases/EisenhowerBasesView.ts<br/>BasesView サブクラス"]
     view -->|onDataUpdated| map["src/bases/toViewModel.ts<br/>entries → MatrixViewModel 変換"]
     map --> vm["MatrixViewModel（Bases 非依存の plain データ）"]
     view -->|render(container, vm, callbacks)| ui["src/ui/MatrixView.tsx<br/>Preact render（F1: シェル＋状態表示）"]
-    view -->|onunload/onload 解除| unmount["preact unmount + container クリア"]
+    view -->|onunload で unmount| unmount["preact unmount + container クリア"]
     ui --> logic["src/logic/（classifyQuadrant 等・#19 で接続）"]
 ```
 
-- **`src/bases/registerView.ts`** — `plugin.registerBasesView(viewId, registration)` を呼ぶ薄いラッパ。戻り値 `false`（Bases 無効）を例外にせず `console`／`Notice` で握り、`onload` を継続させる（AC2）。
-- **`src/bases/EisenhowerBasesView.ts`** — `BasesView` サブクラス。`onDataUpdated()` で `data`（`BasesQueryResult`）から ViewModel を組み、`MatrixView` の `render()` を呼ぶ（AC3）。ビューの破棄時に Preact ルートを `unmount` する（AC4）。
-- **`src/bases/toViewModel.ts`** — `BasesEntry[]`／`config` を **`MatrixViewModel`** へ変換する純度の高いマッパ（Bases 型を入力に取り plain データを出力）。F1 では entry の `id`/`title`/`file` と「state（loading/empty/ready）」までを組む。軸値（urgent/important）と象限配置は #19 で本マッパに追加する。
-- **`src/bases/types.ts`** — 境界 ViewModel 型の定義（下記「外部依存・インターフェース」）。`src/ui` はこの型のみに依存し、`obsidian`/Bases 型を import しない。
+- **`src/bases/registerView.ts`** — ビュー定数（`VIEW_ID`/`VIEW_NAME`/`VIEW_ICON`）と **`safeRegisterBasesView(register, onUnavailable)`**。`register`（＝`plugin.registerBasesView(...)`）をコールバックで受け、戻り値 `false`（Bases 無効）や API 例外を `console`／`Notice` で握って `onload` を継続させる（AC2）。obsidian ランタイムに依存しない純ラッパなので単体テスト可能。実際の `registerBasesView` 呼び出しと factory 配線は `src/main.ts` が行う（手動/結合で担保）。
+- **`src/bases/EisenhowerBasesView.ts`** — `BasesView` サブクラス。コンストラクタで loading シェルを描画し、`onDataUpdated()` で `data.data`（`BasesEntry[]`）から `toViewModel` で ViewModel を組み `MatrixView` の `render()` を呼ぶ（AC3）。`onunload()` で Preact ルートを `unmount` する（AC4）。`extends BasesView`＝obsidian ランタイム必須のため単体テスト対象外。
+- **`src/bases/toViewModel.ts`** — `BasesEntry[]` を **`MatrixViewModel`** へ変換する純関数（`import type` のみで obsidian 非依存＝単体テスト可能）。F1 では entry の `id`（file.path）/`title`（file.basename）と state（empty/ready）までを組む。軸値（urgent/important）と象限配置・`.base` 自己エントリ/欠損ノートのフィルタは #19 で本マッパに追加する。
+- **`src/bases/types.ts`** — 境界 ViewModel 型（`MatrixViewModel`/`MatrixEntry`/`MatrixState`/`MatrixCallbacks`）。`src/ui` はこの型のみに依存し、`obsidian`/Bases 型を import しない（AC5。`MatrixCallbacks` は F1 では空で、F3/F5 で操作を足す）。
 
 ## データフロー・主要シーケンス
 
@@ -41,18 +42,18 @@ flowchart TD
 sequenceDiagram
     actor U as ユーザー
     participant M as src/main.ts
-    participant R as registerView（src/bases）
+    participant R as safeRegisterBasesView（src/bases）
     participant B as Bases (QueryController)
     participant V as EisenhowerBasesView
     participant T as toViewModel
     participant UI as MatrixView (src/ui / Preact)
 
-    M->>R: onload → registerEisenhowerView(plugin)
-    R->>B: registerBasesView(viewId, registration)
+    M->>R: onload → safeRegisterBasesView(register, onUnavailable)
+    R->>B: register() = plugin.registerBasesView(viewId, registration)
     alt Bases 有効
         B-->>R: true（Configure view に型が出る）
-    else Bases 無効
-        B-->>R: false（log/Notice で graceful・onload 継続）
+    else Bases 無効/例外
+        B-->>R: false（onUnavailable で log/Notice・onload 継続）
     end
     U->>B: .base で Eisenhower Matrix を選択し開く
     B->>V: factory(controller, containerEl) → BasesView 生成

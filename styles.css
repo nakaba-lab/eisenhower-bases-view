@@ -2,5 +2,33 @@
  * Eisenhower Matrix (Bases view) — スタイル
  * Obsidian テーマ変数（--background-*, --text-*, --interactive-* 等）に追従し、
  * ライト/ダーク両テーマで馴染ませる方針（docs/要件定義書.md「UI/UX 方針」）。
- * 実スタイルは UI 実装時に追加する。
+ * 配色はハードコードしない（テーマ変数のみ）。
  */
+
+/* F1（#18）: シェル＋状態表示。2×2 グリッドとカードは #19 で追加する。 */
+.eisenhower-matrix {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: var(--size-4-3, 12px);
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+  box-sizing: border-box;
+}
+
+.eisenhower-matrix--loading,
+.eisenhower-matrix--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.eisenhower-matrix__placeholder {
+  /* 色は親 .eisenhower-matrix--empty（--text-muted）から継承する。 */
+  margin: 0;
+  text-align: center;
+}
+
+.eisenhower-matrix__grid {
+  flex: 1 1 auto;
+}

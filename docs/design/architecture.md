@@ -2,8 +2,8 @@
 title: アーキテクチャ 設計
 area: architecture
 status: active
-relatedIssues: []
-updated: 2026-06-28
+relatedIssues: [18]
+updated: 2026-06-29
 kind: architecture
 ---
 
@@ -23,9 +23,9 @@ flowchart TD
         main["src/main.ts<br/>onload/onunload・設定ロード"]
         settings["src/settings.ts<br/>デフォルト軸プロパティ等"]
     end
-    subgraph adapter["src/bases/（アダプタ層・実装フェーズで追加）"]
-        reg["registerBasesView 登録"]
-        access["controller / onDataUpdated アクセス<br/>entry.getValue・ビュー設定取得"]
+    subgraph adapter["src/bases/（アダプタ層・#18 で導入）"]
+        reg["registerBasesView 登録（graceful ラッパ）"]
+        access["controller / onDataUpdated アクセス<br/>entry.getValue・ビュー設定取得・ViewModel 変換"]
     end
     subgraph ui["src/ui/（Preact）"]
         matrix["マトリクス描画（2×2＋未分類ゾーン）"]
@@ -45,7 +45,7 @@ flowchart TD
 ```
 
 - **`src/logic/`** — Obsidian 非依存の純ロジック（象限判定・象限→軸値）。単体 TDD の対象。
-- **`src/bases/`**（実装フェーズで追加）— アダプタ層。`registerBasesView` 登録、`controller`/`onDataUpdated` アクセス、`entry.getValue`、ビュー設定（軸プロパティ）取得を 1 箇所に集約。
+- **`src/bases/`** — アダプタ層（#18 で導入）。`registerBasesView` 登録（`registerView.ts` の graceful ラッパ）、`BasesView` サブクラス（`EisenhowerBasesView.ts`）、entries→ViewModel 変換（`toViewModel.ts`）、境界型（`types.ts`）。`controller`/`onDataUpdated`・`entry.getValue`・ビュー設定取得を 1 箇所に集約。詳細は [bases.md](./bases.md)。
 - **`src/ui/`** — Preact コンポーネント。マトリクス描画・ドラッグ。
 - **`src/main.ts`** — プラグインエントリ（`onload`/`onunload`・設定ロード）。
 - **`src/settings.ts`** — プラグイン設定（デフォルト軸プロパティ等）。

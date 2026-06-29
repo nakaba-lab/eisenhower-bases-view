@@ -7,6 +7,7 @@ export default tseslint.config(
       "main.js",
       "node_modules/**",
       "docs-site/**",
+      "scripts/**",
       "coverage/**",
       "esbuild.config.mjs",
       "eslint.config.mjs",

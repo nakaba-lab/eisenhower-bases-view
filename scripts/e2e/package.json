@@ -1,0 +1,12 @@
+{
+  "name": "eisenhower-e2e-harness",
+  "private": true,
+  "version": "1.0.0",
+  "description": "実機 Obsidian で Bases カスタムビュー往復を検証する E2E ハーネス（CDP 接続）",
+  "scripts": {
+    "e2e": "./setup-and-run.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
+  }
+}

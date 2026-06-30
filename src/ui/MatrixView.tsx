@@ -1,11 +1,12 @@
 import { render as preactRender } from "preact";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
+import { QuadrantCell } from "./QuadrantCell";
 
 /**
  * Matrix ビューの命令的な描画入口（アダプタ層が onDataUpdated 内で呼ぶ＝AC3）。
  *
- * F1（#18）の範囲はシェル＋状態表示（loading / empty / ready）。2×2 グリッドの
- * 実レイアウトとカード配置は #19（F2）が `ui.md` のワイヤーフレームに沿って充填する。
+ * #19（F2）: 2×2 グリッド（Do/Schedule/Delegate/Delete）＋下部フル幅の未分類ゾーンを
+ * `placements` から描画する（事前グルーピング済みのため UI は配置のみ）。
  * 配色はハードコードせず Obsidian テーマ変数（styles.css）に追従する。
  */
 
@@ -13,6 +14,18 @@ import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
 const MATRIX_LABEL = "Eisenhower Matrix";
 const LOADING_TEXT = "読み込み中…";
 const EMPTY_TEXT = "表示するノートがありません";
+const EMPTY_QUADRANT_TEXT = "なし";
+
+/** 2×2 グリッドの象限定義（ワイヤーフレーム順: 上段 Do/Schedule、下段 Delegate/Delete）。 */
+const QUADRANTS = [
+  { key: "do", label: "Do", axisLabel: "重要 × 緊急" },
+  { key: "schedule", label: "Schedule", axisLabel: "重要 × 非緊急" },
+  { key: "delegate", label: "Delegate", axisLabel: "非重要 × 緊急" },
+  { key: "delete", label: "Delete", axisLabel: "非重要 × 非緊急" },
+] as const;
+
+const UNCLASSIFIED_LABEL = "未分類";
+const UNCLASSIFIED_AXIS_LABEL = "軸欠損・ドロップ不可";
 
 interface MatrixViewProps {
   viewModel: MatrixViewModel;
@@ -44,14 +57,27 @@ function MatrixView({ viewModel }: MatrixViewProps) {
     );
   }
 
+  const { placements } = viewModel;
   return (
-    <section
-      class="eisenhower-matrix"
-      role="group"
-      aria-label={MATRIX_LABEL}
-    >
-      {/* F1: マトリクス領域の枠のみ。4 象限グリッドとカードは #19 で充填する。 */}
-      <div class="eisenhower-matrix__grid" aria-hidden="true" />
+    <section class="eisenhower-matrix" role="group" aria-label={MATRIX_LABEL}>
+      <div class="eisenhower-matrix__grid">
+        {QUADRANTS.map((quadrant) => (
+          <QuadrantCell
+            key={quadrant.key}
+            label={quadrant.label}
+            axisLabel={quadrant.axisLabel}
+            entries={placements[quadrant.key]}
+            emptyText={EMPTY_QUADRANT_TEXT}
+          />
+        ))}
+      </div>
+      <QuadrantCell
+        label={UNCLASSIFIED_LABEL}
+        axisLabel={UNCLASSIFIED_AXIS_LABEL}
+        entries={placements.unclassified}
+        emptyText={EMPTY_QUADRANT_TEXT}
+        variant="unclassified"
+      />
     </section>
   );
 }

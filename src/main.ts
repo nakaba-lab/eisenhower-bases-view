@@ -28,7 +28,11 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
           name: VIEW_NAME,
           icon: VIEW_ICON,
           factory: (controller, containerEl) =>
-            new EisenhowerBasesView(controller, containerEl),
+            new EisenhowerBasesView(
+              controller,
+              containerEl,
+              () => this.settings,
+            ),
         }),
       () => {
         console.warn(

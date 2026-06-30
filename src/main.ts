@@ -1,26 +1,49 @@
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, type EisenhowerSettings } from "./settings";
+import { EisenhowerBasesView } from "./bases/EisenhowerBasesView";
+import {
+  VIEW_ICON,
+  VIEW_ID,
+  VIEW_NAME,
+  safeRegisterBasesView,
+} from "./bases/registerView";
 
 /**
  * Eisenhower Matrix（Obsidian Bases カスタムビュー）プラグインのエントリポイント。
  *
- * 注意: 中核の `registerBasesView` によるカスタムビュー登録は、要件定義書で合意した
- * 「着手前スパイク」（登録→getValue 読み取り→processFrontMatter 書き戻し→onDataUpdated 再描画
- * の往復ループの実機確認）で API シグネチャ・再描画挙動を確証してから配線する。
- * 本ファイルは雛形段階のため最小の onload/onunload・設定ロードのみを持つ。
+ * `onload` で Bases カスタムビューを登録する。Bases が無効な Vault では
+ * `registerBasesView` が `false` を返す（または API が無い）ため、`safeRegisterBasesView`
+ * で graceful に握り、設定ロード等の他機能を壊さない（AC2）。
+ * 登録ビューは Plugin ライフサイクルで解除される（各ビューの onunload で Preact を unmount）。
  */
 export default class EisenhowerBasesViewPlugin extends Plugin {
   settings: EisenhowerSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    // TODO(spike): this.registerBasesView(...) でカスタムビューを登録する。
-    // Bases が無効な Vault では registerBasesView が false を返すため graceful に扱う。
-    console.log("Eisenhower Matrix (Bases view) plugin loaded");
+
+    safeRegisterBasesView(
+      () =>
+        this.registerBasesView(VIEW_ID, {
+          name: VIEW_NAME,
+          icon: VIEW_ICON,
+          factory: (controller, containerEl) =>
+            new EisenhowerBasesView(controller, containerEl),
+        }),
+      () => {
+        console.warn(
+          "[Eisenhower Matrix] Bases が無効なためカスタムビューを登録できませんでした。",
+        );
+        new Notice(
+          "Eisenhower Matrix: Bases が無効なためビューを登録できませんでした。",
+        );
+      },
+    );
   }
 
   onunload(): void {
-    // TODO: 登録したビューの detach・リソース解放。
+    // registerBasesView の登録は Plugin ライフサイクルで解除される。
+    // 各 EisenhowerBasesView は onunload で Preact ルートを unmount し DOM リークを防ぐ。
   }
 
   async loadSettings(): Promise<void> {

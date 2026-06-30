@@ -1,25 +1,48 @@
-import type { BasesEntry } from "obsidian";
-import type { MatrixEntry, MatrixViewModel } from "./types";
+import type { BasesEntry, BasesViewConfig } from "obsidian";
+import { DEFAULT_SETTINGS, type EisenhowerSettings } from "../settings";
+import { classifyQuadrant } from "../logic/quadrant";
+import { readAxisValues, resolveAxisPropertyIds } from "./readAxis";
+import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "./types";
 
 /**
  * Bases の entries を Bases 非依存の {@link MatrixViewModel} へ変換する純関数。
  *
- * F1（#18）では state（empty/ready）と各 entry の id/title までを組む。
- * 軸値の読み取り（absent 判定）と 4 象限への配置は #19（F2）で本マッパに追加する。
- * `.base` 自身や軸欠損ノートのフィルタも #19 の責務（要件定義書「未決事項」）。
+ * #19（F2）: 各 entry の両軸値を `getValue` で読み（absent は NullValue で区別）、
+ * `classifyQuadrant` で 4 象限＋未分類に**事前グルーピング**する（placements）。
+ * 軸 propertyId はビュー options（主）＋設定デフォルトで解決する（{@link resolveAxisPropertyIds}）。
  *
  * `import type` のみで obsidian ランタイムに依存しないため単体テスト可能。
  */
+
+/** 全象限を空配列で初期化した placements を作る（loading シェルの初期状態にも使う）。 */
+export function emptyPlacements(): QuadrantPlacements {
+  return { do: [], schedule: [], delegate: [], delete: [], unclassified: [] };
+}
+
 export function toViewModel(
   entries: readonly BasesEntry[] | undefined | null,
+  config?: Pick<BasesViewConfig, "getAsPropertyId"> | null,
+  settings: EisenhowerSettings = DEFAULT_SETTINGS,
 ): MatrixViewModel {
   // クエリ未初期化・失敗で data が undefined/null になっても落ちないよう防御する。
   if (!entries || entries.length === 0) {
-    return { state: "empty", entries: [] };
+    return { state: "empty", entries: [], placements: emptyPlacements() };
   }
-  const mapped: MatrixEntry[] = entries.map((entry) => ({
-    id: entry.file.path,
-    title: entry.file.basename,
-  }));
-  return { state: "ready", entries: mapped };
+
+  const ids = resolveAxisPropertyIds(config, settings);
+  const placements = emptyPlacements();
+  const mapped: MatrixEntry[] = entries.map((entry) => {
+    const axis = readAxisValues(entry, ids);
+    const quadrant = classifyQuadrant(axis);
+    const matrixEntry: MatrixEntry = {
+      id: entry.file.path,
+      title: entry.file.basename,
+      urgent: axis.urgent,
+      important: axis.important,
+    };
+    placements[quadrant].push(matrixEntry);
+    return matrixEntry;
+  });
+
+  return { state: "ready", entries: mapped, placements };
 }

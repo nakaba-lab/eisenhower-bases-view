@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { MatrixViewModel } from "../bases/types";
+import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../bases/types";
 import { render, unmount } from "./MatrixView";
 
 /**
  * MatrixView — アダプタ層が onDataUpdated 内で呼ぶ命令的な描画入口（AC3）。
- * F1 範囲はシェル＋状態表示（loading / empty / ready）。4 象限の実配置は #19。
- * unmount でコンテナを空にしリークを防ぐ（AC4）。
+ * F1（#18）はシェル＋状態表示。#19（F2）で 2×2 グリッド（Do/Schedule/Delegate/Delete）
+ * ＋下部フル幅の未分類ゾーンに、placements のカードを配置する。
  */
 
 function mountContainer(): HTMLElement {
@@ -14,55 +14,92 @@ function mountContainer(): HTMLElement {
   return container;
 }
 
+function entry(id: string, title: string): MatrixEntry {
+  return { id, title, urgent: undefined, important: undefined };
+}
+
+function emptyPlacements(): QuadrantPlacements {
+  return { do: [], schedule: [], delegate: [], delete: [], unclassified: [] };
+}
+
+function readyViewModel(placements: Partial<QuadrantPlacements>): MatrixViewModel {
+  const merged = { ...emptyPlacements(), ...placements };
+  const entries = Object.values(merged).flat();
+  return { state: "ready", entries, placements: merged };
+}
+
 afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("MatrixView render", () => {
+describe("MatrixView render — 状態表示", () => {
   it("render — loading 状態でローディング表示（role=status）を描画する", () => {
-    // given
     const container = mountContainer();
-    const viewModel: MatrixViewModel = { state: "loading", entries: [] };
-    // when
-    render(container, viewModel, {});
-    // then
-    const status = container.querySelector('[role="status"]');
-    expect(status).not.toBeNull();
+    render(container, { state: "loading", entries: [], placements: emptyPlacements() }, {});
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
     expect(container.textContent).toContain("読み込み中");
   });
 
   it("render — empty 状態で空プレースホルダを描画する", () => {
-    // given
     const container = mountContainer();
-    const viewModel: MatrixViewModel = { state: "empty", entries: [] };
-    // when
-    render(container, viewModel, {});
-    // then
+    render(container, { state: "empty", entries: [], placements: emptyPlacements() }, {});
     expect(container.textContent).toContain("表示するノートがありません");
   });
 
   it("render — ready 状態でマトリクス領域（aria-label 付きランドマーク）を描画する", () => {
+    const container = mountContainer();
+    render(container, readyViewModel({ do: [entry("a.md", "a")] }), {});
+    expect(container.querySelector('[aria-label="Eisenhower Matrix"]')).not.toBeNull();
+  });
+});
+
+describe("MatrixView render — 2×2 グリッド配置（#19）", () => {
+  it("render — ready で 4 象限セル＋未分類ゾーンを描画する", () => {
     // given
     const container = mountContainer();
-    const viewModel: MatrixViewModel = {
-      state: "ready",
-      entries: [{ id: "a.md", title: "a" }],
-    };
     // when
-    render(container, viewModel, {});
-    // then
-    const region = container.querySelector('[aria-label="Eisenhower Matrix"]');
-    expect(region).not.toBeNull();
+    render(container, readyViewModel({}), {});
+    // then: Do/Schedule/Delegate/Delete/未分類 の 5 領域（aria-label は「象限名（軸ラベル）」前方一致）
+    for (const label of ["Do", "Schedule", "Delegate", "Delete", "未分類"]) {
+      expect(container.querySelector(`[aria-label^="${label}"]`)).not.toBeNull();
+    }
   });
 
-  it("unmount — 描画後に unmount するとコンテナが空になる（リーク防止 AC4）", () => {
+  it("render — カードを対応する象限セル内に配置する（誤配置しない）", () => {
     // given
     const container = mountContainer();
-    render(container, { state: "ready", entries: [] }, {});
-    expect(container.childElementCount).toBeGreaterThan(0);
+    const vm = readyViewModel({
+      do: [entry("do.md", "緊急重要タスク")],
+      unclassified: [entry("x.md", "軸欠損ノート")],
+    });
     // when
+    render(container, vm, {});
+    // then: Do セル内に do カード、未分類セル内に欠損ノート
+    const doCell = container.querySelector('[aria-label^="Do"]');
+    const uncCell = container.querySelector('[aria-label^="未分類"]');
+    expect(doCell?.textContent).toContain("緊急重要タスク");
+    expect(uncCell?.textContent).toContain("軸欠損ノート");
+    // 未分類のカードが Do に漏れていない
+    expect(doCell?.textContent).not.toContain("軸欠損ノート");
+  });
+
+  it("render — 0 件の象限は空プレースホルダ（なし）を表示する", () => {
+    // given
+    const container = mountContainer();
+    // when: Do に 1 件、他は 0 件
+    render(container, readyViewModel({ do: [entry("do.md", "t")] }), {});
+    // then: Schedule セル内に空プレースホルダ
+    const schedule = container.querySelector('[aria-label^="Schedule"]');
+    expect(schedule?.textContent).toContain("なし");
+  });
+});
+
+describe("MatrixView unmount", () => {
+  it("unmount — 描画後に unmount するとコンテナが空になる（リーク防止 AC4）", () => {
+    const container = mountContainer();
+    render(container, readyViewModel({}), {});
+    expect(container.childElementCount).toBeGreaterThan(0);
     unmount(container);
-    // then
     expect(container.childElementCount).toBe(0);
   });
 });

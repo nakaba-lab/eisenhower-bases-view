@@ -29,6 +29,103 @@
   text-align: center;
 }
 
+/* #19（F2）: 2×2 グリッド（Do/Schedule / Delegate/Delete）。 */
 .eisenhower-matrix__grid {
   flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: var(--size-4-2, 8px);
+  min-height: 0;
+}
+
+/* 狭幅（モバイル・狭ペイン）では 1 列に積む（崩れ防止＝レスポンシブ）。 */
+@media (max-width: 600px) {
+  .eisenhower-matrix__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 象限セル（カードのドロップ先になる領域＝DnD は #20）。 */
+.eisenhower-quadrant {
+  display: flex;
+  flex-direction: column;
+  min-height: 96px;
+  padding: var(--size-4-2, 8px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  background-color: var(--background-secondary);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 4 象限を控えめなアクセント色で区別する（テーマ変数のみ・ライト/ダーク追従）。 */
+.eisenhower-quadrant--quadrant {
+  border-inline-start: 3px solid var(--interactive-accent);
+}
+
+/* 未分類ゾーンは下部にフル幅で常時表示（軸欠損・ドロップ不可）。 */
+.eisenhower-quadrant--unclassified {
+  margin-top: var(--size-4-2, 8px);
+  border-style: dashed;
+  border-inline-start-width: 1px;
+  background-color: var(--background-primary-alt);
+}
+
+.eisenhower-quadrant__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-4-2, 8px);
+  margin-bottom: var(--size-4-1, 4px);
+}
+
+.eisenhower-quadrant__title {
+  margin: 0;
+  font-size: var(--font-ui-small, 0.8em);
+  font-weight: var(--font-semibold, 600);
+  color: var(--text-normal);
+}
+
+.eisenhower-quadrant__axis {
+  font-size: var(--font-ui-smaller, 0.75em);
+  color: var(--text-muted);
+}
+
+.eisenhower-quadrant__count {
+  margin-inline-start: auto;
+  font-size: var(--font-ui-smaller, 0.75em);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.eisenhower-quadrant__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1, 4px);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.eisenhower-quadrant__empty {
+  /* 「該当 0 件」は意味のある状態メッセージのため、装飾用の --text-faint ではなく
+   * AA を満たしやすい --text-muted を使う（Issue #19 の WCAG AA 視覚 AC）。 */
+  margin: auto 0;
+  text-align: center;
+  font-size: var(--font-ui-smaller, 0.75em);
+  color: var(--text-muted);
+}
+
+/* 1 ノートのカード（クリックで開く・DnD は後続フィーチャ）。 */
+.eisenhower-note-card {
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  border-radius: var(--radius-s, 4px);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small, 0.8em);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

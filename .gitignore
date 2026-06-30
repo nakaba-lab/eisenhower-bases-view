@@ -40,6 +40,9 @@ venv/
 main.js
 *.js.map
 
+# ── ビジュアル検証プレビューのバンドル（生成物。ソース scripts/preview/*.tsx/.html はコミットする）──
+scripts/preview/preview.bundle.js
+
 # ── Claude Code（ローカル設定はコミットしない）──
 .claude/settings.local.json
 # /remember・継続メモリのハンドオフ記録（チームで共有する場合はこの行を外す）

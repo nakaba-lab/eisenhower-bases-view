@@ -108,6 +108,20 @@ describe("readAxisValues", () => {
     expect(axis.urgent).toBeUndefined();
     expect(axis.important).toBe(true);
   });
+
+  it("readAxisValues — note.* 以外（formula/file）の軸は値があっても undefined＝未分類化（読み書き対称・レビュー指摘）", () => {
+    // given: 緊急軸を書き戻し不可な formula.* に、重要軸を note.* に設定
+    const mixedIds: AxisPropertyIds = {
+      urgent: "formula.score" as BasesPropertyId,
+      important: "note.important" as BasesPropertyId,
+    };
+    const entry = mockEntry({ "formula.score": TRUE, "note.important": TRUE });
+    // when
+    const axis = readAxisValues(entry, mixedIds);
+    // then: formula 軸は getValue が真値でも absent 扱い → 4 象限に並べず未分類（ドラッグ→必ず失敗を防ぐ）
+    expect(axis.urgent).toBeUndefined();
+    expect(axis.important).toBe(true);
+  });
 });
 
 describe("toFrontmatterKey", () => {
@@ -121,5 +135,10 @@ describe("toFrontmatterKey", () => {
     // given / when / then
     expect(toFrontmatterKey("formula.score" as BasesPropertyId)).toBeNull();
     expect(toFrontmatterKey("file.name" as BasesPropertyId)).toBeNull();
+  });
+
+  it("toFrontmatterKey — 空キー（bare 'note.'）は null＝空名で frontmatter を壊さない（レビュー指摘）", () => {
+    // given / when / then: note. の後ろが空なら書き戻しキーにできない
+    expect(toFrontmatterKey("note." as BasesPropertyId)).toBeNull();
   });
 });

@@ -74,11 +74,14 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     if (!axis) return; // 未分類など書き戻し不可な対象は no-op（AC4 の二重ガード）
 
     // 既に同じ分類なら書き戻さない（同一象限へのドロップを無駄打ちしない）。
-    const current = viewModel.entries.find((entry) => entry.id === entryId);
+    // 書き込み in-flight 中は保留値を優先する（サーバ未反映でも二重書き込みを防ぐ）。
+    const currentAxis =
+      pending.get(entryId) ??
+      viewModel.entries.find((entry) => entry.id === entryId);
     if (
-      current &&
-      current.urgent === axis.urgent &&
-      current.important === axis.important
+      currentAxis &&
+      currentAxis.urgent === axis.urgent &&
+      currentAxis.important === axis.important
     ) {
       return;
     }

@@ -15,6 +15,14 @@ const preactJsxRuntime = path.resolve(
   "node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs",
 );
 
+// obsidian npm パッケージは型のみでランタイム JS を持たない（実機が外部提供する）。
+// `readAxis.ts` の `import { NullValue } from "obsidian"`（値）を単体テストで解決するため、
+// obsidian の**値** import を最小スタブへ寄せる（`import type` は消去されるため影響しない）。
+// 注意: この alias は obsidian の値 import を**全て**スタブへ寄せるが、スタブは NullValue のみ提供する。
+// `EisenhowerBasesView`（`extends BasesView`）や `main.ts`（`Plugin`/`Notice`）は obsidian ランタイム必須で
+// 単体テスト対象外（手動/結合で担保）。これらを import するテストを足す場合はスタブに必要シンボルを追加する。
+const obsidianStub = path.resolve(__dirname, "src/test-support/obsidianStub.ts");
+
 /** `@dnd-kit/<pkg>` を ESM ビルドの絶対パスに解決する（package dir 起点）。 */
 function dndKitEsm(pkg: string): string {
   const pkgJsonPath = requireFromHere.resolve(`@dnd-kit/${pkg}/package.json`);
@@ -43,6 +51,7 @@ function preactDndKitResolver(): Plugin {
     name: "eisenhower-preact-dnd-kit-resolver",
     enforce: "pre",
     resolveId(id) {
+      if (id === "obsidian") return obsidianStub;
       if (id === "react" || id === "react-dom") return preactCompat;
       if (id === "react/jsx-runtime" || id === "react/jsx-dev-runtime") {
         return preactJsxRuntime;

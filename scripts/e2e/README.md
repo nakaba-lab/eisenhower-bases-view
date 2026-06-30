@@ -54,6 +54,6 @@ scripts/e2e/setup-and-run.sh
 
 - `BasesViewFactory = (controller: QueryController, containerEl: HTMLElement) => BasesView`
 - `entry.getValue(propertyId): Value | null`、`BasesEntry.file: TFile`、軸は `note.<name>`
-- **absent は `getValue(...)?.toString() === null` で判定**（`false` と `isTruthy()` では区別不可）
+- **absent は `getValue(...) instanceof NullValue` で判定**（NullValue は singleton・`false` と `isTruthy()` では区別不可）。※ #16 スパイク当時は `toString()===null` と観測したが、#33 の実機再検証で `NullValue.toString()` は型契約どおり**文字列 `"null"`** を返すと判明し是正した（型同一性へ。詳細は `docs/design/bases.md`「主要な設計判断」）
 - `processFrontMatter` 書き戻し後 `onDataUpdated` は**自動再発火**（手動再描画不要）
 - `minAppVersion` 1.12.0

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, Value } from "obsidian";
+import { NullValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import { toViewModel } from "./toViewModel";
 
@@ -10,10 +11,14 @@ import { toViewModel } from "./toViewModel";
  * obsidian ランタイムに依存しないよう Value/entry を構造モックする。
  */
 
-function value(str: string | null, truthy: boolean): Value {
+function value(str: string, truthy: boolean): Value {
   return { toString: () => str, isTruthy: () => truthy } as unknown as Value;
 }
-const ABSENT = value(null, false);
+/**
+ * absent を表す **実 NullValue**（singleton）。実機の absent は NullValue で `toString()` は
+ * 文字列 "null"・`isTruthy()===false`（`scripts/e2e` プローブで確定）。判定は `instanceof NullValue`。
+ */
+const ABSENT: Value = NullValue.value;
 const TRUE = value("true", true);
 const FALSE = value("false", false);
 

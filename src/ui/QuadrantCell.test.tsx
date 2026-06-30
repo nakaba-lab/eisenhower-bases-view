@@ -42,11 +42,15 @@ describe("QuadrantCell", () => {
         entries={[entry("a.md", "タスクA"), entry("b.md", "タスクB")]}
       />,
     );
-    // then: #20 でカードは dnd-kit draggable（role=button・キーボード操作可＝AC5）になり
-    // listitem ロールは持たないため、カード要素そのものを件数で数える。
+    // then: #30 でカードは <li>（listitem）を保ち、ドラッグ可能要素（role=button・AC5）は
+    // 内側の要素に移した（<ul> のリスト件数/項目位置の SR 読み上げを守る＝回帰ガード）。
     expect(screen.getByText("タスクA")).toBeTruthy();
     expect(screen.getByText("タスクB")).toBeTruthy();
     expect(container.querySelectorAll(".eisenhower-note-card")).toHaveLength(2);
+    // <li> が listitem を保つ（dnd の role=button を <li> へ戻す回帰を検知する）。
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    // ドラッグ可能要素は内側にあり role=button を持つ（listitem の上書きではない）。
+    expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 
   it("QuadrantCell — 0 件なら空プレースホルダを描画する", () => {

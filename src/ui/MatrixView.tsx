@@ -19,6 +19,7 @@ import {
   isLatestGeneration,
   reconcilePendingMoves,
   rollbackFailedMove,
+  settleAnnouncement,
   type PendingMoves,
 } from "./optimisticMove";
 import { nextAnnouncement } from "./liveStatus";
@@ -169,28 +170,28 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       return next;
     });
 
-    // 書き込みの settle（成功/失敗）で in-flight を減らし、最新世代の失敗だけロールバックする。
+    // 書き込みの settle（成功/失敗）で in-flight を減らし、最新世代か（後続ドラッグに上書きされて
+    // いないか）でロールバックと通知を決める。最新の保留は非同期実行時点の pendingRef で見る。
+    // ロールバック判定（rollbackFailedMove）も通知判定（settleAnnouncement）も純関数＝単体テスト済み。
     const settle = (failed: boolean) => {
       const remaining = (inFlight.get(entryId) ?? 1) - 1;
       if (remaining <= 0) inFlight.delete(entryId);
       else inFlight.set(entryId, remaining);
-      if (failed) {
-        // 最新世代の書き込みが失敗したときだけロールバックし、その場合だけ失敗を通知する
-        //（古い世代の失敗で後続の新しい移動を巻き戻さない／巻き戻していないのに「元に戻し
-        // ました」と誤報しない＝レビュー指摘）。判定は純関数で、最新の保留は pendingRef で見る。
-        const { pending: rolledBackPending, rolledBack } = rollbackFailedMove(
-          pendingRef.current,
-          entryId,
-          generation,
+
+      const isLatest = isLatestGeneration(pendingRef.current, entryId, generation);
+      // 最新世代の失敗だけ巻き戻す（古い世代の失敗で新しい移動を巻き戻さない）。
+      if (failed && isLatest) {
+        setPending(
+          rollbackFailedMove(pendingRef.current, entryId, generation).pending,
         );
-        if (rolledBack) {
-          setPending(rolledBackPending);
+      }
+      switch (settleAnnouncement(failed, isLatest)) {
+        case "failure":
           announce(`「${titleOf(entryId)}」の移動に失敗しました。元に戻しました。`);
-        }
-      } else if (isLatestGeneration(pendingRef.current, entryId, generation)) {
-        // 成功も、後続のドラッグに上書きされていない最新世代のときだけ通知する
-        //（古い書き込みの成功で superseded な象限を読み上げない）。
-        announce(`「${titleOf(entryId)}」を ${labelOf(target)} へ移動しました。`);
+          break;
+        case "success":
+          announce(`「${titleOf(entryId)}」を ${labelOf(target)} へ移動しました。`);
+          break;
       }
     };
     // 書き戻しを委譲。成功/失敗いずれも settle へ（Notice はアダプタが出す）。

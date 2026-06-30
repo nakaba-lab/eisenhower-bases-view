@@ -108,3 +108,36 @@ export function reconcilePendingMoves(
   }
   return next;
 }
+
+/**
+ * `entryId` の保留が、いま指定 `generation` の書き込みのままか（後続のドラッグに上書きされて
+ * いないか）を判定する純関数。書き込みの settle 時に、その結果がユーザーの最終意図と一致する
+ * （＝最新世代の書き込みだ）ときだけ通知/ロールバックするために使う。
+ */
+export function isLatestGeneration(
+  pending: PendingMoves,
+  entryId: string,
+  generation: number,
+): boolean {
+  const current = pending.get(entryId);
+  return current?.generation === generation;
+}
+
+/**
+ * 失敗した書き込みのロールバックを純粋に計算する。**当該 entry の最新世代の書き込みが失敗した
+ * ときだけ**保留を取り除く（古い世代の失敗では後続の新しい移動を巻き戻さない）。返り値の
+ * `rolledBack` で「実際に巻き戻したか」を呼び出し側が判断し、巻き戻したときだけ失敗を通知できる
+ *（巻き戻していないのに「元に戻しました」と誤報しない＝レビュー指摘）。
+ */
+export function rollbackFailedMove(
+  pending: PendingMoves,
+  entryId: string,
+  generation: number,
+): { pending: PendingMoves; rolledBack: boolean } {
+  if (!isLatestGeneration(pending, entryId, generation)) {
+    return { pending, rolledBack: false };
+  }
+  const next = new Map(pending);
+  next.delete(entryId);
+  return { pending: next, rolledBack: true };
+}

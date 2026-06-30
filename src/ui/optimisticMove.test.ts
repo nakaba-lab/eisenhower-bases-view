@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { MatrixEntry, QuadrantPlacements } from "../bases/types";
 import {
   applyPendingMoves,
+  isLatestGeneration,
   reconcilePendingMoves,
+  rollbackFailedMove,
   type PendingMoves,
 } from "./optimisticMove";
 
@@ -206,5 +208,46 @@ describe("ロールバック意味論（AC3）", () => {
     // then: 元の Schedule に戻る
     expect(rolledBack.do).toEqual([]);
     expect(rolledBack.schedule.map((e) => e.id)).toEqual(["a.md"]);
+  });
+});
+
+describe("isLatestGeneration / rollbackFailedMove — 世代ベースのロールバック判定（レビュー指摘）", () => {
+  it("isLatestGeneration — 保留の世代が一致すれば true・上書き/不在なら false", () => {
+    const pending: PendingMoves = new Map([
+      ["a.md", { urgent: true, important: true, generation: 2 }],
+    ]);
+    expect(isLatestGeneration(pending, "a.md", 2)).toBe(true);
+    expect(isLatestGeneration(pending, "a.md", 1)).toBe(false); // 旧世代（上書き済み）
+    expect(isLatestGeneration(pending, "ghost.md", 2)).toBe(false); // 不在
+  });
+
+  it("rollbackFailedMove — 最新世代の失敗は保留を取り除き rolledBack=true", () => {
+    // given
+    const pending: PendingMoves = new Map([
+      ["a.md", { urgent: true, important: true, generation: 3 }],
+    ]);
+    // when: gen3 の書き込みが失敗
+    const result = rollbackFailedMove(pending, "a.md", 3);
+    // then
+    expect(result.rolledBack).toBe(true);
+    expect(result.pending.has("a.md")).toBe(false);
+    expect(pending.has("a.md")).toBe(true); // 入力を破壊しない（純粋性）
+  });
+
+  it("rollbackFailedMove — 旧世代の失敗は巻き戻さず rolledBack=false（後続の新しい移動を守る）", () => {
+    // given: 連続ドラッグで保留は最新 gen2 になっている
+    const pending: PendingMoves = new Map([
+      ["a.md", { urgent: false, important: false, generation: 2 }],
+    ]);
+    // when: 古い gen1 の書き込みが遅れて失敗
+    const result = rollbackFailedMove(pending, "a.md", 1);
+    // then: 最新 gen2 の楽観状態を残す（巻き戻さない）＝同じ Map をそのまま返す
+    expect(result.rolledBack).toBe(false);
+    expect(result.pending).toBe(pending);
+    expect(result.pending.get("a.md")).toEqual({
+      urgent: false,
+      important: false,
+      generation: 2,
+    });
   });
 });

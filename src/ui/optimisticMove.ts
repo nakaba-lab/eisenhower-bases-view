@@ -34,14 +34,14 @@ function clonePlacements(placements: QuadrantPlacements): QuadrantPlacements {
   return next;
 }
 
-/** 全象限から id 一致のエントリを探して返す（無ければ undefined）。 */
-function findEntry(
+/** 全象限から id 一致のエントリを取り除いて返す（無ければ undefined・placements を破壊変更）。 */
+function removeEntry(
   placements: QuadrantPlacements,
   id: string,
 ): MatrixEntry | undefined {
   for (const key of QUADRANT_KEYS) {
-    const found = placements[key].find((e) => e.id === id);
-    if (found) return found;
+    const idx = placements[key].findIndex((e) => e.id === id);
+    if (idx !== -1) return placements[key].splice(idx, 1)[0];
   }
   return undefined;
 }
@@ -61,24 +61,13 @@ export function applyPendingMoves(
 
   const next = clonePlacements(placements);
   for (const [id, axis] of pending) {
-    const current = findEntry(next, id);
-    if (!current) continue;
-    // 現在の象限から取り除く。
-    for (const key of QUADRANT_KEYS) {
-      const idx = next[key].findIndex((e) => e.id === id);
-      if (idx !== -1) {
-        next[key].splice(idx, 1);
-        break;
-      }
-    }
-    // 両軸値を上書きしたエントリを目的象限へ。
-    const moved: MatrixEntry = {
+    const current = removeEntry(next, id);
+    if (!current) continue; // 見つからない保留は無視（防御）
+    next[classifyQuadrant(axis)].push({
       ...current,
       urgent: axis.urgent,
       important: axis.important,
-    };
-    const target = classifyQuadrant(axis);
-    next[target].push(moved);
+    });
   }
   return next;
 }

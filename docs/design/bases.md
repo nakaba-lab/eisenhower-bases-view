@@ -1,7 +1,7 @@
 ---
 title: Bases アダプタ層 設計
 area: bases
-status: draft
+status: active
 relatedIssues: [18, 19, 20]
 updated: 2026-06-30
 kind: api
@@ -9,7 +9,7 @@ kind: api
 
 # Bases アダプタ層 設計
 
-> Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項（スパイク #16 確定）」に接地する。軸プロパティ設定 UI（#21）は本領域に積み増す。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を本領域に積み増すため一時的に `status: draft` に戻している（実装完了後に `active` 確定）。**
+> Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項（スパイク #16 確定）」に接地する。軸プロパティ設定 UI（#21）は本領域に積み増す。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。**
 
 ## 責務（このユニットは何をするか）
 

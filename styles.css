@@ -118,7 +118,7 @@
   color: var(--text-muted);
 }
 
-/* 1 ノートのカード（クリックで開く・DnD は後続フィーチャ）。 */
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリックで開くは後続 F5/#22）。 */
 .eisenhower-note-card {
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
   border-radius: var(--radius-s, 4px);
@@ -128,4 +128,26 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* ドラッグ可能であることを示す（#20）。 */
+  cursor: grab;
+  touch-action: none;
+}
+
+/* キーボード操作時のフォーカス可視（dnd-kit が role=button・tabindex を付与＝AC5）。 */
+.eisenhower-note-card:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+/* ドラッグ中のカード（つかんでいる視覚フィードバック）。 */
+.eisenhower-note-card--dragging {
+  cursor: grabbing;
+  opacity: 0.5;
+}
+
+/* ドロップ可能な象限にカードが重なっているときのフィードバック（#20）。 */
+.eisenhower-quadrant--over {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
+  background-color: var(--background-modifier-hover);
 }

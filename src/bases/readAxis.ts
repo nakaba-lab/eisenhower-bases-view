@@ -30,6 +30,21 @@ function toNotePropertyId(name: string): BasesPropertyId {
   return `note.${name}` as BasesPropertyId;
 }
 
+/** `note.` 接頭辞。書き戻し可能なのはこの名前空間（frontmatter）のプロパティのみ。 */
+const NOTE_PROPERTY_PREFIX = "note.";
+
+/**
+ * 軸 propertyId から frontmatter の書き戻しキーを取り出す（#20 F3 のドラッグ書き戻し用）。
+ * `note.<key>` のみ書き戻し可能で `<key>` を返す。`formula.*`／`file.*` 等は
+ * frontmatter へ書き戻せないため `null` を返す（呼び出し側は Notice 等で弾く）。
+ */
+export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
+  const raw = propertyId as unknown as string;
+  if (!raw.startsWith(NOTE_PROPERTY_PREFIX)) return null;
+  const key = raw.slice(NOTE_PROPERTY_PREFIX.length);
+  return key.length > 0 ? key : null;
+}
+
 /**
  * 軸 propertyId を解決する。ビュー options（`config.getAsPropertyId`）を主とし、
  * 未設定（null）なら設定タブのデフォルト（`note.<name>`）にフォールバックする（要件 F4）。

@@ -16,9 +16,12 @@ import { axisValuesForQuadrant, type Quadrant } from "../logic/quadrant";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
 import {
   applyPendingMoves,
+  isLatestGeneration,
   reconcilePendingMoves,
+  rollbackFailedMove,
   type PendingMoves,
 } from "./optimisticMove";
+import { nextAnnouncement } from "./liveStatus";
 import { QuadrantCell } from "./QuadrantCell";
 
 /**
@@ -65,15 +68,22 @@ interface MatrixViewProps {
 function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 楽観移動の保留（entryId → 目的両軸値＋世代）。書込確定で reconcile が落とす（#20）。
   const [pending, setPending] = useState<PendingMoves>(() => new Map());
+  // 最新の保留を非同期 settle から参照するためのミラー（毎レンダリングで同期）。
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   // ドラッグ中のカード（DragOverlay で指/カーソルへ追従描画する）。
   const [activeId, setActiveId] = useState<string | null>(null);
-  // 移動結果（成功/失敗）をスクリーンリーダーへ伝える aria-live メッセージ。
-  const [statusMessage, setStatusMessage] = useState("");
+  // 移動結果（成功/失敗）をスクリーンリーダーへ伝える aria-live 文言（再読み上げ用に差分化済み）。
+  const [liveStatus, setLiveStatus] = useState("");
   // 楽観移動の世代採番（連番）。最新の書き込みだけを確定/ロールバックの対象にする。
   const nextGenerationRef = useRef(0);
   // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
   const inFlightRef = useRef<Map<string, number>>(new Map());
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+
+  // aria-live へ通知する（同一文言でも nextAnnouncement が差分化して再読み上げを促す）。
+  const announce = (message: string) =>
+    setLiveStatus((prev) => nextAnnouncement(prev, message));
 
   // 新しい viewModel（onDataUpdated 由来）が来たら、サーバ値が追いついた保留を解除する。
   // in-flight 中の entry は値一致でも確定しない（coincidental match 防止）。
@@ -165,20 +175,22 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       if (remaining <= 0) inFlight.delete(entryId);
       else inFlight.set(entryId, remaining);
       if (failed) {
-        // 最新世代の書き込みが失敗したときだけロールバックする
-        //（古い書き込みの失敗で後続の新しい移動の楽観状態を巻き戻さない）。
-        setPending((prev) => {
-          const current = prev.get(entryId);
-          if (!current || current.generation !== generation) return prev;
-          const next = new Map(prev);
-          next.delete(entryId);
-          return next;
-        });
-        setStatusMessage(
-          `「${titleOf(entryId)}」の移動に失敗しました。元に戻しました。`,
+        // 最新世代の書き込みが失敗したときだけロールバックし、その場合だけ失敗を通知する
+        //（古い世代の失敗で後続の新しい移動を巻き戻さない／巻き戻していないのに「元に戻し
+        // ました」と誤報しない＝レビュー指摘）。判定は純関数で、最新の保留は pendingRef で見る。
+        const { pending: rolledBackPending, rolledBack } = rollbackFailedMove(
+          pendingRef.current,
+          entryId,
+          generation,
         );
-      } else {
-        setStatusMessage(`「${titleOf(entryId)}」を ${labelOf(target)} へ移動しました。`);
+        if (rolledBack) {
+          setPending(rolledBackPending);
+          announce(`「${titleOf(entryId)}」の移動に失敗しました。元に戻しました。`);
+        }
+      } else if (isLatestGeneration(pendingRef.current, entryId, generation)) {
+        // 成功も、後続のドラッグに上書きされていない最新世代のときだけ通知する
+        //（古い書き込みの成功で superseded な象限を読み上げない）。
+        announce(`「${titleOf(entryId)}」を ${labelOf(target)} へ移動しました。`);
       }
     };
     // 書き戻しを委譲。成功/失敗いずれも settle へ（Notice はアダプタが出す）。
@@ -228,9 +240,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       }}
     >
       <section class="eisenhower-matrix" role="group" aria-label={MATRIX_LABEL}>
-        {/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ通知する視覚的非表示のライブ領域。 */}
+        {/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ通知する視覚的非表示のライブ領域。
+            文言は nextAnnouncement で差分化済み（同一文言でも再読み上げされる）。 */}
         <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
-          {statusMessage}
+          {liveStatus}
         </div>
         <div class="eisenhower-matrix__grid">
           {QUADRANTS.map((quadrant) => (
@@ -244,6 +257,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             />
           ))}
         </div>
+        {/* showUnclassified=false かつ全カードが未分類（例: 両軸が非 note.* 解決）の構成では、
+            未分類ゾーン非表示で「ready なのに何も出ない」無言の空表示になりうる（レビュー指摘 #9）。
+            非 note.* 軸の警告・件数ヒントは F4（#21）/F6（#23・切替 UI 導入時）で本格対応する。 */}
         {showUnclassified && (
           <QuadrantCell
             quadrant="unclassified"

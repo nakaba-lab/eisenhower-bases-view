@@ -125,3 +125,23 @@ describe("toViewModel — absent / 未分類（AC5-6）", () => {
     });
   });
 });
+
+describe("toViewModel — showUnclassified の反映（レビュー指摘）", () => {
+  it("toViewModel — 設定 showUnclassified を ViewModel に伝える（既定 true / false 設定）", () => {
+    // given
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when / then: UI が未分類ゾーンの表示可否を判断できるよう flag を載せる
+    expect(toViewModel(entries, null, DEFAULT_SETTINGS).showUnclassified).toBe(true);
+    expect(
+      toViewModel(entries, null, { ...DEFAULT_SETTINGS, showUnclassified: false })
+        .showUnclassified,
+    ).toBe(false);
+  });
+
+  it("toViewModel — empty 状態でも showUnclassified を伝える", () => {
+    expect(
+      toViewModel([], null, { ...DEFAULT_SETTINGS, showUnclassified: false })
+        .showUnclassified,
+    ).toBe(false);
+  });
+});

@@ -74,13 +74,27 @@ function normalizeAxis(value: Value | null): boolean | undefined {
   return value.isTruthy();
 }
 
+/**
+ * 1 軸を読む。書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は **absent 扱い（undefined）**にして
+ * 4 象限へ配置しない（未分類・ドロップ不可）。読み取り側を書き戻し側（{@link toFrontmatterKey}）と
+ * 対称にし、「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない（レビュー指摘）。
+ * 非 `note.*` 軸が設定されたときの本格的な UX（ドラッグ無効化・ビュー全体の警告）は F4（#21）で扱う。
+ */
+function readSingleAxis(
+  entry: BasesEntry,
+  id: BasesPropertyId,
+): boolean | undefined {
+  if (toFrontmatterKey(id) === null) return undefined;
+  return normalizeAxis(entry.getValue(id));
+}
+
 /** 1 エントリの両軸値を読み、absent を区別した {@link AxisValues} を返す。 */
 export function readAxisValues(
   entry: BasesEntry,
   ids: AxisPropertyIds,
 ): AxisValues {
   return {
-    urgent: normalizeAxis(entry.getValue(ids.urgent)),
-    important: normalizeAxis(entry.getValue(ids.important)),
+    urgent: readSingleAxis(entry, ids.urgent),
+    important: readSingleAxis(entry, ids.important),
   };
 }

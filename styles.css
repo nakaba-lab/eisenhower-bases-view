@@ -123,6 +123,12 @@
   color: var(--text-muted);
 }
 
+/* カードのラッパ <li>（listitem 意味論を保つ＝#9）。ドラッグ可能要素は内側の card。
+ * flex 列の項目として全幅に伸び、nowrap カードで広がらないよう収縮可能にする（ellipsis 維持）。 */
+.eisenhower-note-card-item {
+  min-width: 0;
+}
+
 /* 1 ノートのカード（ドラッグで象限移動＝#20。クリックで開くは後続 F5/#22）。 */
 .eisenhower-note-card {
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
@@ -157,4 +163,26 @@
   outline: 2px dashed var(--interactive-accent);
   outline-offset: -2px;
   background-color: var(--background-modifier-hover);
+}
+
+/* 掴んでいる間カーソル/指へ追従する浮遊カード（DragOverlay）。象限の overflow:hidden に
+ * クリップされずグリッド外レイヤに描かれ、掴んでいる対象と移動先を視覚的に追える（#20・レビュー指摘）。 */
+.eisenhower-note-card--overlay {
+  cursor: grabbing;
+  box-shadow: var(--shadow-l, 0 4px 12px rgba(0, 0, 0, 0.3));
+  opacity: 0.95;
+}
+
+/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ伝える視覚的非表示のライブ領域。
+ * 見た目には出さず a11y ツリーにのみ存在させる（レビュー指摘）。 */
+.eisenhower-matrix__sr-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

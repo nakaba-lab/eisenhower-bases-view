@@ -26,7 +26,12 @@ export function toViewModel(
 ): MatrixViewModel {
   // クエリ未初期化・失敗で data が undefined/null になっても落ちないよう防御する。
   if (!entries || entries.length === 0) {
-    return { state: "empty", entries: [], placements: emptyPlacements() };
+    return {
+      state: "empty",
+      entries: [],
+      placements: emptyPlacements(),
+      showUnclassified: settings.showUnclassified,
+    };
   }
 
   const ids = resolveAxisPropertyIds(config, settings);
@@ -44,5 +49,10 @@ export function toViewModel(
     return matrixEntry;
   });
 
-  return { state: "ready", entries: mapped, placements };
+  return {
+    state: "ready",
+    entries: mapped,
+    placements,
+    showUnclassified: settings.showUnclassified,
+  };
 }

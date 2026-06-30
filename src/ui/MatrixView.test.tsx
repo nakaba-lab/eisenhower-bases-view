@@ -94,6 +94,39 @@ describe("MatrixView render — 2×2 グリッド配置（#19）", () => {
   });
 });
 
+describe("MatrixView render — 未分類ゾーンの表示制御 / a11y（レビュー指摘）", () => {
+  it("render — showUnclassified=false で未分類ゾーンを描画しない（4 象限は残す）", () => {
+    // given: 未分類カードを持つが showUnclassified=false
+    const container = mountContainer();
+    const vm: MatrixViewModel = {
+      ...readyViewModel({ unclassified: [entry("x.md", "軸欠損ノート")] }),
+      showUnclassified: false,
+    };
+    // when
+    render(container, vm, {});
+    // then: 未分類ゾーンは出ない（4 象限は残る）
+    expect(container.querySelector('[aria-label^="未分類"]')).toBeNull();
+    expect(container.querySelector('[aria-label^="Do"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("軸欠損ノート");
+  });
+
+  it("render — showUnclassified 省略時は従来どおり未分類ゾーンを描画する（後方互換）", () => {
+    const container = mountContainer();
+    render(container, readyViewModel({}), {});
+    expect(container.querySelector('[aria-label^="未分類"]')).not.toBeNull();
+  });
+
+  it("render — 移動結果通知用の aria-live ステータス領域を持つ（SR 向け）", () => {
+    // given / when
+    const container = mountContainer();
+    render(container, readyViewModel({ do: [entry("a.md", "a")] }), {});
+    // then: ready マトリクス内に role=status・aria-live のライブ領域がある
+    const status = container.querySelector(".eisenhower-matrix__sr-status");
+    expect(status).not.toBeNull();
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+  });
+});
+
 describe("MatrixView unmount", () => {
   it("unmount — 描画後に unmount するとコンテナが空になる（リーク防止 AC4）", () => {
     const container = mountContainer();

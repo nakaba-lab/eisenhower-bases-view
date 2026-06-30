@@ -141,3 +141,26 @@ export function rollbackFailedMove(
   next.delete(entryId);
   return { pending: next, rolledBack: true };
 }
+
+/** settle 時にスクリーンリーダーへ何を通知するか。 */
+export type SettleAnnouncement = "success" | "failure" | "silent";
+
+/**
+ * 書き込みの settle 結果から aria-live への通知種別を決める純関数。
+ *
+ * `isLatest`（その書き込みが当該 entry の最新世代＝後続ドラッグに上書きされていないか）と
+ * `failed` だけで決まる:
+ * - 最新世代でない（superseded）→ 成否に関わらず `"silent"`（古い書き込みの結果を読み上げない／
+ *   巻き戻していないのに「元に戻しました」と誤報しない）。
+ * - 最新世代の失敗 → `"failure"`（実際にロールバックした＝`rollbackFailedMove` が巻き戻すケースと一致）。
+ * - 最新世代の成功 → `"success"`。
+ *
+ * settle→通知の判断を純化して単体テストで固定する（コンポーネントの結線を細い switch に留める）。
+ */
+export function settleAnnouncement(
+  failed: boolean,
+  isLatest: boolean,
+): SettleAnnouncement {
+  if (!isLatest) return "silent";
+  return failed ? "failure" : "success";
+}

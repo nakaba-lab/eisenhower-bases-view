@@ -1,13 +1,20 @@
 /**
- * 軸プロパティの解決と、1 軸値の absent/true/false 正規化（#19 F2）。
+ * 軸プロパティの解決と、1 軸値の absent/true/false 正規化（#19 F2・#33 で absent 判定を是正）。
  *
  * Bases API 接触（`config.getAsPropertyId`／`entry.getValue`）をアダプタ層に閉じ込める。
- * absent 判定はスパイク #16 で確定: `NullValue.toString()` が実行時に `null` を返すため
- * `getValue(...)?.toString() === null` で absent を検出し、明示 `false` と区別する
- *（`isTruthy()` だけでは absent と false を区別できず欠損ノートを最低象限 Delete に誤分類する）。
+ * absent 判定は実機検証（#33・`scripts/e2e` プローブ）で確定した NullValue の**型同一性**で行う:
+ * 欠損プロパティの `getValue` は **NullValue（singleton）** を返すため `value instanceof NullValue`
+ * で absent を検出し、明示 `false`（BooleanValue）と区別する（`isTruthy()` だけでは absent と false を
+ * 区別できず欠損ノートを最低象限 Delete に誤分類する）。
  *
- * `import type` のみで obsidian ランタイムに依存しないため単体テスト可能。
+ * 旧実装は `toString()===null` で判定していたが、実機の `NullValue.toString()` は文字列 "null" を
+ * 返す（型契約どおり string）ため機能せず、absent が false に誤判定されていた（スパイク #16 の誤観測）。
+ * 型同一性（instanceof）は constructor 名が minify されても（実機は `"t"`）成立し、文字列表現に依存しない。
+ *
+ * NullValue（値）は obsidian から import する（実機は外部提供・esbuild external）。型は `import type`、
+ * 単体テストは vitest が obsidian の値 import を `src/test-support/obsidianStub.ts` へ解決する。
  */
+import { NullValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import type { AxisValues } from "../logic/quadrant";
@@ -64,13 +71,12 @@ export function resolveAxisPropertyIds(
 
 /**
  * 1 軸の Value を boolean | undefined に正規化する。
- * absent（NullValue: `toString()===null`）と `getValue` 自体の null を undefined にし、
- * 値があれば `isTruthy()` で boolean 化する。
+ * absent（NullValue singleton）と `getValue` 自体の null を undefined にし、
+ * 値があれば `isTruthy()` で boolean 化する（absent 判定は `instanceof NullValue`＝型同一性）。
  */
 function normalizeAxis(value: Value | null): boolean | undefined {
-  if (value == null) return undefined;
-  // 型上は string だが NullValue は実行時に null を返す（スパイク #16 確定）。
-  if ((value.toString() as string | null) === null) return undefined;
+  if (value == null) return undefined; // getValue 自体の null（防御）
+  if (value instanceof NullValue) return undefined; // absent（NullValue singleton）
   return value.isTruthy();
 }
 

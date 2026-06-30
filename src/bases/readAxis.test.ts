@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
+import { NullValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import {
   IMPORTANT_OPTION_KEY,
@@ -16,12 +17,17 @@ import {
  * obsidian ランタイムに依存しないよう Value/Config を構造モックする。
  */
 
-/** toString()/isTruthy() だけを持つ最小の Value モック。 */
-function value(str: string | null, truthy: boolean): Value {
+/** toString()/isTruthy() だけを持つ最小の Value モック（true/false 用）。 */
+function value(str: string, truthy: boolean): Value {
   return { toString: () => str, isTruthy: () => truthy } as unknown as Value;
 }
-/** absent を表す NullValue（toString()===null・isTruthy()===false）。 */
-const ABSENT = value(null, false);
+/**
+ * absent を表す **実 NullValue**（singleton）。実機の absent は NullValue で、
+ * `toString()` は**文字列 "null"**・`isTruthy()===false`（`scripts/e2e` のプローブで確定）。
+ * 判定は `toString()` の文字列ではなく `instanceof NullValue`（型同一性）で行うため、
+ * 旧モック（`toString()===null` を返す素オブジェクト）ではなく実 NullValue を使う。
+ */
+const ABSENT: Value = NullValue.value;
 const TRUE = value("true", true);
 const FALSE = value("false", false);
 
@@ -89,7 +95,7 @@ describe("readAxisValues", () => {
     expect(axis).toEqual({ urgent: true, important: false });
   });
 
-  it("readAxisValues — absent(NullValue: toString()===null) は undefined（false と区別）", () => {
+  it("readAxisValues — absent(NullValue・instanceof で判定) は undefined（false と区別）", () => {
     // given
     const entry = mockEntry({ "note.urgent": ABSENT, "note.important": FALSE });
     // when

@@ -1,12 +1,16 @@
 import { render as preactRender } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  type DragCancelEvent,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { axisValuesForQuadrant, type Quadrant } from "../logic/quadrant";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
@@ -46,26 +50,83 @@ const QUADRANTS = [
 const UNCLASSIFIED_LABEL = "未分類";
 const UNCLASSIFIED_AXIS_LABEL = "軸欠損・ドロップ不可";
 
+/** スクリーンリーダー向けのキーボード操作説明（dnd-kit の既定英語文を日本語へ差し替える）。 */
+const SCREEN_READER_INSTRUCTIONS = {
+  draggable:
+    "スペースまたは Enter キーで掴み、矢印キーで象限へ移動し、" +
+    "スペースまたは Enter でドロップします。Esc でキャンセルします。",
+};
+
 interface MatrixViewProps {
   viewModel: MatrixViewModel;
   callbacks: MatrixCallbacks;
 }
 
 function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
-  // 楽観移動の保留（entryId → 目的両軸値）。書込確定で reconcile が落とす（#20）。
+  // 楽観移動の保留（entryId → 目的両軸値＋世代）。書込確定で reconcile が落とす（#20）。
   const [pending, setPending] = useState<PendingMoves>(() => new Map());
+  // ドラッグ中のカード（DragOverlay で指/カーソルへ追従描画する）。
+  const [activeId, setActiveId] = useState<string | null>(null);
+  // 移動結果（成功/失敗）をスクリーンリーダーへ伝える aria-live メッセージ。
+  const [statusMessage, setStatusMessage] = useState("");
+  // 楽観移動の世代採番（連番）。最新の書き込みだけを確定/ロールバックの対象にする。
+  const nextGenerationRef = useRef(0);
+  // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
+  const inFlightRef = useRef<Map<string, number>>(new Map());
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
 
   // 新しい viewModel（onDataUpdated 由来）が来たら、サーバ値が追いついた保留を解除する。
+  // in-flight 中の entry は値一致でも確定しない（coincidental match 防止）。
   useEffect(() => {
     setPending((prev) => {
       if (prev.size === 0) return prev;
-      const reconciled = reconcilePendingMoves(prev, viewModel.entries);
+      const inFlightIds = new Set(
+        [...inFlightRef.current.entries()]
+          .filter(([, count]) => count > 0)
+          .map(([id]) => id),
+      );
+      const reconciled = reconcilePendingMoves(
+        prev,
+        viewModel.entries,
+        inFlightIds,
+      );
       return reconciled.size === prev.size ? prev : reconciled;
     });
   }, [viewModel]);
 
+  const titleOf = (id: string): string =>
+    viewModel.entries.find((entry) => entry.id === id)?.title ?? id;
+  const labelOf = (quadrant: Quadrant): string =>
+    QUADRANTS.find((q) => q.key === quadrant)?.label ??
+    (quadrant === "unclassified" ? UNCLASSIFIED_LABEL : quadrant);
+
+  // スクリーンリーダーへ各操作段階を日本語で読み上げる（dnd-kit 既定の英語＋内部 ID を置換）。
+  const announcements = {
+    onDragStart({ active }: DragStartEvent) {
+      return `「${titleOf(String(active.id))}」を掴みました。象限へ移動してください。`;
+    },
+    onDragOver({ over }: DragOverEvent) {
+      return over
+        ? `${labelOf(String(over.id) as Quadrant)} の上にあります。`
+        : "ドロップ可能な象限の外にあります。";
+    },
+    onDragEnd({ active, over }: DragEndEvent) {
+      return over
+        ? `「${titleOf(String(active.id))}」を ${labelOf(String(over.id) as Quadrant)} にドロップしました。`
+        : `「${titleOf(String(active.id))}」を元の位置に戻しました。`;
+    },
+    onDragCancel({ active }: DragCancelEvent) {
+      return `「${titleOf(String(active.id))}」の移動をキャンセルしました。`;
+    },
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+  const handleDragCancel = () => setActiveId(null);
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || !callbacks.onMoveCard) return;
     const entryId = String(active.id);
@@ -86,20 +147,45 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       return;
     }
 
+    // この移動の世代を採番し、in-flight 数を増やす。
+    const generation = (nextGenerationRef.current += 1);
+    const inFlight = inFlightRef.current;
+    inFlight.set(entryId, (inFlight.get(entryId) ?? 0) + 1);
+
     // 楽観移動: 保留に積んで即再描画。
     setPending((prev) => {
       const next = new Map(prev);
-      next.set(entryId, axis);
+      next.set(entryId, { ...axis, generation });
       return next;
     });
-    // 書き戻しを委譲。失敗したら保留を破棄してロールバック（Notice はアダプタが出す）。
-    callbacks.onMoveCard(entryId, axis).catch(() => {
-      setPending((prev) => {
-        const next = new Map(prev);
-        next.delete(entryId);
-        return next;
-      });
-    });
+
+    // 書き込みの settle（成功/失敗）で in-flight を減らし、最新世代の失敗だけロールバックする。
+    const settle = (failed: boolean) => {
+      const remaining = (inFlight.get(entryId) ?? 1) - 1;
+      if (remaining <= 0) inFlight.delete(entryId);
+      else inFlight.set(entryId, remaining);
+      if (failed) {
+        // 最新世代の書き込みが失敗したときだけロールバックする
+        //（古い書き込みの失敗で後続の新しい移動の楽観状態を巻き戻さない）。
+        setPending((prev) => {
+          const current = prev.get(entryId);
+          if (!current || current.generation !== generation) return prev;
+          const next = new Map(prev);
+          next.delete(entryId);
+          return next;
+        });
+        setStatusMessage(
+          `「${titleOf(entryId)}」の移動に失敗しました。元に戻しました。`,
+        );
+      } else {
+        setStatusMessage(`「${titleOf(entryId)}」を ${labelOf(target)} へ移動しました。`);
+      }
+    };
+    // 書き戻しを委譲。成功/失敗いずれも settle へ（Notice はアダプタが出す）。
+    callbacks.onMoveCard(entryId, axis).then(
+      () => settle(false),
+      () => settle(true),
+    );
   };
 
   if (viewModel.state === "loading") {
@@ -128,9 +214,24 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
 
   // 楽観移動を重ねた表示用 placements（純レデューサ）。
   const placements = applyPendingMoves(viewModel.placements, pending);
+  // 未分類ゾーンの表示可否（設定 showUnclassified。省略時は表示＝後方互換）。
+  const showUnclassified = viewModel.showUnclassified !== false;
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+      accessibility={{
+        announcements,
+        screenReaderInstructions: SCREEN_READER_INSTRUCTIONS,
+      }}
+    >
       <section class="eisenhower-matrix" role="group" aria-label={MATRIX_LABEL}>
+        {/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ通知する視覚的非表示のライブ領域。 */}
+        <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
+          {statusMessage}
+        </div>
         <div class="eisenhower-matrix__grid">
           {QUADRANTS.map((quadrant) => (
             <QuadrantCell
@@ -143,15 +244,25 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             />
           ))}
         </div>
-        <QuadrantCell
-          quadrant="unclassified"
-          label={UNCLASSIFIED_LABEL}
-          axisLabel={UNCLASSIFIED_AXIS_LABEL}
-          entries={placements.unclassified}
-          emptyText={EMPTY_QUADRANT_TEXT}
-          variant="unclassified"
-        />
+        {showUnclassified && (
+          <QuadrantCell
+            quadrant="unclassified"
+            label={UNCLASSIFIED_LABEL}
+            axisLabel={UNCLASSIFIED_AXIS_LABEL}
+            entries={placements.unclassified}
+            emptyText={EMPTY_QUADRANT_TEXT}
+            variant="unclassified"
+          />
+        )}
       </section>
+      {/* 掴んでいるカードを象限の overflow:hidden にクリップされず指/カーソルへ追従描画する。 */}
+      <DragOverlay>
+        {activeId ? (
+          <div class="eisenhower-note-card eisenhower-note-card--overlay">
+            {titleOf(activeId)}
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

@@ -12,6 +12,12 @@ import type { MatrixEntry, QuadrantPlacements } from "../bases/types";
 export interface PendingAxisValues {
   urgent: boolean;
   important: boolean;
+  /**
+   * 楽観移動の世代（連番）。同一カードを in-flight 中に連続ドラッグしたとき、
+   * 最新の書き込みだけを確定/ロールバックの対象にするために使う（UI 側で付与）。
+   * 純レデューサ（applyPendingMoves）は参照しない。
+   */
+  generation?: number;
 }
 
 /** 保留中の移動: entryId（file.path）→ 目的象限の両軸値。 */
@@ -78,10 +84,16 @@ export function applyPendingMoves(
  *
  * 書き込み成功 → `onDataUpdated` 再描画で entries が更新された後に呼び、楽観オーバーレイを
  * 解除する。まだ追いついていない保留は残す（書き込み in-flight）。
+ *
+ * `inFlightIds` を渡すと、**書き込みがまだ in-flight の entry はサーバ値が偶然一致しても確定としない**。
+ * 同一カードを連続ドラッグして in-flight が重なると、古いサーバスナップショットが最新保留値と
+ * 偶然一致して保留を早期に落とし、後続の書き込み着弾でユーザー最終意図と表示が食い違う事故
+ *（coincidental match）を防ぐ。in-flight が解消してから値一致で確定する。
  */
 export function reconcilePendingMoves(
   pending: PendingMoves,
   entries: readonly MatrixEntry[],
+  inFlightIds?: ReadonlySet<string>,
 ): PendingMoves {
   const byId = new Map(entries.map((e) => [e.id, e]));
   const next: PendingMoves = new Map();
@@ -90,7 +102,9 @@ export function reconcilePendingMoves(
     if (!entry) continue; // サーバから消えた → 保留破棄
     const confirmed =
       entry.urgent === axis.urgent && entry.important === axis.important;
-    if (!confirmed) next.set(id, axis); // まだ反映前 → 残す
+    const stillWriting = inFlightIds?.has(id) ?? false;
+    // まだ反映前、または書き込み in-flight 中（coincidental match 防止）は残す。
+    if (!confirmed || stillWriting) next.set(id, axis);
   }
   return next;
 }

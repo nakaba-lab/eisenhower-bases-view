@@ -35,6 +35,11 @@ export interface MatrixViewModel {
   entries: MatrixEntry[];
   /** 4 象限＋未分類への事前グルーピング（#19）。 */
   placements: QuadrantPlacements;
+  /**
+   * 軸欠損ノートの未分類ゾーンを表示するか（設定 `showUnclassified` の反映）。
+   * 省略時は表示（既定 true・後方互換）。`false` で UI は未分類ゾーンを描画しない。
+   */
+  showUnclassified?: boolean;
 }
 
 /** ドラッグ書き戻しで UI からアダプタへ渡す目的両軸値（両軸とも明示 boolean）。 */

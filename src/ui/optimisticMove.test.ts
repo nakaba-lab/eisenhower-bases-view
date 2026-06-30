@@ -163,6 +163,30 @@ describe("reconcilePendingMoves — 確定/保留の判定（AC2）", () => {
     // then
     expect(pending.has("a.md")).toBe(true);
   });
+
+  it("reconcilePendingMoves — in-flight 中はサーバ値が偶然一致しても保留を残す（coincidental match 防止・レビュー指摘）", () => {
+    // given: サーバ値が保留値とたまたま一致するが、当該 entry の書き込みはまだ in-flight
+    const pending: PendingMoves = new Map([
+      ["a.md", { urgent: true, important: true }],
+    ]);
+    const entries = [entry("a.md", "a", true, true)];
+    // when
+    const result = reconcilePendingMoves(pending, entries, new Set(["a.md"]));
+    // then: 早期確定せず残す（古いスナップショットで最新保留を落とさない）
+    expect(result.has("a.md")).toBe(true);
+  });
+
+  it("reconcilePendingMoves — in-flight が無ければ値一致した保留を確定して落とす", () => {
+    // given
+    const pending: PendingMoves = new Map([
+      ["a.md", { urgent: true, important: true }],
+    ]);
+    const entries = [entry("a.md", "a", true, true)];
+    // when: in-flight 集合が空
+    const result = reconcilePendingMoves(pending, entries, new Set());
+    // then
+    expect(result.has("a.md")).toBe(false);
+  });
 });
 
 describe("ロールバック意味論（AC3）", () => {

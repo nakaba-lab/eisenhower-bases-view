@@ -2,14 +2,14 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19]
+relatedIssues: [18, 19, 20]
 updated: 2026-06-30
 kind: api
 ---
 
 # Bases アダプタ層 設計
 
-> Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項（スパイク #16 確定）」に接地する。ドラッグ書き戻し（#20）、軸プロパティ設定 UI（#21）は本領域に積み増す。
+> Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項（スパイク #16 確定）」に接地する。軸プロパティ設定 UI（#21）は本領域に積み増す。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。**
 
 ## 責務（このユニットは何をするか）
 
@@ -90,11 +90,14 @@ sequenceDiagram
     entries: MatrixEntry[];   // F1 ではシェル表示用（配置は #19）
   }
   export interface MatrixCallbacks {
-    // F3（#20）でドラッグ書き戻し、F5（#22）でカードを開く導線を足す。
-    // F1 は空オブジェクトでよい（境界を先に確定させておく）。
+    // F3（#20）でドラッグ書き戻しを追加。F5（#22）でカードを開く導線を足す。
+    // 書き戻しは両軸の boolean を渡すだけで、TFile 解決・processFrontMatter は
+    // アダプタ（EisenhowerBasesView）が担う（UI は obsidian 型に触れない＝AC5）。
+    onMoveCard?(entryId: string, axisValues: { urgent: boolean; important: boolean }): Promise<void>;
   }
   ```
 - **UI 入口**: `render(containerEl: HTMLElement, viewModel: MatrixViewModel, callbacks: MatrixCallbacks): void`（Preact `render()` を内部で呼ぶ命令的橋渡し）。`unmount(containerEl)` で破棄。
+- **書き戻し（#20 F3）**: `EisenhowerBasesView` が `onMoveCard` を実装し、`entryId`（file.path）→ `app.vault.getAbstractFileByPath` で `TFile` を解決、解決済み軸 propertyId（`note.<key>`）から frontmatter キー（`<key>`）を取り出し、`app.fileManager.processFrontMatter(file, fm => { fm[urgentKey] = urgent; fm[importantKey] = important; })` で**両軸を明示 `true/false`** 書き込みする（`delete` しない＝v1 boolean 軸）。読み取り（`getValue`）と書き込み（`processFrontMatter`）は別系統。`processFrontMatter` が reject したら UI 側がロールバック＋`Notice`（`ui.md` のシーケンス参照）。
 - **ビルド**: esbuild（`main.js`）。`minAppVersion` 1.12.0・`isDesktopOnly: true`（確定）。
 
 ## 主要な設計判断（現行の理由）
@@ -106,6 +109,7 @@ sequenceDiagram
 - **解除は Preact `unmount` を明示**: ビュー破棄・`onunload` で Preact ルートを `unmount` し DOM/購読リークを防ぐ（AC4）。
 - **F1 で境界型を先に確定**（`MatrixCallbacks` は空でも置く）: F2〜F5 が同じ境界に積み増せるよう、契約面を最初に固定して後続の手戻りを避ける。
 - **手動再描画は持たない**: 書き戻し→`onDataUpdated` 自動再発火で反応ループが閉じる（スパイク #16 確定）。F1 は描画経路の確立まで。
+- **書き戻しはアダプタに隔離（#20）**: `MatrixCallbacks.onMoveCard` は両軸の boolean だけを受け、`TFile` 解決・frontmatter キー算出・`app.fileManager.processFrontMatter` 実行をアダプタ（`EisenhowerBasesView`）が担う。UI・logic に `obsidian` 型を漏らさず（AC5 維持）、書き込み経路を読み取り経路（`getValue`）と同じく 1 領域へ集約する。frontmatter キーの取り出し（`note.urgent`→`urgent`）は純関数として切り出し単体テスト対象にする（`extends BasesView` 本体は obsidian ランタイム必須で対象外のため、テスト可能な純度をキー算出に逃がす）。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

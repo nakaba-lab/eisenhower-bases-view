@@ -37,9 +37,23 @@ export interface MatrixViewModel {
   placements: QuadrantPlacements;
 }
 
+/** ドラッグ書き戻しで UI からアダプタへ渡す目的両軸値（両軸とも明示 boolean）。 */
+export interface AxisWriteValues {
+  urgent: boolean;
+  important: boolean;
+}
+
 /**
  * UI からアダプタ層へ委譲する操作のコールバック束。
- * F1（#18）/F2（#19）では空。F3（#20）でドラッグ書き戻し、F5（#22）でカードを開く導線を足す。
+ * F1（#18）/F2（#19）では空。F3（#20）でドラッグ書き戻しを追加。F5（#22）でカードを開く導線を足す。
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface MatrixCallbacks {}
+export interface MatrixCallbacks {
+  /**
+   * カードを目的象限へ移動した結果を frontmatter に書き戻す（#20 F3）。
+   *
+   * UI は両軸の boolean だけを渡し、`TFile` 解決・`processFrontMatter`・失敗時の `Notice` は
+   * アダプタ（`EisenhowerBasesView`）が担う（UI は `obsidian` 型に触れない＝AC5）。
+   * 書き込み失敗時は reject し、UI 側は楽観移動をロールバックする。
+   */
+  onMoveCard?(entryId: string, axisValues: AxisWriteValues): Promise<void>;
+}

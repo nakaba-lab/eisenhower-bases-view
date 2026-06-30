@@ -13,9 +13,9 @@ description: 生きた設計書（docs/design/）の索引
 |------|---------|------|------|
 | アーキテクチャ | [architecture.md](./architecture.md) | システム全体構成（三層構成・データフロー・主要設計判断） | active |
 | Bases アダプタ層 | [bases.md](./bases.md) | Bases API 接触面の隔離・アダプタ↔UI 境界契約（ViewModel）（kind:api） | active |
-| UI | [ui.md](./ui.md) | 画面構成・状態設計・ワイヤーフレーム・a11y（kind:ui） | draft |
+| UI | [ui.md](./ui.md) | 画面構成・状態設計・ワイヤーフレーム・a11y（kind:ui） | active |
 
-> 領域ファイルの追加・削除時のみこの索引を更新する。最終更新: 2026-06-29
+> 領域ファイルの追加・削除時のみこの索引を更新する。最終更新: 2026-06-30
 
 ## 各領域ファイルの構成（雛形）
 

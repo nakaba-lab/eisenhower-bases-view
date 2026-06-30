@@ -6,6 +6,7 @@ import {
   URGENT_OPTION_KEY,
   readAxisValues,
   resolveAxisPropertyIds,
+  toFrontmatterKey,
   type AxisPropertyIds,
 } from "./readAxis";
 
@@ -106,5 +107,19 @@ describe("readAxisValues", () => {
     // then
     expect(axis.urgent).toBeUndefined();
     expect(axis.important).toBe(true);
+  });
+});
+
+describe("toFrontmatterKey", () => {
+  it("toFrontmatterKey — note.<key> から frontmatter キーを取り出す（書き戻し用・#20）", () => {
+    // given / when / then
+    expect(toFrontmatterKey("note.urgent" as BasesPropertyId)).toBe("urgent");
+    expect(toFrontmatterKey("note.due_date" as BasesPropertyId)).toBe("due_date");
+  });
+
+  it("toFrontmatterKey — note. 接頭辞でない（formula./file.）は null＝書き戻し不可", () => {
+    // given / when / then
+    expect(toFrontmatterKey("formula.score" as BasesPropertyId)).toBeNull();
+    expect(toFrontmatterKey("file.name" as BasesPropertyId)).toBeNull();
   });
 });

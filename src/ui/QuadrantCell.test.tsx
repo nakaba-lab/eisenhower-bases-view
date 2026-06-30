@@ -20,7 +20,12 @@ describe("QuadrantCell", () => {
   it("QuadrantCell — 象限ラベル（見出し）と軸ラベルを描画する", () => {
     // given / when
     render(
-      <QuadrantCell label="Do" axisLabel="重要 × 緊急" entries={[entry("a.md", "a")]} />,
+      <QuadrantCell
+        quadrant="do"
+        label="Do"
+        axisLabel="重要 × 緊急"
+        entries={[entry("a.md", "a")]}
+      />,
     );
     // then
     expect(screen.getByRole("heading", { name: "Do" }).textContent).toBe("Do");
@@ -29,22 +34,31 @@ describe("QuadrantCell", () => {
 
   it("QuadrantCell — カード一覧を件数ぶん描画する", () => {
     // given / when
-    render(
+    const { container } = render(
       <QuadrantCell
+        quadrant="schedule"
         label="Schedule"
         axisLabel="重要 × 非緊急"
         entries={[entry("a.md", "タスクA"), entry("b.md", "タスクB")]}
       />,
     );
-    // then
+    // then: #20 でカードは dnd-kit draggable（role=button・キーボード操作可＝AC5）になり
+    // listitem ロールは持たないため、カード要素そのものを件数で数える。
     expect(screen.getByText("タスクA")).toBeTruthy();
     expect(screen.getByText("タスクB")).toBeTruthy();
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(container.querySelectorAll(".eisenhower-note-card")).toHaveLength(2);
   });
 
   it("QuadrantCell — 0 件なら空プレースホルダを描画する", () => {
     // given / when
-    render(<QuadrantCell label="Delete" axisLabel="非重要 × 非緊急" entries={[]} />);
+    render(
+      <QuadrantCell
+        quadrant="delete"
+        label="Delete"
+        axisLabel="非重要 × 非緊急"
+        entries={[]}
+      />,
+    );
     // then
     expect(screen.getByText("なし")).toBeTruthy();
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
@@ -52,7 +66,15 @@ describe("QuadrantCell", () => {
 
   it("QuadrantCell — 象限名＋軸ラベルが aria-label として領域（region）に付く", () => {
     // given / when
-    render(<QuadrantCell label="未分類" axisLabel="軸欠損・ドロップ不可" entries={[]} />);
+    render(
+      <QuadrantCell
+        quadrant="unclassified"
+        label="未分類"
+        axisLabel="軸欠損・ドロップ不可"
+        entries={[]}
+        variant="unclassified"
+      />,
+    );
     // then: ランドマーク名に軸の文脈（軸ラベル）が含まれる（a11y）
     expect(screen.getByRole("region", { name: "未分類（軸欠損・ドロップ不可）" })).toBeTruthy();
   });

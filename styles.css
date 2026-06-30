@@ -51,6 +51,9 @@
   display: flex;
   flex-direction: column;
   min-height: 96px;
+  /* grid/flex の min-width:auto トラップを断つ（nowrap カードがトラックを
+   * intrinsic 幅まで広げて狭幅で横はみ出しするのを防ぐ＝レスポンシブ）。 */
+  min-width: 0;
   padding: var(--size-4-2, 8px);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m, 8px);
@@ -107,6 +110,8 @@
   gap: var(--size-4-1, 4px);
   overflow-y: auto;
   min-height: 0;
+  /* カードの nowrap が幅を押し広げないよう収縮可能にする（ellipsis を効かせる）。 */
+  min-width: 0;
 }
 
 .eisenhower-quadrant__empty {
@@ -118,7 +123,7 @@
   color: var(--text-muted);
 }
 
-/* 1 ノートのカード（クリックで開く・DnD は後続フィーチャ）。 */
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリックで開くは後続 F5/#22）。 */
 .eisenhower-note-card {
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
   border-radius: var(--radius-s, 4px);
@@ -128,4 +133,28 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* ドラッグ可能であることを示す（#20）。 */
+  cursor: grab;
+  touch-action: none;
+}
+
+/* キーボード操作時のフォーカス可視（dnd-kit が role=button・tabindex を付与＝AC5）。
+ * 親セル/リストが overflow:hidden/auto のため、外側リングは端で切れる。インセット
+ * （負オフセット）にしてカード内に描き、端のカードでも全周が見えるようにする。 */
+.eisenhower-note-card:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+
+/* ドラッグ中のカード（つかんでいる視覚フィードバック）。 */
+.eisenhower-note-card--dragging {
+  cursor: grabbing;
+  opacity: 0.5;
+}
+
+/* ドロップ可能な象限にカードが重なっているときのフィードバック（#20）。 */
+.eisenhower-quadrant--over {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
+  background-color: var(--background-modifier-hover);
 }

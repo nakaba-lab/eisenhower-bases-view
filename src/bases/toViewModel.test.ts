@@ -25,6 +25,14 @@ describe("toViewModel", () => {
     expect(viewModel.entries).toEqual([]);
   });
 
+  it("toViewModel — null/undefined を渡しても落ちず state=empty（防御的ガード）", () => {
+    // given / when / then
+    expect(toViewModel(null).state).toBe("empty");
+    expect(toViewModel(undefined).state).toBe("empty");
+    expect(toViewModel(null).entries).toEqual([]);
+    expect(toViewModel(undefined).entries).toEqual([]);
+  });
+
   it("toViewModel — entries があれば state=ready で id/title にマップする", () => {
     // given
     const entries = [

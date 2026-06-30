@@ -26,7 +26,8 @@ export class EisenhowerBasesView extends BasesView {
   }
 
   onDataUpdated(): void {
-    render(this.viewContainerEl, toViewModel(this.data.data));
+    // this.data がまだ無い異常状態でも落とさず空シェルを描く（防御的アクセス）。
+    render(this.viewContainerEl, toViewModel(this.data?.data));
   }
 
   onunload(): void {

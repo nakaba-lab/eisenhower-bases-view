@@ -10,8 +10,11 @@ import type { MatrixEntry, MatrixViewModel } from "./types";
  *
  * `import type` のみで obsidian ランタイムに依存しないため単体テスト可能。
  */
-export function toViewModel(entries: readonly BasesEntry[]): MatrixViewModel {
-  if (entries.length === 0) {
+export function toViewModel(
+  entries: readonly BasesEntry[] | undefined | null,
+): MatrixViewModel {
+  // クエリ未初期化・失敗で data が undefined/null になっても落ちないよう防御する。
+  if (!entries || entries.length === 0) {
     return { state: "empty", entries: [] };
   }
   const mapped: MatrixEntry[] = entries.map((entry) => ({

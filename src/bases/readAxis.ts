@@ -50,7 +50,10 @@ const NOTE_PROPERTY_PREFIX = "note.";
  */
 export function isWritableAxisProperty(propertyId: BasesPropertyId): boolean {
   const raw = propertyId as unknown as string;
+  // Bases API / config から予期しない値（null/undefined/非文字列）が渡っても
+  // startsWith で throw せず false を返す（Bases 境界の防御。churn 耐性）。
   return (
+    typeof raw === "string" &&
     raw.startsWith(NOTE_PROPERTY_PREFIX) &&
     raw.length > NOTE_PROPERTY_PREFIX.length
   );

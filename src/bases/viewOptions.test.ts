@@ -35,6 +35,13 @@ describe("isWritableAxisProperty", () => {
     // given / when / then: note 名前空間の非空キーなので書き戻し可能（弾き忘れではない）
     expect(isWritableAxisProperty("note.note.x" as BasesPropertyId)).toBe(true);
   });
+
+  it("isWritableAxisProperty — null / undefined / 非文字列は false を返し、クラッシュしない（Bases 境界の防御）", () => {
+    // given / when / then: 予期しない値でも startsWith で throw せず false
+    expect(isWritableAxisProperty(null as unknown as BasesPropertyId)).toBe(false);
+    expect(isWritableAxisProperty(undefined as unknown as BasesPropertyId)).toBe(false);
+    expect(isWritableAxisProperty(123 as unknown as BasesPropertyId)).toBe(false);
+  });
 });
 
 describe("buildAxisViewOptions（AC1: note.* のみ選択肢）", () => {

@@ -1,15 +1,17 @@
 ---
 title: UI 設計
 area: ui
-status: active
-relatedIssues: [18, 19, 20, 22, 33, 34]
+status: draft
+relatedIssues: [18, 19, 20, 22, 23, 33, 34]
 updated: 2026-07-01
 kind: ui
 ---
 
 # UI 設計
 
-> 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。** **#22（F5）のカード操作（開く/新タブ/プレビュー/キーボード）を実装し `status: active` に確定した。**
+> 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。** **#22（F5）のカード操作（開く/新タブ/プレビュー/キーボード）を実装し `status: active` に確定した。** **#23（F6）の設定タブ設計（デフォルト軸・象限ラベル/色・欠損表示・i18n 言語）を `status: draft` で先行作成した（本ファイルは F6 実装完了まで draft、F1〜F5 は実装済み。ドキュメント更新タスクで `active` に確定する）。**
+>
+> **#23（F6）の設計方針（2026-07-01・draft／人間承認待ち）**: 設定タブ（`PluginSettingTab`）でデフォルト軸プロパティ・欠損ノート表示トグル・象限ラベル/色・表示言語を編集し `saveData` で永続化する（AC5）。確定した設計判断（承認後に「承認済み」へ更新）: ① **データフローは ViewModel 拡張**＝`toViewModel` が解決済みの象限ラベル（カスタム or 言語既定）・色・UI 文言を `MatrixViewModel` に載せ、UI は受領値を描画（既存 `showUnclassified` と同一経路・UI は Bases 非依存維持・単体テスト可）。② **i18n は Auto 追従＋手動上書き**＝既定は Obsidian のアプリ言語（en/ja）に追従し、設定の言語ドロップダウン（Auto/English/日本語）で明示上書き可。翻訳テーブルは `src/i18n.ts`（`en`/`ja`）に集約し `MatrixView.tsx` のハードコード文言を置換（同ファイル冒頭コメントが起点と明示）。③ **色は象限ごとカラーピッカー＋リセット**＝4 象限それぞれ hex を設定でき ↺ で既定アクセント（AA 準拠・英日共通）へ戻せる。④ **設定タブはセクション区分レイアウト**（`setHeading` で 軸／表示／象限ラベル・色／言語 を区分）。⑤ **反映タイミング**＝設定変更時に開いている Eisenhower ビューを再描画し即時反映（AC1/AC2。プラグインが live ビュー登録簿を保持）。⑥ **ラベル×言語の相互作用**＝カスタムラベルは空＝言語既定にフォールバック。言語切替は空項目の既定文言のみ変え、明示入力したカスタムラベルは保持（リセット ↺ でカスタムを消し言語既定へ戻す）。⑦ **軸の向き反転は対象外**（v2・要件「未決事項」）。
 >
 > **#22（F5）の確定事項（2026-07-01・人間承認済み）**: ① **相互作用モデルはカード全体**＝カード本体が「ドラッグ元」かつ「開く対象」を兼ねる（専用ドラッグハンドルは設けない＝レイアウト据え置き・新規ワイヤーフレーム比較なし。#20 と同様に F5 は操作の上乗せのみ）。② **キーボードは Enter=開く / Space=掴む**に整理する＝dnd-kit `KeyboardSensor` の起動キーを **Space のみ**に remap し、AC4 の Enter を「開く」に解放する（#20 の「Enter/Space どちらでも掴む」から変更。読み上げ説明も「スペースで掴み…」へ更新）。③ **クリックとドラッグの両立**のため `PointerSensor` に距離活性化制約（`activationConstraint: { distance: 5 }`）を足す＝微小移動は掴みにならずクリック（開く）として成立させる。④ **開く/プレビューはコールバック委譲**＝`MatrixCallbacks` に `onOpenCard(entryId, { newLeaf })`・`onHoverCard(entryId, targetEl)` を追加し、UI は修飾キーから `newLeaf` を算出して plain データで渡す（`TFile` 解決・`workspace` 操作・`hover-link` 発火はアダプタ。UI は `obsidian` 型に触れない＝AC5 維持）。⑤ **ホバープレビューはコア設定に委譲**＝ホバーで `app.workspace.trigger("hover-link", …)` を発火し、実際に出すか否かはユーザーのコア「ページプレビュー」設定に委ねる（プラグイン側でプレビューを再実装しない）。native `title` ツールチップは二重表示回避のため撤去する。
 >
@@ -67,6 +69,49 @@ flowchart LR
 ```
 
 > 軸の向き（緊急を左右どちらに置くか）・ラベル文言・色は設定可能（向き反転は v2）。未決事項は `docs/要件定義書.md`「未決事項」。
+
+### 設定タブ設計（F6/#23・draft）
+
+`PluginSettingTab` を `main.ts` の `onload` で `addSettingTab` 登録する。Obsidian 標準 `Setting` を用い、`setHeading` で 4 区分（軸／表示／象限ラベル・色／言語）に分ける（ワイヤーフレーム案 A・人間承認済み）。
+
+```
+▸ 軸（デフォルト）
+  緊急度プロパティ         [ urgent      ]
+  重要度プロパティ         [ important   ]
+▸ 表示
+  欠損ノートを未分類に表示   [ ●── ON ]
+▸ 象限ラベル・色
+  Do（重要×緊急）      [ Do       ] [🎨#e5786d] [↺]
+  Schedule（重要×非緊急）[ Schedule ] [🎨#4a9d8e] [↺]
+  Delegate（非重要×緊急）[ Delegate ] [🎨#d9a441] [↺]
+  Delete（非重要×非緊急）[ Delete   ] [🎨#8a8f98] [↺]
+▸ 言語
+  表示言語               [ Auto ▾ ]  (Auto / English / 日本語)
+```
+
+**設定スキーマ（`src/settings.ts` 拡張）**
+
+```ts
+type QuadrantKey = "do" | "schedule" | "delegate" | "delete";
+interface EisenhowerSettings {
+  defaultUrgencyProperty: string;              // 既存（F4）
+  defaultImportanceProperty: string;           // 既存（F4）
+  showUnclassified: boolean;                   // 既存（トグル UI を F6 で追加）
+  language: "auto" | "en" | "ja";              // F6: 既定 "auto"（Obsidian 言語追従）
+  quadrantLabels: Record<QuadrantKey, string>; // F6: 空文字="言語既定にフォールバック"
+  quadrantColors: Record<QuadrantKey, string>; // F6: 空文字="既定アクセント（AA 準拠）"
+}
+```
+
+**i18n（`src/i18n.ts` 新規）**: `en`/`ja` の翻訳テーブルと、`resolveLanguage(setting, appLang)`（`auto` → Obsidian のアプリ言語〔`moment.locale()`／`localStorage['language']`〕から `en`/`ja` を導出、未知は `en` フォールバック）、`t(lang, key)` を持つ。`MatrixView.tsx` のハードコード文言（`MATRIX_LABEL`/`LOADING_TEXT`/`EMPTY_TEXT`/`EMPTY_QUADRANT_TEXT`／象限の既定ラベル・軸ラベル／未分類ラベル／SR 操作説明・アナウンス）を翻訳キー経由に置換する。**言語解決とキー→文言の確定はアダプタ側**で行い、確定済み文字列を `MatrixViewModel` に載せる（UI は `language` を知らず dumb を維持＝AC5 の疎結合を崩さない）。
+
+**色の適用**: 解決済みの象限色を `MatrixViewModel` に載せ、`QuadrantCell` が当該セルへ**インライン CSS 変数**（例 `--eisenhower-quadrant-accent`）として付与、`styles.css` はその変数を参照する。空文字は i18n 非依存の既定アクセント定数（AA 準拠・英日共通）にフォールバック。背景・文字はテーマ変数追従を維持し、アクセント色のみ上書きする。
+
+**反映タイミング（AC1/AC2）**: 設定タブの各 `Setting.onChange` が `saveSettings()` を呼んだ後、**プラグインが保持する live な `EisenhowerBasesView` 群を再描画**する（各ビューの `render(toViewModel(this.data, this.config, getSettings()))` を再実行）。プラグインは生存中のビューを登録簿（`Set<EisenhowerBasesView>`）で保持し、ビューの `constructor` で登録・`onunload` で解除する。次の `onDataUpdated` 待ちにせず即時反映する。
+
+**永続化（AC5）**: 既存 `saveSettings()`＝`saveData(this.settings)` を流用。拡張フィールドも同一 `data.json` に保存され、再起動後は `loadSettings`（`Object.assign(DEFAULT_SETTINGS, loadData())`）で復元される。`DEFAULT_SETTINGS` に F6 追加フィールドの既定（`language:"auto"`・ラベル/色は空文字）を足す。
+
+**テスト方針（TDD 対象）**: 単体（`npm test`）で ① i18n 解決（`resolveLanguage` の auto/明示/未知フォールバック・`t` のキー解決）、② ラベル解決（カスタム空→言語既定、非空→上書き）、③ 色解決（空→既定アクセント、非空→上書き）、④ 設定読み書き（`Object.assign` マージ・欠損フィールドの既定補完）を赤→緑で固める。設定タブ UI の実描画（`PluginSettingTab`・Obsidian 実機）とビュー再描画の往復は `frontend-reviewer`／手動で担保（アダプタ層と同じ「純ロジック=単体、実機配線=手動」の切り分け）。
 
 ### アダプタ → UI の境界（ViewModel 事前グルーピング・#19 確定）
 
@@ -214,3 +259,10 @@ Obsidian 実機ロードを前提とするビュー本体は Storybook での再
 - **Enter=開く / Space=掴む（#22・AC4 の literal 解釈）**: AC4 が Enter で「開く」を要求する一方、#20 の `KeyboardSensor` は Enter/Space の両方で「掴む」だった。起動キーを **Space のみ**に remap して Enter を「開く」に解放する（一般的な規約＝Enter は既定アクション＝開く、Space は掴む）。代替（Enter を掴むに残し別キーで開く）は AC4 と乖離するため不採。読み上げ説明も同時に更新する。
 - **開く/プレビューはコールバック委譲（#22・AC5 維持）**: `MatrixCallbacks` に `onOpenCard(entryId,{newLeaf})`・`onHoverCard(entryId,targetEl)` を追加し、`TFile` 解決・`workspace.openFile`・`hover-link` 発火はアダプタ（`EisenhowerBasesView`）に隔離する。UI は修飾キーから `newLeaf` を算出して plain データで渡すだけで `obsidian` 型に触れない（`onMoveCard` と同じ疎結合）。却下「単一 `onCardIntent` 判別共用体」: 追加面は 1 本だが UI/アダプタ双方に type 分岐が増え、既存 `onMoveCard` と粒度が不揃いになる。
 - **ホバープレビューはコア設定に委譲（#22・AC3）**: ホバーで `app.workspace.trigger("hover-link", …)` を発火し、実際に表示するかはユーザーのコア「ページプレビュー」設定（例: Ctrl 必須）に委ねる。プラグイン側でプレビュー UI を再実装せず、Obsidian ビューの標準作法に沿う。native `title` ツールチップは二重表示回避のため撤去する。
+- **設定タブのデータフローは ViewModel 拡張（#23 設計オプション比較で選択・人間承認済み）**: `toViewModel` が解決済みの象限ラベル・色・UI 文言を `MatrixViewModel` に載せ、UI は受領値を描画する（既存 `showUnclassified` と同一経路で UI の Bases 非依存＝AC5 を維持し、解決ロジックを単体テストできる）。却下「別 presentation オブジェクトを `render` に併せて渡す」: 関心は分離できるが `render` シグネチャ変更で 2 経路になる。却下「アダプタが CSS 変数注入＋i18n を Preact context 供給」: DOM 副作用と context 依存でテストが難しく、既存の純粋 `render`（plain データ 1 本）と乖離する。
+- **i18n は Auto 追従＋手動上書き（#23・AC4・人間承認済み）**: 既定は Obsidian のアプリ言語（en/ja）に追従し、設定の言語ドロップダウン（Auto/English/日本語）で明示上書きできる。無設定で母語表示になり、ビュー/環境をまたいで固定したい人だけ上書きできる。翻訳テーブルは `src/i18n.ts`（`en`/`ja`）に集約し、`MatrixView.tsx` 冒頭コメントが起点と明示していたハードコード文言を置換する。**言語解決はアダプタ側**で行い ViewModel に確定文字列を載せる（UI は `language` を知らない）。却下「手動設定のみ」: 初期表示が Obsidian の言語と食い違いうる。却下「Obsidian 言語追従のみ」: 個別に言語を変えられない。
+- **象限ラベル×言語のフォールバック（#23・曖昧さ規律で確定）**: `quadrantLabels` は象限ごとに保存し、**空文字＝言語既定へフォールバック**、非空＝カスタム上書き。言語切替は「空項目に表示する既定文言」だけを変え、明示入力したカスタムラベルは保持する。設定 UI のリセット（↺）はカスタムを空に戻し言語既定へ復帰させる。これで AC2（ラベル変更が反映）と AC4（言語切替で既定ラベルが切替）が衝突しない。
+- **象限色は象限ごとカラーピッカー＋リセット（#23・AC2・人間承認済み）**: 4 象限それぞれに hex を設定でき、↺ で AA 準拠の既定アクセント（英日共通・i18n 非依存の定数）へ戻せる。解決済み色は ViewModel 経由で `QuadrantCell` にインライン CSS 変数として渡し `styles.css` が参照する（背景・文字はテーマ変数追従を維持しアクセントのみ上書き）。却下「プリセットパレット」: コントラストは担保しやすいが自由度が低い。却下「アクセント on/off のみ」: 最小だが AC「色を変更」を厳密に満たさない。既定色のコントラストは同梱値で AA を満たし、ユーザーがカスタムした値の AA は保証しない（下限は既定に置く）。
+- **設定変更の即時反映のため live ビュー登録簿を持つ（#23・AC1/AC2）**: プラグインが生存中の `EisenhowerBasesView` を `Set` で保持（`constructor` 登録・`onunload` 解除）し、設定 `onChange`→`saveSettings()` 後に各ビューを再描画（再 `render(toViewModel(...))`）する。`getSettings()` getter で値は既に最新だが、設定変更は `onDataUpdated` を自動発火しないため、登録簿経由で明示的に再描画して「反映される」の即時性を満たす。
+- **設定タブはセクション区分レイアウト（#23・ワイヤーフレーム案 A・人間承認済み）**: `setHeading` で 軸／表示／象限ラベル・色／言語 を区分する。却下「フラット縦積み（Obsidian 標準）」: 実装は最小だが象限×(ラベル＋色) で行が増え目的の項目を探しにくい。
+- **軸の向き反転は F6 の対象外（v2）**: 要件「未決事項」で v1 は向き反転を持たないと確定済み。F6 はラベル・色・言語・欠損表示・既定軸のみ扱う。

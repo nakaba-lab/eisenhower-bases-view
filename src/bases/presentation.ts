@@ -19,7 +19,9 @@ export function resolveQuadrantLabels(
   const out = {} as Record<QuadrantKey, string>;
   for (const key of QUADRANT_KEYS) {
     const custom = settings.quadrantLabels[key] ?? "";
-    out[key] = custom.length > 0 ? custom : messages.quadrantLabels[key];
+    // 空白のみ（trim して空）は「未カスタム」とみなし言語既定へフォールバックする
+    // （空白ラベルで見出しが不可視になるのを防ぐ・frontend-reviewer 指摘）。
+    out[key] = custom.trim().length > 0 ? custom : messages.quadrantLabels[key];
   }
   return out;
 }

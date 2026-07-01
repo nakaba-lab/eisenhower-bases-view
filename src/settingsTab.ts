@@ -13,8 +13,11 @@ import type { LanguageSetting } from "./settings";
  * `extends PluginSettingTab` のため obsidian ランタイムが必要で単体テスト対象外（手動/結合で担保）。
  */
 
-/** カラーピッカーが空（テーマ既定）のとき表示する中立的な既定色。 */
+/** カラーピッカーが空（テーマ既定）のときの最終フォールバック色（テーマ変数が読めない場合）。 */
 const PLACEHOLDER_ACCENT = "#8a8f98";
+
+/** 6 桁 hex（`#rrggbb`）判定。`ColorComponent` は hex を受けるためテーマ値をこの形に限定する。 */
+const HEX6 = /^#[0-9a-fA-F]{6}$/;
 
 export class EisenhowerSettingTab extends PluginSettingTab {
   private readonly plugin: EisenhowerBasesViewPlugin;
@@ -32,6 +35,13 @@ export class EisenhowerSettingTab extends PluginSettingTab {
     const messages = messagesFor(
       resolveLanguage(settings.language, this.plugin.getObsidianLanguage()),
     );
+    // 色未設定の象限はマトリクスでテーマのアクセント色（--interactive-accent）で描画されるため、
+    // カラーピッカーのスウォッチも同色を初期表示して設定画面と実描画の食い違いを防ぐ
+    //（frontend-reviewer 指摘）。テーマ値が hex でなければ中立の既定色にフォールバックする。
+    const themeAccent = getComputedStyle(containerEl)
+      .getPropertyValue("--interactive-accent")
+      .trim();
+    const accentPlaceholder = HEX6.test(themeAccent) ? themeAccent : PLACEHOLDER_ACCENT;
 
     // ▸ 軸（デフォルト）
     new Setting(containerEl).setName("軸（デフォルト）").setHeading();
@@ -73,6 +83,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
     for (const key of QUADRANT_KEYS) {
       new Setting(containerEl)
         .setName(`${messages.quadrantLabels[key]}（${messages.axisLabels[key]}）`)
+        .setDesc("象限のラベルとアクセント色（色未設定時はテーマのアクセント色を使用）。")
         .addText((text) =>
           text
             .setPlaceholder(messages.quadrantLabels[key])
@@ -84,7 +95,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
         )
         .addColorPicker((picker) =>
           picker
-            .setValue(settings.quadrantColors[key] || PLACEHOLDER_ACCENT)
+            .setValue(settings.quadrantColors[key] || accentPlaceholder)
             .onChange(async (value) => {
               settings.quadrantColors[key] = value;
               await this.plugin.saveSettings();

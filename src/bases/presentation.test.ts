@@ -48,6 +48,15 @@ describe("resolveQuadrantLabels — カスタム or 言語既定（AC2/AC4）", 
     expect(labels.delete).toBe("Delete");
   });
 
+  it("resolveQuadrantLabels — 空白のみのカスタムラベルは言語既定へフォールバック（不可視見出し防止）", () => {
+    // given: do を空白のみ（"   "）にした設定 → 見えないラベルにしない
+    const settings = withCustom({ do: "   " });
+    // when
+    const labels = resolveQuadrantLabels(settings, messagesFor("ja"));
+    // then: 空白は未カスタム扱いで言語既定 "実行" に戻る
+    expect(labels.do).toBe("実行");
+  });
+
   it("resolveQuadrantLabels — 言語切替は空項目の既定だけ変え、カスタムは保持", () => {
     // given: do をカスタム
     const settings = withCustom({ do: "MyDo" });

@@ -20,6 +20,21 @@ export const QUADRANT_KEYS: readonly QuadrantKey[] = [
 ];
 
 /**
+ * 各象限キーに `fn` を適用して `Record<QuadrantKey, T>` を作る（ラベル/色/既定値の構築で共有・#23 F6）。
+ * 全キーを明示リテラルで埋めるため型安全（`{} as Record<...>` のような不完全キャストを避ける）。
+ */
+export function mapQuadrantKeys<T>(
+  fn: (key: QuadrantKey) => T,
+): Record<QuadrantKey, T> {
+  return {
+    do: fn("do"),
+    schedule: fn("schedule"),
+    delegate: fn("delegate"),
+    delete: fn("delete"),
+  };
+}
+
+/**
  * 1 ノートの両軸値。`undefined` は「プロパティが存在しない（absent）」を表し、
  * 明示的な `false` とは区別する（absent と false を区別する＝要件定義書の盲点対策）。
  */

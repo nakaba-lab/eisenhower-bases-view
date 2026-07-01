@@ -5,7 +5,7 @@
  * ここの値は未設定時のデフォルトとして使う（docs/要件定義書.md「主要機能 F4」）。
  * #23（F6）で設定タブから編集する `language`／`quadrantLabels`／`quadrantColors` を追加した。
  */
-import { QUADRANT_KEYS, type QuadrantKey } from "./logic/quadrant";
+import { mapQuadrantKeys, type QuadrantKey } from "./logic/quadrant";
 
 /** 表示言語の設定値。`auto` は Obsidian のアプリ言語に追従する（解決は `src/i18n.ts`）。 */
 export type LanguageSetting = "auto" | "en" | "ja";
@@ -27,7 +27,7 @@ export interface EisenhowerSettings {
 
 /** 全象限を空文字で初期化した Record（ラベル/色の既定＝「未カスタム」を表す）。 */
 function emptyQuadrantRecord(): Record<QuadrantKey, string> {
-  return { do: "", schedule: "", delegate: "", delete: "" };
+  return mapQuadrantKeys(() => "");
 }
 
 export const DEFAULT_SETTINGS: EisenhowerSettings = {
@@ -51,12 +51,10 @@ function isLanguageSetting(value: unknown): value is LanguageSetting {
 /** `loadData()` 由来の Record<QuadrantKey,string> を既定（空文字）で補完する（欠損キー対策）。 */
 function mergeQuadrantRecord(raw: unknown): Record<QuadrantKey, string> {
   const source = (raw ?? {}) as Partial<Record<QuadrantKey, unknown>>;
-  const out = emptyQuadrantRecord();
-  for (const key of QUADRANT_KEYS) {
+  return mapQuadrantKeys((key) => {
     const value = source[key];
-    if (typeof value === "string") out[key] = value;
-  }
-  return out;
+    return typeof value === "string" ? value : "";
+  });
 }
 
 /**

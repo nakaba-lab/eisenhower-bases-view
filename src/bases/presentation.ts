@@ -6,7 +6,7 @@
  * 色: カスタム空＝空文字（UI 側でテーマ既定 `--interactive-accent` にフォールバック）、非空＝その hex。
  * Obsidian・Bases 非依存の純ロジックのため単体テストで固定する。
  */
-import { QUADRANT_KEYS, type QuadrantKey } from "../logic/quadrant";
+import { mapQuadrantKeys, type QuadrantKey } from "../logic/quadrant";
 import type { EisenhowerSettings } from "../settings";
 import type { Messages } from "../i18n";
 import type { MatrixPresentation } from "./types";
@@ -16,26 +16,19 @@ export function resolveQuadrantLabels(
   settings: EisenhowerSettings,
   messages: Messages,
 ): Record<QuadrantKey, string> {
-  const out = {} as Record<QuadrantKey, string>;
-  for (const key of QUADRANT_KEYS) {
+  return mapQuadrantKeys((key) => {
     const custom = settings.quadrantLabels[key] ?? "";
     // 空白のみ（trim して空）は「未カスタム」とみなし言語既定へフォールバックする
     // （空白ラベルで見出しが不可視になるのを防ぐ・frontend-reviewer 指摘）。
-    out[key] = custom.trim().length > 0 ? custom : messages.quadrantLabels[key];
-  }
-  return out;
+    return custom.trim().length > 0 ? custom : messages.quadrantLabels[key];
+  });
 }
 
 /** 象限色を解決する（カスタム非空＝その hex・空＝空文字でテーマ既定にフォールバック）。 */
 export function resolveQuadrantColors(
   settings: EisenhowerSettings,
 ): Record<QuadrantKey, string> {
-  const out = {} as Record<QuadrantKey, string>;
-  for (const key of QUADRANT_KEYS) {
-    const custom = settings.quadrantColors[key] ?? "";
-    out[key] = custom.length > 0 ? custom : "";
-  }
-  return out;
+  return mapQuadrantKeys((key) => settings.quadrantColors[key] ?? "");
 }
 
 /** ラベル・色・言語メッセージを束ねた {@link MatrixPresentation} を組む。 */

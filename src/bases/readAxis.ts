@@ -41,15 +41,29 @@ function toNotePropertyId(name: string): BasesPropertyId {
 const NOTE_PROPERTY_PREFIX = "note.";
 
 /**
+ * 「書き戻せる `note.*` 軸か」を判定する単一述語（軸許容ルールの真実源・#21 F4）。
+ *
+ * `note.<key>`（非空キー）のみ true を返し、`formula.*`／`file.*`／空キー（bare `note.`）を弾く。
+ * options の `filter`（選択時に弾く＝`viewOptions.buildAxisViewOptions`）・読み取り（{@link readSingleAxis}）・
+ * 書き戻し（{@link toFrontmatterKey}／`EisenhowerBasesView.writeBackAxes`）の 3 面がこの述語を共有し、
+ * 「選べるのに壊れる／読めるのに書けない」非対称を防ぐ。
+ */
+export function isWritableAxisProperty(propertyId: BasesPropertyId): boolean {
+  const raw = propertyId as unknown as string;
+  return (
+    raw.startsWith(NOTE_PROPERTY_PREFIX) &&
+    raw.length > NOTE_PROPERTY_PREFIX.length
+  );
+}
+
+/**
  * 軸 propertyId から frontmatter の書き戻しキーを取り出す（#20 F3 のドラッグ書き戻し用）。
- * `note.<key>` のみ書き戻し可能で `<key>` を返す。`formula.*`／`file.*` 等は
- * frontmatter へ書き戻せないため `null` を返す（呼び出し側は Notice 等で弾く）。
+ * 書き戻し可能な `note.<key>`（{@link isWritableAxisProperty}）のみ `<key>` を返す。
+ * `formula.*`／`file.*`／空キーは frontmatter へ書き戻せないため `null` を返す（呼び出し側は Notice 等で弾く）。
  */
 export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
-  const raw = propertyId as unknown as string;
-  if (!raw.startsWith(NOTE_PROPERTY_PREFIX)) return null;
-  const key = raw.slice(NOTE_PROPERTY_PREFIX.length);
-  return key.length > 0 ? key : null;
+  if (!isWritableAxisProperty(propertyId)) return null;
+  return (propertyId as unknown as string).slice(NOTE_PROPERTY_PREFIX.length);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { BasesView, Notice, TFile, type QueryController } from "obsidian";
 import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
-import { resolveAxisPropertyIds, toFrontmatterKey } from "./readAxis";
+import { resolveWritableAxisKeys } from "./readAxis";
 import { VIEW_ID } from "./registerView";
 import type { AxisWriteValues, MatrixCallbacks } from "./types";
 import type { EisenhowerSettings } from "../settings";
@@ -71,10 +71,9 @@ export class EisenhowerBasesView extends BasesView {
     entryId: string,
     axisValues: AxisWriteValues,
   ): Promise<void> {
-    const ids = resolveAxisPropertyIds(this.config, this.getSettings());
-    const urgentKey = toFrontmatterKey(ids.urgent);
-    const importantKey = toFrontmatterKey(ids.important);
-    if (urgentKey === null || importantKey === null) {
+    // 書込可能な note.* 軸か（両軸）を frontmatter に触れる前に判定して弾く（AC3）。
+    const keys = resolveWritableAxisKeys(this.config, this.getSettings());
+    if (keys === null) {
       new Notice(
         "Eisenhower Matrix: 書き戻せない軸プロパティ（note. 以外）のため移動できません。",
       );
@@ -89,8 +88,8 @@ export class EisenhowerBasesView extends BasesView {
 
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        frontmatter[urgentKey] = axisValues.urgent;
-        frontmatter[importantKey] = axisValues.important;
+        frontmatter[keys.urgent] = axisValues.urgent;
+        frontmatter[keys.important] = axisValues.important;
       });
     } catch (error) {
       console.error("[Eisenhower Matrix] frontmatter 書き戻しに失敗しました", error);

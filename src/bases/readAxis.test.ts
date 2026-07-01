@@ -7,6 +7,7 @@ import {
   URGENT_OPTION_KEY,
   readAxisValues,
   resolveAxisPropertyIds,
+  resolveWritableAxisKeys,
   toFrontmatterKey,
   type AxisPropertyIds,
 } from "./readAxis";
@@ -146,5 +147,54 @@ describe("toFrontmatterKey", () => {
   it("toFrontmatterKey — 空キー（bare 'note.'）は null＝空名で frontmatter を壊さない（レビュー指摘）", () => {
     // given / when / then: note. の後ろが空なら書き戻しキーにできない
     expect(toFrontmatterKey("note." as BasesPropertyId)).toBeNull();
+  });
+
+  it("toFrontmatterKey — frontmatter プロパティ名が 'note.x' のケース（propertyId=note.note.x）は 'note.x' を返す（入れ子は意図的に許可）", () => {
+    // given / when / then: BasesPropertyId=`${type}.${name}` のため name に "note.x" を持つと
+    // propertyId は "note.note.x"。書き戻し先 frontmatter キーは "note.x" が正しい（弾かない）。
+    expect(toFrontmatterKey("note.note.x" as BasesPropertyId)).toBe("note.x");
+  });
+});
+
+describe("resolveWritableAxisKeys（#21 F4・AC3 書き戻しガードの純度）", () => {
+  it("resolveWritableAxisKeys — 両軸とも note.* なら frontmatter キーを返す（config 優先）", () => {
+    // given
+    const config = mockConfig({
+      [URGENT_OPTION_KEY]: "note.due" as BasesPropertyId,
+      [IMPORTANT_OPTION_KEY]: "note.priority" as BasesPropertyId,
+    });
+    // when / then
+    expect(resolveWritableAxisKeys(config, DEFAULT_SETTINGS)).toEqual({
+      urgent: "due",
+      important: "priority",
+    });
+  });
+
+  it("resolveWritableAxisKeys — config 未設定なら settings デフォルト（note.urgent/important）のキー", () => {
+    // given / when / then
+    expect(resolveWritableAxisKeys(null, DEFAULT_SETTINGS)).toEqual({
+      urgent: "urgent",
+      important: "important",
+    });
+  });
+
+  it("resolveWritableAxisKeys — 片軸が formula.* なら null＝書き戻し前に弾く（AC3・frontmatter を壊さない）", () => {
+    // given: 緊急軸を書き戻し不可な formula.* に設定
+    const config = mockConfig({
+      [URGENT_OPTION_KEY]: "formula.score" as BasesPropertyId,
+      [IMPORTANT_OPTION_KEY]: "note.important" as BasesPropertyId,
+    });
+    // when / then: null → writeBackAxes は processFrontMatter を呼ばず Notice で reject する
+    expect(resolveWritableAxisKeys(config, DEFAULT_SETTINGS)).toBeNull();
+  });
+
+  it("resolveWritableAxisKeys — 片軸が file.* でも null（両軸書込可でなければ弾く）", () => {
+    // given
+    const config = mockConfig({
+      [URGENT_OPTION_KEY]: "note.urgent" as BasesPropertyId,
+      [IMPORTANT_OPTION_KEY]: "file.name" as BasesPropertyId,
+    });
+    // when / then
+    expect(resolveWritableAxisKeys(config, DEFAULT_SETTINGS)).toBeNull();
   });
 });

@@ -30,6 +30,11 @@ describe("isWritableAxisProperty", () => {
     // given / when / then
     expect(isWritableAxisProperty("note." as BasesPropertyId)).toBe(false);
   });
+
+  it("isWritableAxisProperty — frontmatter プロパティ名が 'note.x'（propertyId=note.note.x）は true＝入れ子を意図的に許可", () => {
+    // given / when / then: note 名前空間の非空キーなので書き戻し可能（弾き忘れではない）
+    expect(isWritableAxisProperty("note.note.x" as BasesPropertyId)).toBe(true);
+  });
 });
 
 describe("buildAxisViewOptions（AC1: note.* のみ選択肢）", () => {

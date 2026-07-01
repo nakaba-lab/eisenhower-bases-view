@@ -83,6 +83,34 @@ export function resolveAxisPropertyIds(
   return { urgent, important };
 }
 
+/** ドラッグ書き戻し先の frontmatter キー（両軸とも書き戻し可能な `note.*` のとき）。 */
+export interface WritableAxisKeys {
+  urgent: string;
+  important: string;
+}
+
+/**
+ * 書き戻し先の frontmatter キーを解決する（#20 F3 ドラッグ書き戻し・#21 F4 実行時ガード）。
+ *
+ * 軸 propertyId を解決（ビュー options 主・設定デフォルト）し、両軸とも書き戻し可能な `note.<key>`
+ * なら `{ urgent, important }`（frontmatter キー）を返す。**片方でも非 `note.*`（`formula.*`／`file.*`／
+ * 空キー）なら `null`** を返し、呼び出し側（`EisenhowerBasesView.writeBackAxes`）は frontmatter に
+ * 触れる前に Notice で弾く（AC3＝書込不可軸のとき frontmatter を壊さない）。
+ *
+ * `writeBackAxes` は `extends BasesView` で単体対象外のため、ガード判定（どの軸が書けるか）の純度を
+ * 本関数へ切り出して単体テストで固定する（`safeRegisterBasesView` と同じ流儀）。
+ */
+export function resolveWritableAxisKeys(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+): WritableAxisKeys | null {
+  const ids = resolveAxisPropertyIds(config, settings);
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  if (urgent === null || important === null) return null;
+  return { urgent, important };
+}
+
 /**
  * 1 軸の Value を boolean | undefined に正規化する。
  * absent（NullValue singleton）と `getValue` 自体の null を undefined にし、

@@ -1,0 +1,49 @@
+/**
+ * presentation — 設定（カスタムラベル/色）と言語メッセージ（既定ラベル/色フォールバック）を
+ * 合成して UI へ渡す表示情報を組む純関数（#23 F6・AC2）。
+ *
+ * ラベル: カスタム空＝言語既定にフォールバック、非空＝カスタム上書き（AC2 とラベル×言語の相互作用）。
+ * 色: カスタム空＝空文字（UI 側でテーマ既定 `--interactive-accent` にフォールバック）、非空＝その hex。
+ * Obsidian・Bases 非依存の純ロジックのため単体テストで固定する。
+ */
+import { QUADRANT_KEYS, type QuadrantKey } from "../logic/quadrant";
+import type { EisenhowerSettings } from "../settings";
+import type { Messages } from "../i18n";
+import type { MatrixPresentation } from "./types";
+
+/** 象限ラベルを解決する（カスタム非空＝上書き・空＝言語既定）。 */
+export function resolveQuadrantLabels(
+  settings: EisenhowerSettings,
+  messages: Messages,
+): Record<QuadrantKey, string> {
+  const out = {} as Record<QuadrantKey, string>;
+  for (const key of QUADRANT_KEYS) {
+    const custom = settings.quadrantLabels[key] ?? "";
+    out[key] = custom.length > 0 ? custom : messages.quadrantLabels[key];
+  }
+  return out;
+}
+
+/** 象限色を解決する（カスタム非空＝その hex・空＝空文字でテーマ既定にフォールバック）。 */
+export function resolveQuadrantColors(
+  settings: EisenhowerSettings,
+): Record<QuadrantKey, string> {
+  const out = {} as Record<QuadrantKey, string>;
+  for (const key of QUADRANT_KEYS) {
+    const custom = settings.quadrantColors[key] ?? "";
+    out[key] = custom.length > 0 ? custom : "";
+  }
+  return out;
+}
+
+/** ラベル・色・言語メッセージを束ねた {@link MatrixPresentation} を組む。 */
+export function resolvePresentation(
+  settings: EisenhowerSettings,
+  messages: Messages,
+): MatrixPresentation {
+  return {
+    messages,
+    quadrantLabels: resolveQuadrantLabels(settings, messages),
+    quadrantColors: resolveQuadrantColors(settings),
+  };
+}

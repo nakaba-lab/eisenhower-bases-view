@@ -8,6 +8,17 @@
 /** 4 象限＋未分類。 */
 export type Quadrant = "do" | "schedule" | "delegate" | "delete" | "unclassified";
 
+/** 4 象限のキー（未分類を除く）。設定のラベル/色・presentation の Record キーに使う（#23 F6）。 */
+export type QuadrantKey = Exclude<Quadrant, "unclassified">;
+
+/** 4 象限キーの列挙（表示順: Do/Schedule/Delegate/Delete）。ラベル/色の反復に使う。 */
+export const QUADRANT_KEYS: readonly QuadrantKey[] = [
+  "do",
+  "schedule",
+  "delegate",
+  "delete",
+];
+
 /**
  * 1 ノートの両軸値。`undefined` は「プロパティが存在しない（absent）」を表し、
  * 明示的な `false` とは区別する（absent と false を区別する＝要件定義書の盲点対策）。

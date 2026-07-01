@@ -5,7 +5,8 @@
  *（`obsidian`/Bases 型を import しない＝AC5 の疎結合を構造で保証）。
  * 象限キー（{@link Quadrant}）は純ロジック `src/logic/quadrant` を真実源とする。
  */
-import type { Quadrant } from "../logic/quadrant";
+import type { Quadrant, QuadrantKey } from "../logic/quadrant";
+import type { Messages } from "../i18n";
 
 /** マトリクスに並ぶ 1 ノートの表示用データ。 */
 export interface MatrixEntry {
@@ -28,6 +29,20 @@ export type MatrixState = "loading" | "empty" | "ready";
  */
 export type QuadrantPlacements = Record<Quadrant, MatrixEntry[]>;
 
+/**
+ * UI へ渡す表示情報（象限ラベル/色・言語文言）を束ねたもの（#23 F6）。
+ * アダプタ層が設定（カスタムラベル/色）と言語メッセージ（既定ラベル）を解決して組む
+ *（`resolvePresentation`）。UI はこの解決済みデータを描画するだけで、`language` を知らない。
+ */
+export interface MatrixPresentation {
+  /** 解決済みの言語メッセージ束（静的文言・軸ラベル・SR・アナウンステンプレート）。 */
+  messages: Messages;
+  /** 表示する象限ラベル（カスタム || 言語既定）。 */
+  quadrantLabels: Record<QuadrantKey, string>;
+  /** 象限アクセント色（カスタム hex。空文字＝テーマ既定にフォールバック）。 */
+  quadrantColors: Record<QuadrantKey, string>;
+}
+
 /** UI へ渡す ViewModel（アダプタ層が entries から組む）。 */
 export interface MatrixViewModel {
   state: MatrixState;
@@ -40,6 +55,11 @@ export interface MatrixViewModel {
    * 省略時は表示（既定 true・後方互換）。`false` で UI は未分類ゾーンを描画しない。
    */
   showUnclassified?: boolean;
+  /**
+   * ラベル/色/言語文言の表示情報（#23 F6）。省略時は UI が現行の既定（英ラベル＋日本語文言）に
+   * フォールバックする（後方互換）。アダプタは常に載せる。
+   */
+  presentation?: MatrixPresentation;
 }
 
 /** ドラッグ書き戻しで UI からアダプタへ渡す目的両軸値（両軸とも明示 boolean）。 */

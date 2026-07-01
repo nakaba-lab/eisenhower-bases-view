@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, Value } from "obsidian";
 import { BooleanValue, NullValue, NumberValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
+import { messagesFor } from "../i18n";
 import { toViewModel } from "./toViewModel";
 
 /**
@@ -208,5 +209,53 @@ describe("toViewModel — ビュー options の軸変更で再配置（#21 F4・
     // then: 新しい軸で両軸 true → Do、未分類は空
     expect(remappedView.placements.do.map((e) => e.id)).toEqual(["t.md"]);
     expect(remappedView.placements.unclassified).toEqual([]);
+  });
+});
+
+describe("toViewModel — presentation（ラベル/色/言語文言の解決・#23 F6）", () => {
+  /** 両軸 boolean の最小 entry（presentation 検証は配置に依存しないため簡易版）。 */
+  function boolEntry(path: string, urgent: Value, important: Value): BasesEntry {
+    const values: Record<string, Value | null> = {
+      "note.urgent": urgent,
+      "note.important": important,
+    };
+    return {
+      file: { path, basename: path.replace(/\.md$/, "") },
+      getValue: (id: BasesPropertyId) => values[id] ?? null,
+    } as unknown as BasesEntry;
+  }
+
+  it("toViewModel — 渡した messages と設定から presentation を組む（ready 状態）", () => {
+    // given: do をカスタムラベル/色にした設定＋ en messages
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      quadrantLabels: { ...DEFAULT_SETTINGS.quadrantLabels, do: "やることA" },
+      quadrantColors: { ...DEFAULT_SETTINGS.quadrantColors, do: "#123456" },
+    };
+    const messages = messagesFor("en");
+    // when
+    const viewModel = toViewModel([boolEntry("a.md", TRUE, TRUE)], null, settings, messages);
+    // then: presentation にラベル（カスタム上書き・空は en 既定）・色・messages が載る
+    expect(viewModel.presentation?.messages).toBe(messages);
+    expect(viewModel.presentation?.quadrantLabels.do).toBe("やることA");
+    expect(viewModel.presentation?.quadrantLabels.schedule).toBe("Schedule");
+    expect(viewModel.presentation?.quadrantColors.do).toBe("#123456");
+    expect(viewModel.presentation?.quadrantColors.schedule).toBe("");
+  });
+
+  it("toViewModel — empty 状態でも presentation を載せる（言語既定ラベル）", () => {
+    // given / when: entries 0 件・ja messages
+    const viewModel = toViewModel([], null, DEFAULT_SETTINGS, messagesFor("ja"));
+    // then
+    expect(viewModel.state).toBe("empty");
+    expect(viewModel.presentation?.quadrantLabels.do).toBe("実行");
+  });
+
+  it("toViewModel — messages 省略時も presentation を持つ（後方互換の既定言語）", () => {
+    // given / when: 3 引数呼び出し（既存呼び出しの後方互換）
+    const viewModel = toViewModel([boolEntry("a.md", TRUE, TRUE)], null, DEFAULT_SETTINGS);
+    // then: presentation は存在し全象限ラベルが埋まる
+    expect(viewModel.presentation).toBeDefined();
+    expect(viewModel.presentation?.quadrantLabels.delete.length).toBeGreaterThan(0);
   });
 });

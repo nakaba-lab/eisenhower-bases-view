@@ -62,9 +62,12 @@
   overflow: hidden;
 }
 
-/* 4 象限を控えめなアクセント色で区別する（テーマ変数のみ・ライト/ダーク追従）。 */
+/* 4 象限を控えめなアクセント色で区別する。既定はテーマ変数（ライト/ダーク追従）、
+ * 設定タブ（F6/#23）で象限ごとに色を指定するとインライン変数
+ * --eisenhower-quadrant-accent が上書きする（空/未設定はテーマ既定にフォールバック）。 */
 .eisenhower-quadrant--quadrant {
-  border-inline-start: 3px solid var(--interactive-accent);
+  border-inline-start: 3px solid
+    var(--eisenhower-quadrant-accent, var(--interactive-accent));
 }
 
 /* 未分類ゾーンは下部にフル幅で常時表示（軸欠損・ドロップ不可）。 */

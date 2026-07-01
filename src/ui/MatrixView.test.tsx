@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../bases/types";
+import { DEFAULT_SETTINGS } from "../settings";
+import { messagesFor, type Language } from "../i18n";
+import { resolvePresentation } from "../bases/presentation";
 import { render, unmount } from "./MatrixView";
 
 /**
@@ -151,6 +154,90 @@ describe("MatrixView — カードを開く導線の配線（#22 F5）", () => {
     // then
     expect(onHoverCard).toHaveBeenCalledTimes(1);
     expect(onHoverCard.mock.calls[0][0]).toBe("do.md");
+  });
+});
+
+describe("MatrixView render — presentation（ラベル/色/言語文言・#23 F6）", () => {
+  function presentationWith(
+    labels: Record<string, string>,
+    colors: Record<string, string> = {},
+    lang: Language = "en",
+  ) {
+    return resolvePresentation(
+      {
+        ...DEFAULT_SETTINGS,
+        quadrantLabels: { ...DEFAULT_SETTINGS.quadrantLabels, ...labels },
+        quadrantColors: { ...DEFAULT_SETTINGS.quadrantColors, ...colors },
+      },
+      messagesFor(lang),
+    );
+  }
+
+  it("render — presentation.messages で loading 文言が言語化される（en）", () => {
+    const container = mountContainer();
+    render(
+      container,
+      {
+        state: "loading",
+        entries: [],
+        placements: emptyPlacements(),
+        presentation: presentationWith({}, {}, "en"),
+      },
+      {},
+    );
+    expect(container.textContent).toContain("Loading…");
+  });
+
+  it("render — presentation.messages で empty 文言が言語化される（en）", () => {
+    const container = mountContainer();
+    render(
+      container,
+      {
+        state: "empty",
+        entries: [],
+        placements: emptyPlacements(),
+        presentation: presentationWith({}, {}, "en"),
+      },
+      {},
+    );
+    expect(container.textContent).toContain("No notes to display");
+  });
+
+  it("render — presentation の象限ラベル（カスタム上書き・空は言語既定）を描画する", () => {
+    // given: do をカスタム、他は en 既定
+    const container = mountContainer();
+    const vm: MatrixViewModel = {
+      ...readyViewModel({ do: [entry("a.md", "a")] }),
+      presentation: presentationWith({ do: "やることA" }, {}, "en"),
+    };
+    // when
+    render(container, vm, {});
+    // then: Do セルはカスタム "やることA"、Schedule は en 既定 "Schedule"
+    expect(container.querySelector('[aria-label^="やることA"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label^="Schedule"]')).not.toBeNull();
+  });
+
+  it("render — presentation の象限色をセルにインライン CSS 変数で付与する（AC2）", () => {
+    // given: Do に色を指定
+    const container = mountContainer();
+    const vm: MatrixViewModel = {
+      ...readyViewModel({ do: [entry("a.md", "a")] }),
+      presentation: presentationWith({}, { do: "#123456" }, "en"),
+    };
+    // when
+    render(container, vm, {});
+    // then
+    const doCell = container.querySelector('[aria-label^="Do"]') as HTMLElement;
+    expect(doCell.style.getPropertyValue("--eisenhower-quadrant-accent")).toBe("#123456");
+  });
+
+  it("render — presentation 省略時は従来どおり日本語既定の文言/ラベルを描画する（後方互換）", () => {
+    // given / when: presentation なし
+    const container = mountContainer();
+    render(container, readyViewModel({}), {});
+    // then: 現行のハードコード（Do ラベル・未分類）を維持
+    expect(container.querySelector('[aria-label^="Do"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label^="未分類"]')).not.toBeNull();
   });
 });
 

@@ -1,5 +1,5 @@
 import { Notice, Plugin } from "obsidian";
-import { DEFAULT_SETTINGS, type EisenhowerSettings } from "./settings";
+import { DEFAULT_SETTINGS, mergeSettings, type EisenhowerSettings } from "./settings";
 import { EisenhowerBasesView } from "./bases/EisenhowerBasesView";
 import {
   VIEW_ICON,
@@ -8,20 +8,26 @@ import {
   safeRegisterBasesView,
 } from "./bases/registerView";
 import { buildAxisViewOptions } from "./bases/viewOptions";
+import { EisenhowerSettingTab } from "./settingsTab";
+import { messagesFor, resolveLanguage, type Messages } from "./i18n";
 
 /**
  * Eisenhower Matrix（Obsidian Bases カスタムビュー）プラグインのエントリポイント。
  *
- * `onload` で Bases カスタムビューを登録する。Bases が無効な Vault では
- * `registerBasesView` が `false` を返す（または API が無い）ため、`safeRegisterBasesView`
+ * `onload` で設定タブ（#23 F6）を登録し、続けて Bases カスタムビューを登録する。Bases が無効な
+ * Vault では `registerBasesView` が `false` を返す（または API が無い）ため、`safeRegisterBasesView`
  * で graceful に握り、設定ロード等の他機能を壊さない（AC2）。
  * 登録ビューは Plugin ライフサイクルで解除される（各ビューの onunload で Preact を unmount）。
+ * 生存中ビューは登録簿（{@link liveViews}）で保持し、設定変更時に再描画して即時反映する（F6・AC1/AC2）。
  */
 export default class EisenhowerBasesViewPlugin extends Plugin {
   settings: EisenhowerSettings = DEFAULT_SETTINGS;
+  /** 生存中の Eisenhower ビュー（設定変更時に再描画する登録簿・#23 F6）。 */
+  private readonly liveViews = new Set<EisenhowerBasesView>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.addSettingTab(new EisenhowerSettingTab(this.app, this));
 
     safeRegisterBasesView(
       () =>
@@ -33,6 +39,8 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
               controller,
               containerEl,
               () => this.settings,
+              () => this.resolveMessages(),
+              this.liveViews,
             ),
           // 軸プロパティ選択 UI（#21 F4）: note.* のみ選択可の property セレクタを
           // Configure view へ宣言する（filter は書き戻し可能な note.* 判定・AC1）。
@@ -51,14 +59,38 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
 
   onunload(): void {
     // registerBasesView の登録は Plugin ライフサイクルで解除される。
-    // 各 EisenhowerBasesView は onunload で Preact ルートを unmount し DOM リークを防ぐ。
+    // 各 EisenhowerBasesView は onunload で Preact ルートを unmount し登録簿から抜ける。
+    this.liveViews.clear();
+  }
+
+  /** 設定の言語（Auto は Obsidian 追従）を解決した言語メッセージ束を返す（#23 F6・AC4）。 */
+  resolveMessages(): Messages {
+    return messagesFor(
+      resolveLanguage(this.settings.language, this.getObsidianLanguage()),
+    );
+  }
+
+  /** Obsidian のアプリ表示言語（`localStorage['language']`。未設定は null＝既定 en）。 */
+  getObsidianLanguage(): string | null {
+    try {
+      return window.localStorage.getItem("language");
+    } catch {
+      return null;
+    }
+  }
+
+  /** 設定変更を開いている全ビューへ即時反映する（#23 F6・AC1/AC2）。 */
+  private refreshViews(): void {
+    for (const view of this.liveViews) view.refresh();
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // 浅い Object.assign ではネスト（象限ラベル/色）の欠損キーが埋まらないため mergeSettings を使う。
+    this.settings = mergeSettings(await this.loadData());
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    this.refreshViews();
   }
 }

@@ -83,3 +83,45 @@ describe("QuadrantCell", () => {
     expect(screen.getByRole("region", { name: "未分類（軸欠損・ドロップ不可）" })).toBeTruthy();
   });
 });
+
+describe("QuadrantCell — 象限アクセント色（#23 F6・AC2）", () => {
+  it("QuadrantCell — accentColor（非空）をセルにインライン CSS 変数で付与する", () => {
+    // given / when
+    const { container } = render(
+      <QuadrantCell
+        quadrant="do"
+        label="Do"
+        axisLabel="重要 × 緊急"
+        entries={[]}
+        accentColor="#123456"
+      />,
+    );
+    // then: セルの style に --eisenhower-quadrant-accent が載る（styles.css がこの変数を参照）
+    const cell = container.querySelector(".eisenhower-quadrant") as HTMLElement;
+    expect(cell.style.getPropertyValue("--eisenhower-quadrant-accent")).toBe("#123456");
+  });
+
+  it("QuadrantCell — accentColor 未指定/空ならインライン変数を付けない（テーマ既定にフォールバック）", () => {
+    // given / when: accentColor を渡さない
+    const { container } = render(
+      <QuadrantCell quadrant="do" label="Do" axisLabel="重要 × 緊急" entries={[]} />,
+    );
+    // then: インライン変数は無し（CSS の var(..., --interactive-accent) 側にフォールバック）
+    const cell = container.querySelector(".eisenhower-quadrant") as HTMLElement;
+    expect(cell.style.getPropertyValue("--eisenhower-quadrant-accent")).toBe("");
+  });
+
+  it("QuadrantCell — accentColor 空文字は付与しない", () => {
+    const { container } = render(
+      <QuadrantCell
+        quadrant="do"
+        label="Do"
+        axisLabel="重要 × 緊急"
+        entries={[]}
+        accentColor=""
+      />,
+    );
+    const cell = container.querySelector(".eisenhower-quadrant") as HTMLElement;
+    expect(cell.style.getPropertyValue("--eisenhower-quadrant-accent")).toBe("");
+  });
+});

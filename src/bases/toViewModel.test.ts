@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, Value } from "obsidian";
-import { NullValue } from "obsidian";
+import { BooleanValue, NullValue, NumberValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import { toViewModel } from "./toViewModel";
 
@@ -8,19 +8,18 @@ import { toViewModel } from "./toViewModel";
  * toViewModel — Bases の entries を Bases 非依存の MatrixViewModel へ変換する純関数。
  * #19（F2）で各 entry の両軸値を `getValue` で読み（absent は NullValue で区別）、
  * `classifyQuadrant` で 4 象限＋未分類に**事前グルーピング**（placements）する。
- * obsidian ランタイムに依存しないよう Value/entry を構造モックする。
+ * v1 は boolean 軸限定のため、値が `BooleanValue` の軸だけを 4 象限に分類し、非 boolean
+ * （数値/文字列）や absent は未分類へ退避する（#34）。obsidian の値 import はスタブへ解決される。
  */
 
-function value(str: string, truthy: boolean): Value {
-  return { toString: () => str, isTruthy: () => truthy } as unknown as Value;
-}
 /**
  * absent を表す **実 NullValue**（singleton）。実機の absent は NullValue で `toString()` は
  * 文字列 "null"・`isTruthy()===false`（`scripts/e2e` プローブで確定）。判定は `instanceof NullValue`。
  */
 const ABSENT: Value = NullValue.value;
-const TRUE = value("true", true);
-const FALSE = value("false", false);
+/** boolean 軸の値（実 `BooleanValue`）。#34 で正規化を boolean 軸限定に狭めたため実インスタンスを使う。 */
+const TRUE: Value = new BooleanValue(true);
+const FALSE: Value = new BooleanValue(false);
 
 /** 両軸の値を指定した最小モック entry（軸プロパティは note.urgent / note.important）。 */
 function mockEntry(
@@ -104,6 +103,18 @@ describe("toViewModel — absent / 未分類（AC5-6）", () => {
     // then
     expect(placements.unclassified.map((e) => e.id)).toEqual(["x.md"]);
     expect(placements.delete).toEqual([]);
+  });
+
+  it("toViewModel — 非 boolean 軸（数値 note.priority: 3 相当）のノートは未分類ゾーンに入る（v1 boolean 軸限定・#34 AC1/AC2）", () => {
+    // given: 緊急軸が数値 NumberValue、重要軸は boolean。マトリクスを開くと…
+    const entries = [mockEntry("num.md", "num", new NumberValue(3), TRUE)];
+    // when
+    const { placements } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: 非 boolean 軸のノートは 4 象限に並ばず未分類（ドラッグ→両軸 true/false 上書きでの破壊を防ぐ）
+    expect(placements.unclassified.map((e) => e.id)).toEqual(["num.md"]);
+    expect(
+      placements.do.concat(placements.schedule, placements.delegate, placements.delete),
+    ).toEqual([]);
   });
 
   it("toViewModel — 両軸 absent（軸プロパティを持たないノート・.base 自身）は未分類", () => {

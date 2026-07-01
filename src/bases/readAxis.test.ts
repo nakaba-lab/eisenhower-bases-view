@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
-import { NullValue } from "obsidian";
+import { BooleanValue, NullValue, NumberValue, StringValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import {
   IMPORTANT_OPTION_KEY,
@@ -14,14 +14,13 @@ import {
 
 /**
  * readAxis — 軸プロパティの解決（config 主・settings デフォルト）と、
- * 1 軸値の absent/true/false 正規化（スパイク #16 確定の NullValue 判定）。
- * obsidian ランタイムに依存しないよう Value/Config を構造モックする。
+ * 1 軸値の absent/非 boolean/true/false 正規化。
+ * v1 は **boolean 軸限定**のため、値が `BooleanValue` の軸だけを 4 象限に分類し、
+ * 非 boolean（`NumberValue`/`StringValue`）や absent（`NullValue`）は未分類（undefined）へ
+ * 退避する（#34。正の許可リスト `instanceof BooleanValue`）。obsidian の値 import
+ * （`BooleanValue`/`NullValue`/…）は vitest が `src/test-support/obsidianStub.ts` へ解決する。
  */
 
-/** toString()/isTruthy() だけを持つ最小の Value モック（true/false 用）。 */
-function value(str: string, truthy: boolean): Value {
-  return { toString: () => str, isTruthy: () => truthy } as unknown as Value;
-}
 /**
  * absent を表す **実 NullValue**（singleton）。実機の absent は NullValue で、
  * `toString()` は**文字列 "null"**・`isTruthy()===false`（`scripts/e2e` のプローブで確定）。
@@ -29,8 +28,13 @@ function value(str: string, truthy: boolean): Value {
  * 旧モック（`toString()===null` を返す素オブジェクト）ではなく実 NullValue を使う。
  */
 const ABSENT: Value = NullValue.value;
-const TRUE = value("true", true);
-const FALSE = value("false", false);
+/**
+ * boolean 軸の値（実 `BooleanValue`）。#34 で正規化を boolean 軸限定に狭めたため、
+ * true/false は素オブジェクトではなく **`instanceof BooleanValue` が成立する実インスタンス**を使う
+ * （素オブジェクトは非 boolean 扱いで未分類化される＝実機の非 boolean 軸と同じ挙動）。
+ */
+const TRUE: Value = new BooleanValue(true);
+const FALSE: Value = new BooleanValue(false);
 
 function mockEntry(values: Record<string, Value | null>): BasesEntry {
   return {
@@ -128,6 +132,53 @@ describe("readAxisValues", () => {
     // then: formula 軸は getValue が真値でも absent 扱い → 4 象限に並べず未分類（ドラッグ→必ず失敗を防ぐ）
     expect(axis.urgent).toBeUndefined();
     expect(axis.important).toBe(true);
+  });
+
+  it("readAxisValues — 数値軸（NumberValue・note.priority: 3 相当）は値があっても undefined＝未分類化（v1 boolean 軸限定・#34 AC1）", () => {
+    // given: 緊急軸が数値プロパティ（note.priority: 3）、重要軸は boolean
+    const entry = mockEntry({
+      "note.urgent": new NumberValue(3),
+      "note.important": TRUE,
+    });
+    // when
+    const axis = readAxisValues(entry, ids);
+    // then: 非 boolean は BooleanValue でないため未分類へ退避（ドラッグ→両軸 true/false 上書きでの数値破壊を防ぐ）
+    expect(axis.urgent).toBeUndefined();
+    expect(axis.important).toBe(true);
+  });
+
+  it("readAxisValues — 文字列軸（StringValue）は値があっても undefined＝未分類化（#34 AC2）", () => {
+    // given: 緊急軸が文字列プロパティ、重要軸は boolean
+    const entry = mockEntry({
+      "note.urgent": new StringValue("high"),
+      "note.important": FALSE,
+    });
+    // when
+    const axis = readAxisValues(entry, ids);
+    // then
+    expect(axis.urgent).toBeUndefined();
+    expect(axis.important).toBe(false);
+  });
+
+  it("readAxisValues — boolean 軸（BooleanValue）は従来どおり true/false に正規化される（#34 AC3・回帰防止）", () => {
+    // given
+    const entry = mockEntry({ "note.urgent": TRUE, "note.important": FALSE });
+    // when / then: BooleanValue は isTruthy() で boolean 化（回帰なし）
+    expect(readAxisValues(entry, ids)).toEqual({ urgent: true, important: false });
+  });
+
+  it("readAxisValues — 非 boolean は isTruthy の真偽ではなく型で退避する（falsy な NumberValue(0)/空文字も未分類・#34 AC4）", () => {
+    // given: falsy な非 boolean（0・空文字）。isTruthy() ベースなら false（Delete 象限）に落ちうるが、
+    //        型ガード（instanceof BooleanValue）なら型で undefined（未分類）へ退避されるべき
+    const entry = mockEntry({
+      "note.urgent": new NumberValue(0),
+      "note.important": new StringValue(""),
+    });
+    // when
+    const axis = readAxisValues(entry, ids);
+    // then: どちらも undefined（未分類）。false（Delete）に誤分類しない
+    expect(axis.urgent).toBeUndefined();
+    expect(axis.important).toBeUndefined();
   });
 });
 

@@ -41,15 +41,32 @@ function toNotePropertyId(name: string): BasesPropertyId {
 const NOTE_PROPERTY_PREFIX = "note.";
 
 /**
+ * 「書き戻せる `note.*` 軸か」を判定する単一述語（軸許容ルールの真実源・#21 F4）。
+ *
+ * `note.<key>`（非空キー）のみ true を返し、`formula.*`／`file.*`／空キー（bare `note.`）を弾く。
+ * options の `filter`（選択時に弾く＝`viewOptions.buildAxisViewOptions`）・読み取り（{@link readSingleAxis}）・
+ * 書き戻し（{@link toFrontmatterKey}／`EisenhowerBasesView.writeBackAxes`）の 3 面がこの述語を共有し、
+ * 「選べるのに壊れる／読めるのに書けない」非対称を防ぐ。
+ */
+export function isWritableAxisProperty(propertyId: BasesPropertyId): boolean {
+  const raw = propertyId as unknown as string;
+  // Bases API / config から予期しない値（null/undefined/非文字列）が渡っても
+  // startsWith で throw せず false を返す（Bases 境界の防御。churn 耐性）。
+  return (
+    typeof raw === "string" &&
+    raw.startsWith(NOTE_PROPERTY_PREFIX) &&
+    raw.length > NOTE_PROPERTY_PREFIX.length
+  );
+}
+
+/**
  * 軸 propertyId から frontmatter の書き戻しキーを取り出す（#20 F3 のドラッグ書き戻し用）。
- * `note.<key>` のみ書き戻し可能で `<key>` を返す。`formula.*`／`file.*` 等は
- * frontmatter へ書き戻せないため `null` を返す（呼び出し側は Notice 等で弾く）。
+ * 書き戻し可能な `note.<key>`（{@link isWritableAxisProperty}）のみ `<key>` を返す。
+ * `formula.*`／`file.*`／空キーは frontmatter へ書き戻せないため `null` を返す（呼び出し側は Notice 等で弾く）。
  */
 export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
-  const raw = propertyId as unknown as string;
-  if (!raw.startsWith(NOTE_PROPERTY_PREFIX)) return null;
-  const key = raw.slice(NOTE_PROPERTY_PREFIX.length);
-  return key.length > 0 ? key : null;
+  if (!isWritableAxisProperty(propertyId)) return null;
+  return (propertyId as unknown as string).slice(NOTE_PROPERTY_PREFIX.length);
 }
 
 /**
@@ -66,6 +83,34 @@ export function resolveAxisPropertyIds(
   const important =
     config?.getAsPropertyId(IMPORTANT_OPTION_KEY) ??
     toNotePropertyId(settings.defaultImportanceProperty);
+  return { urgent, important };
+}
+
+/** ドラッグ書き戻し先の frontmatter キー（両軸とも書き戻し可能な `note.*` のとき）。 */
+export interface WritableAxisKeys {
+  urgent: string;
+  important: string;
+}
+
+/**
+ * 書き戻し先の frontmatter キーを解決する（#20 F3 ドラッグ書き戻し・#21 F4 実行時ガード）。
+ *
+ * 軸 propertyId を解決（ビュー options 主・設定デフォルト）し、両軸とも書き戻し可能な `note.<key>`
+ * なら `{ urgent, important }`（frontmatter キー）を返す。**片方でも非 `note.*`（`formula.*`／`file.*`／
+ * 空キー）なら `null`** を返し、呼び出し側（`EisenhowerBasesView.writeBackAxes`）は frontmatter に
+ * 触れる前に Notice で弾く（AC3＝書込不可軸のとき frontmatter を壊さない）。
+ *
+ * `writeBackAxes` は `extends BasesView` で単体対象外のため、ガード判定（どの軸が書けるか）の純度を
+ * 本関数へ切り出して単体テストで固定する（`safeRegisterBasesView` と同じ流儀）。
+ */
+export function resolveWritableAxisKeys(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+): WritableAxisKeys | null {
+  const ids = resolveAxisPropertyIds(config, settings);
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  if (urgent === null || important === null) return null;
   return { urgent, important };
 }
 

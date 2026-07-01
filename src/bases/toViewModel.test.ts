@@ -150,3 +150,52 @@ describe("toViewModel — showUnclassified の反映（レビュー指摘）", (
     ).toBe(false);
   });
 });
+
+describe("toViewModel — ビュー options の軸変更で再配置（#21 F4・AC4）", () => {
+  /** 任意キーの note.* プロパティを持つ entry（軸変更の検証用）。 */
+  function entryWith(
+    path: string,
+    values: Record<string, Value | null>,
+  ): BasesEntry {
+    return {
+      file: { path, basename: path.replace(/\.md$/, "") },
+      getValue: (id: BasesPropertyId) => values[id] ?? null,
+    } as unknown as BasesEntry;
+  }
+  /** ビュー options（config.getAsPropertyId）のモック。 */
+  function mockConfig(
+    map: Record<string, BasesPropertyId | null>,
+  ): { getAsPropertyId: (key: string) => BasesPropertyId | null } {
+    return { getAsPropertyId: (key: string) => map[key] ?? null };
+  }
+
+  it("toViewModel — options で軸を別 note.* に変えると新しい軸に基づき再配置される", () => {
+    // given: ノートは note.due=true / note.priority=true を持つが note.urgent/important は absent
+    const entries = [
+      entryWith("t.md", {
+        "note.due": TRUE,
+        "note.priority": TRUE,
+        "note.urgent": ABSENT,
+        "note.important": ABSENT,
+      }),
+    ];
+    // when: config を設定しない（デフォルト note.urgent/important）→ 両軸 absent で未分類
+    const defaultView = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then
+    expect(defaultView.placements.unclassified.map((e) => e.id)).toEqual(["t.md"]);
+    expect(defaultView.placements.do).toEqual([]);
+
+    // when: options で軸を note.due / note.priority に変更 → Do 象限へ再配置
+    const remappedView = toViewModel(
+      entries,
+      mockConfig({
+        urgentProperty: "note.due" as BasesPropertyId,
+        importantProperty: "note.priority" as BasesPropertyId,
+      }),
+      DEFAULT_SETTINGS,
+    );
+    // then: 新しい軸で両軸 true → Do、未分類は空
+    expect(remappedView.placements.do.map((e) => e.id)).toEqual(["t.md"]);
+    expect(remappedView.placements.unclassified).toEqual([]);
+  });
+});

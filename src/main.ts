@@ -7,6 +7,7 @@ import {
   VIEW_NAME,
   safeRegisterBasesView,
 } from "./bases/registerView";
+import { buildAxisViewOptions } from "./bases/viewOptions";
 
 /**
  * Eisenhower Matrix（Obsidian Bases カスタムビュー）プラグインのエントリポイント。
@@ -33,6 +34,9 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
               containerEl,
               () => this.settings,
             ),
+          // 軸プロパティ選択 UI（#21 F4）: note.* のみ選択可の property セレクタを
+          // Configure view へ宣言する（filter は書き戻し可能な note.* 判定・AC1）。
+          options: () => buildAxisViewOptions(),
         }),
       () => {
         console.warn(

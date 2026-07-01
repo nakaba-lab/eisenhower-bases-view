@@ -38,6 +38,9 @@ export class EisenhowerBasesView extends BasesView {
     this.getSettings = getSettings;
     this.callbacks = {
       onMoveCard: (entryId, axisValues) => this.writeBackAxes(entryId, axisValues),
+      onOpenCard: (entryId, opts) => this.openNote(entryId, opts.newLeaf),
+      onHoverCard: (entryId, targetEl, event) =>
+        this.previewNote(entryId, targetEl, event),
     };
     // データ到着前は loading シェルを描画し、onDataUpdated で実データに差し替える。
     render(this.viewContainerEl, {
@@ -61,6 +64,18 @@ export class EisenhowerBasesView extends BasesView {
   }
 
   /**
+   * `entryId`（=file.path）から操作対象の `TFile` を解決する（書き戻し #20／オープン #22 で共通）。
+   * 見つからなければ `actionLabel` を差し込んだ `Notice` を出して `null` を返す
+   *（呼び出し側は移動なら throw でロールバック、オープンなら return と制御を分ける）。
+   */
+  private resolveTargetFile(entryId: string, actionLabel: string): TFile | null {
+    const file = this.app.vault.getAbstractFileByPath(entryId);
+    if (file instanceof TFile) return file;
+    new Notice(`Eisenhower Matrix: 対象ファイルが見つからないため${actionLabel}。`);
+    return null;
+  }
+
+  /**
    * ドラッグ書き戻し（#20 F3）: 両軸を明示 `true/false` で frontmatter へ書き込む（`delete` しない）。
    *
    * 軸 propertyId を解決し（ビュー options 主・設定デフォルト）、`note.<key>` のキーへ
@@ -80,9 +95,8 @@ export class EisenhowerBasesView extends BasesView {
       throw new Error("axis property is not writable (formula/file)");
     }
 
-    const file = this.app.vault.getAbstractFileByPath(entryId);
-    if (!(file instanceof TFile)) {
-      new Notice("Eisenhower Matrix: 対象ファイルが見つからないため移動できません。");
+    const file = this.resolveTargetFile(entryId, "移動できません");
+    if (!file) {
       throw new Error(`target file not found: ${entryId}`);
     }
 
@@ -96,5 +110,40 @@ export class EisenhowerBasesView extends BasesView {
       new Notice("Eisenhower Matrix: 書き戻しに失敗しました。元に戻します。");
       throw error;
     }
+  }
+
+  /**
+   * カードのノートを開く（#22 F5・AC1/AC2/AC4）。
+   *
+   * `entryId`（=file.path）から `TFile` を解決し、`newLeaf`（Cmd/Ctrl+ で true）に応じて
+   * 現在のリーフ（`false`）または新規タブ（`"tab"`）で開く。ファイル欠落時は `Notice`（読みと同系統の防御）。
+   * UI は `obsidian` 型に触れず、`workspace` 操作はここ（アダプタ）に隔離する（AC5）。
+   */
+  private openNote(entryId: string, newLeaf: boolean): void {
+    const file = this.resolveTargetFile(entryId, "開けません");
+    if (!file) return;
+    void this.app.workspace.getLeaf(newLeaf ? "tab" : false).openFile(file);
+  }
+
+  /**
+   * カードのホバーでページプレビューを起動する（#22 F5・AC3）。
+   *
+   * Obsidian コアの page-preview へ `hover-link` イベントを発火するだけで、実際に表示するかは
+   * ユーザーのコア「ページプレビュー」設定（例: Ctrl 必須）に委ねる（プラグインは preview を再実装しない）。
+   * `linktext`/`sourcePath` は entryId（file.path）、`targetEl` はプレビュー位置決めのカード要素。
+   */
+  private previewNote(
+    entryId: string,
+    targetEl: HTMLElement,
+    event: MouseEvent,
+  ): void {
+    this.app.workspace.trigger("hover-link", {
+      event,
+      source: VIEW_ID,
+      hoverParent: this,
+      targetEl,
+      linktext: entryId,
+      sourcePath: entryId,
+    });
   }
 }

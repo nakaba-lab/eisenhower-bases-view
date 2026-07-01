@@ -2,14 +2,16 @@
 title: UI 設計
 area: ui
 status: active
-relatedIssues: [18, 19, 20, 33]
+relatedIssues: [18, 19, 20, 22, 33]
 updated: 2026-07-01
 kind: ui
 ---
 
 # UI 設計
 
-> 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。**
+> 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。** **#22（F5）のカード操作（開く/新タブ/プレビュー/キーボード）を実装し `status: active` に確定した。**
+>
+> **#22（F5）の確定事項（2026-07-01・人間承認済み）**: ① **相互作用モデルはカード全体**＝カード本体が「ドラッグ元」かつ「開く対象」を兼ねる（専用ドラッグハンドルは設けない＝レイアウト据え置き・新規ワイヤーフレーム比較なし。#20 と同様に F5 は操作の上乗せのみ）。② **キーボードは Enter=開く / Space=掴む**に整理する＝dnd-kit `KeyboardSensor` の起動キーを **Space のみ**に remap し、AC4 の Enter を「開く」に解放する（#20 の「Enter/Space どちらでも掴む」から変更。読み上げ説明も「スペースで掴み…」へ更新）。③ **クリックとドラッグの両立**のため `PointerSensor` に距離活性化制約（`activationConstraint: { distance: 5 }`）を足す＝微小移動は掴みにならずクリック（開く）として成立させる。④ **開く/プレビューはコールバック委譲**＝`MatrixCallbacks` に `onOpenCard(entryId, { newLeaf })`・`onHoverCard(entryId, targetEl)` を追加し、UI は修飾キーから `newLeaf` を算出して plain データで渡す（`TFile` 解決・`workspace` 操作・`hover-link` 発火はアダプタ。UI は `obsidian` 型に触れない＝AC5 維持）。⑤ **ホバープレビューはコア設定に委譲**＝ホバーで `app.workspace.trigger("hover-link", …)` を発火し、実際に出すか否かはユーザーのコア「ページプレビュー」設定に委ねる（プラグイン側でプレビューを再実装しない）。native `title` ツールチップは二重表示回避のため撤去する。
 >
 > **#20（F3）の確定事項（2026-06-30・人間承認済み）**: ① レイアウトは #19 から据え置き（2×2 グリッド＋下部フル幅の未分類行）。F3 はドラッグ/ドロップのフィードバックとフォーカス可視を上乗せするだけ（新規ワイヤーフレーム比較なし）。② 楽観移動＋ロールバックは**純レデューサ抽出**＝`applyPendingMoves`（placements に保留中の移動を重ねる純関数）と `reconcilePendingMoves`（到着 props と突合して確定済みを落とす純関数）を `src/ui` の単体テスト対象として切り出す。dnd-kit 配線とドラッグ実操作は手動/`frontend-reviewer` で担保（DoD「軸値算出=単体、DnD往復=手動/結合」）。③ **4 象限のみドロップ可。未分類ゾーンはドロップ先にしない（AC4）。** ④ **未分類ゾーンのカード（両軸 absent）も象限へドラッグ可**＝ドロップで両軸を明示 `true/false` 書き込みして分類する（書き戻しは「両軸明示・`delete` しない」方針と整合）。⑤ AC2「ちらつき抑制」＝楽観移動で書込前から目的象限に見せ、`onDataUpdated` 再描画は `file.path` keyed 差分で吸収。「スクロール位置保持」＝コンテナ DOM を破棄せず Preact 差分更新する（`unmount` はビュー破棄時のみ）。⑥ 書き込み失敗は保留移動を取り消して再描画でロールバックし、`Notice` でエラー表示（AC3）。
 >
@@ -27,7 +29,7 @@ flowchart TD
     Ctx --> Grid["QuadrantGrid（2×2 レイアウト・4 象限のみ droppable）"]
     Ctx --> Unc["UnclassifiedZone（軸欠損ノート・ドロップ先にしない）"]
     Grid --> Cell["QuadrantCell ×4（Do/Schedule/Delegate/Delete・useDroppable）"]
-    Cell --> Card["NoteCard（useDraggable・キーボード DnD・クリックで開くは F5/#22）"]
+    Cell --> Card["NoteCard（useDraggable＋クリック/Enter で開く・ホバーでプレビュー・#22 F5）"]
     Unc --> Card
     View --> Move["optimisticMove.ts（純: applyPendingMoves / reconcilePendingMoves・#20）"]
     SettingsTab["設定タブ（src/settings.ts 連携）"]
@@ -122,6 +124,39 @@ sequenceDiagram
     end
 ```
 
+### カード操作（開く/新タブ/プレビュー/キーボード・#22 F5・draft）
+
+カードは **ドラッグ元（#20）かつ「開く」対象**を兼ねる（専用ハンドルを設けずレイアウト据え置き）。開く・プレビューは Bases/Obsidian に触れず `MatrixCallbacks` 経由でアダプタへ委譲する（`onMoveCard` と同じ疎結合＝AC5）。
+
+- **境界契約の追加（`src/bases/types.ts`）**:
+  - `onOpenCard(entryId: string, opts: { newLeaf: boolean }): void` — UI が修飾キーから `newLeaf`（新タブ可否）を算出して渡す。アダプタが `file.path`（=entryId）から `TFile` を解決し `app.workspace.getLeaf(newLeaf ? "tab" : false).openFile(file)` で開く。
+  - `onHoverCard(entryId: string, targetEl: HTMLElement, event: MouseEvent): void` — アダプタが `app.workspace.trigger("hover-link", { event, source: VIEW_ID, hoverParent, targetEl, linktext: entryId, sourcePath: entryId })` を発火。表示可否はコア「ページプレビュー」設定に委ねる（プラグインはプレビューを再実装しない）。
+- **クリック（AC1/AC2）**: `NoteCard` 内側のドラッグ可能 `<div>` の `onClick` で、修飾キー（mac=`metaKey`／win=`ctrlKey`。`Keymap.isModEvent` 相当）を見て `newLeaf` を決め `onOpenCard` を呼ぶ。素のクリック＝現在のリーフ、Mod+クリック＝新タブ。
+- **クリックとドラッグの両立**: `PointerSensor` に `activationConstraint: { distance: 5 }` を付け、5px 未満の移動は掴みにせずクリック（開く）として成立させる（ドラッグ直後の誤オープンを避ける・#20 の Pointer 無制約から変更）。
+- **キーボード（AC4）**: `KeyboardSensor` の起動キーを **Space のみ**に remap（`keyboardCodes.start = ["Space"]`）して Enter を「開く」に解放する。`NoteCard` の `onKeyDown` で `Enter`（＋Mod で新タブ）→ `onOpenCard`。フォーカスは既存の `:focus-visible` インセットリングで可視（#20 から据え置き）。
+- **ホバー（AC3）**: `onPointerEnter`（またはマウス移動）で `onHoverCard` を呼ぶ。連続発火はコア側がデバウンスするため UI では抑制しない。native `title` 属性は撤去（コアプレビューと二重の素朴ツールチップを出さない）。
+
+```mermaid
+sequenceDiagram
+    actor U as ユーザー
+    participant Card as NoteCard (src/ui)
+    participant CB as MatrixCallbacks（onOpenCard/onHoverCard）
+    participant V as EisenhowerBasesView（アダプタ）
+    participant W as app.workspace
+
+    U->>Card: クリック（素/Mod+）・Enter・ホバー
+    alt 開く（クリック/Enter）
+        Card->>CB: onOpenCard(entryId, { newLeaf })
+        CB->>V: 委譲
+        V->>W: getLeaf(newLeaf ? "tab" : false).openFile(TFile)
+    else ホバー
+        Card->>CB: onHoverCard(entryId, targetEl, event)
+        CB->>V: 委譲
+        V->>W: trigger("hover-link", { linktext, sourcePath, targetEl, ... })
+        W-->>U: core page-preview が設定に従い表示（無効なら非表示）
+    end
+```
+
 ### 状態設計（初期・ローディング・空・成功・エラー）
 
 > **F1（#18）実装済みの範囲＝ビューのシェル＋状態表示**（`src/ui/MatrixView.tsx` の `render`/`unmount`）。2×2 グリッドの実レイアウトとカード配置は #19 で充填する。スクリーンショット: `docs/screenshots/18-matrix-shell-{desktop,mobile}-after.png`（ライト/ダーク×loading/empty/ready）。
@@ -148,11 +183,12 @@ Obsidian テーマ変数を使用（ハードコードしない）: `--backgroun
 
 ### アクセシビリティ
 
-- **キーボード DnD**（dnd-kit 標準）でマウスなしでも象限間移動が可能。ドラッグ可能要素は dnd-kit の `attributes` で `role="button"`・`tabindex`・`aria-roledescription` を持つ（キーボードで掴んで移動）。
+- **キーボード DnD**（dnd-kit 標準）でマウスなしでも象限間移動が可能。ドラッグ可能要素は dnd-kit の `attributes` で `role="button"`・`tabindex`・`aria-roledescription` を持つ（キーボードで掴んで移動）。**#22（F5）でキー割当を整理**＝**Space=掴む（ドラッグ開始）／Enter=ノートを開く**（`KeyboardSensor` の起動キーを Space のみに remap し Enter を「開く」に解放。#20 の「Enter/Space どちらでも掴む」から変更）。Cmd/Ctrl+Enter で新タブ。SR 操作説明も「スペースまたは Enter…」→「スペースで掴み…」へ更新する。
 - **`<li>` は `listitem` を保ち、ドラッグ可能要素は内側に置く**: dnd-kit のドラッグ可能要素は `role="button"` を付与する。これを外側の `<li>` に乗せると `<ul>` のリスト意味論（件数・項目位置）が失われるため、`NoteCard` は `<li class="…-item">` を listitem のまま保ち、**内側の `<div>` をドラッグ可能要素（`role=button`）にする**（レビュー指摘 #9。件数は各象限ヘッダの可視テキスト＋`aria-label="N 件"` でも補う）。
 - **dnd の日本語アナウンス＋操作説明**: `DndContext` の `accessibility.announcements`（onDragStart/Over/End/Cancel）と `screenReaderInstructions` を日本語化し、象限の**ローカライズ済みラベル**と**ノート名**で読み上げる（既定の英語＋内部 ID〔file.path・象限キー〕の読み上げを置換＝レビュー指摘）。
 - **移動結果のライブ通知（最新世代のみ・誤報しない・再読み上げ可）**: ビュー内に `role="status"`／`aria-live="polite"` の視覚的非表示領域を持ち、楽観移動の結果をスクリーンリーダーへ伝える（`Notice` はビュー外トーストのため a11y ツリーに乗る保証がない）。ただし **実際にロールバックした（最新世代の失敗）ときだけ「失敗・復元」を、後続ドラッグに上書きされていない最新世代のときだけ「移動成功」を通知**する（巻き戻していないのに「元に戻しました」と誤報せず、superseded な象限も読み上げない＝レビュー指摘）。同一文言の連続移動でも読み上げが消えないよう、`nextAnnouncement`（`liveStatus.ts`・純関数）が文言を不可視のゼロ幅スペース（U+200B）で差分化して再読み上げを促す。
 - フォーカス可視（`:focus-visible` のアクセントリング。親の `overflow` で切れないよう**インセット** `outline-offset`）・WCAG AA コントラスト（テーマ変数に追従）・象限は region ランドマーク＋`aria-label`「象限名（軸ラベル）」。
+- **カード名の省略とアクセシブル名（#22 F5・既知の制約）**: カードは 1 行省略（`text-overflow: ellipsis`）だが、可視テキストがそのまま**アクセシブル名**になるためスクリーンリーダーは省略に関わらず**全文タイトルを読み上げる**。F5 で native `title` を撤去した（コア page-preview との二重ツールチップ回避）ため、**視覚のみのキーボード利用者は、フォーカス中カードの省略された長いタイトル全文を確認する手段を持たない**（コア page-preview はマウスホバー起点でキーボードフォーカスでは発火しない）。今回は下限を満たすため許容し、将来「フォーカス時ツールチップ／幅可変表示」で補うことを検討する（`frontend-reviewer` question で確認済み・スコープ外）。
 
 ### コンポーネントカタログ
 
@@ -172,3 +208,8 @@ Obsidian 実機ロードを前提とするビュー本体は Storybook での再
 - **未分類カードも象限へドラッグ可＝分類できる（#20・人間承認）**: 両軸 absent のカードを象限へドロップすると両軸を明示 `true/false` 書き込みして分類する（「両軸明示・`delete` しない」方針と整合し、未分類ノートを片付ける自然な導線になる）。AC4 の「ドロップ不可」は未分類を**ドロップ先**にしないことを指し、未分類カードを**ドラッグ元**にすることは妨げない。
 - **書き戻しは `processFrontMatter`（読みと別系統）**: 読み取りは Bases `getValue`、書き込みは標準 `app.fileManager.processFrontMatter`。アダプタ（`EisenhowerBasesView`）が `MatrixCallbacks.onMoveCard` を実装し、解決済み軸 propertyId（`note.<key>`）から frontmatter キー（`<key>`）を取り出して両軸を設定する。UI は `obsidian` 型に触れず、書き込み経路もアダプタ層に隔離（AC5 維持）。
 - **テーマ変数追従**: 独自配色を持たず Obsidian テーマに馴染ませることで、ライト/ダーク両対応とコントラストをテーマ側に委ねる。
+- **カード操作は全体でドラッグ＋開くを兼ねる（#22 設計オプション比較で選択）**: カード本体が「ドラッグ元」かつ「開く対象」。却下「専用ドラッグハンドル（グリップ）で掴む/開くを分離」: 曖昧さは消えるが視覚 chrome とレイアウト変更・工数が増え、Obsidian のネイティブ馴染み（控えめ）方針からやや外れる。全体案は #19/#20 のレイアウトを据え置け、`PointerSensor` の距離活性化制約で掴み/クリックを両立できる。
+- **カーソルは `grab` を維持しクリック可能性は `role=button`＋ホバー背景で示す（#22・`frontend-reviewer` should の判断）**: カードはドラッグ元かつクリック対象だが、`:hover` でカーソルを `pointer` に変えるとカーソルが視認できるのはホバー中だけのため `grab`（静止時の唯一の手掛かり）が実質見えなくなり、第一級の機能であるドラッグの affordance が消える。よって静止/ホバーは `grab`（ドラッグ中は既存の `--dragging` で `grabbing`）を維持し、クリック可能性は `role="button"`（dnd-kit 付与）＋ホバー背景（`--background-modifier-hover`）＋実際にクリックで開く挙動で伝える。カーソルで両方を同時に示すことはできないためのトレードオフ。
+- **Enter=開く / Space=掴む（#22・AC4 の literal 解釈）**: AC4 が Enter で「開く」を要求する一方、#20 の `KeyboardSensor` は Enter/Space の両方で「掴む」だった。起動キーを **Space のみ**に remap して Enter を「開く」に解放する（一般的な規約＝Enter は既定アクション＝開く、Space は掴む）。代替（Enter を掴むに残し別キーで開く）は AC4 と乖離するため不採。読み上げ説明も同時に更新する。
+- **開く/プレビューはコールバック委譲（#22・AC5 維持）**: `MatrixCallbacks` に `onOpenCard(entryId,{newLeaf})`・`onHoverCard(entryId,targetEl)` を追加し、`TFile` 解決・`workspace.openFile`・`hover-link` 発火はアダプタ（`EisenhowerBasesView`）に隔離する。UI は修飾キーから `newLeaf` を算出して plain データで渡すだけで `obsidian` 型に触れない（`onMoveCard` と同じ疎結合）。却下「単一 `onCardIntent` 判別共用体」: 追加面は 1 本だが UI/アダプタ双方に type 分岐が増え、既存 `onMoveCard` と粒度が不揃いになる。
+- **ホバープレビューはコア設定に委譲（#22・AC3）**: ホバーで `app.workspace.trigger("hover-link", …)` を発火し、実際に表示するかはユーザーのコア「ページプレビュー」設定（例: Ctrl 必須）に委ねる。プラグイン側でプレビュー UI を再実装せず、Obsidian ビューの標準作法に沿う。native `title` ツールチップは二重表示回避のため撤去する。

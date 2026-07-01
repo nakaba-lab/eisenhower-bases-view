@@ -50,7 +50,7 @@ export interface AxisWriteValues {
 
 /**
  * UI からアダプタ層へ委譲する操作のコールバック束。
- * F1（#18）/F2（#19）では空。F3（#20）でドラッグ書き戻しを追加。F5（#22）でカードを開く導線を足す。
+ * F1（#18）/F2（#19）では空。F3（#20）でドラッグ書き戻しを追加。F5（#22）でカードを開く/プレビュー導線を追加。
  */
 export interface MatrixCallbacks {
   /**
@@ -61,4 +61,19 @@ export interface MatrixCallbacks {
    * 書き込み失敗時は reject し、UI 側は楽観移動をロールバックする。
    */
   onMoveCard?(entryId: string, axisValues: AxisWriteValues): Promise<void>;
+  /**
+   * カードのノートを開く（#22 F5・AC1/AC2/AC4）。
+   *
+   * UI は修飾キーから `newLeaf`（新タブ可否）を算出して渡すだけで、`file.path`（=entryId）からの
+   * `TFile` 解決と `workspace.getLeaf(...).openFile(...)` はアダプタが担う（UI は `obsidian` 型に触れない＝AC5）。
+   */
+  onOpenCard?(entryId: string, opts: { newLeaf: boolean }): void;
+  /**
+   * カードのホバーでページプレビューを起動する（#22 F5・AC3）。
+   *
+   * アダプタが core page-preview を `app.workspace.trigger("hover-link", …)` で発火する
+   *（実際に表示するかはユーザーのコア「ページプレビュー」設定に委ねる）。
+   * `targetEl` はプレビュー位置決めに使うカード要素、`event` は発火元のマウスイベント。
+   */
+  onHoverCard?(entryId: string, targetEl: HTMLElement, event: MouseEvent): void;
 }

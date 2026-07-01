@@ -24,6 +24,10 @@ export interface QuadrantCellProps {
   emptyText?: string;
   /** レイアウト上の種別（未分類ゾーンはフル幅・ドロップ不可）。 */
   variant?: "quadrant" | "unclassified";
+  /** カードを開く（#22 F5）。各 NoteCard へ委譲する。 */
+  onOpenCard?: (entryId: string, opts: { newLeaf: boolean }) => void;
+  /** カードのホバーでプレビュー（#22 F5）。各 NoteCard へ委譲する。 */
+  onHoverCard?: (entryId: string, targetEl: HTMLElement, event: MouseEvent) => void;
 }
 
 const DEFAULT_EMPTY_TEXT = "なし";
@@ -35,6 +39,8 @@ export function QuadrantCell({
   entries,
   emptyText = DEFAULT_EMPTY_TEXT,
   variant = "quadrant",
+  onOpenCard,
+  onHoverCard,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
   const isDropDisabled = variant === "unclassified";
@@ -64,7 +70,12 @@ export function QuadrantCell({
       ) : (
         <ul class="eisenhower-quadrant__list">
           {entries.map((entry) => (
-            <NoteCard key={entry.id} entry={entry} />
+            <NoteCard
+              key={entry.id}
+              entry={entry}
+              onOpenCard={onOpenCard}
+              onHoverCard={onHoverCard}
+            />
           ))}
         </ul>
       )}

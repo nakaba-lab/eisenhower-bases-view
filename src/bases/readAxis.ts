@@ -1,20 +1,25 @@
 /**
- * 軸プロパティの解決と、1 軸値の absent/true/false 正規化（#19 F2・#33 で absent 判定を是正）。
+ * 軸プロパティの解決と、1 軸値の absent/非 boolean/true/false 正規化
+ * （#19 F2・#33 で absent 判定を是正・#34 で boolean 軸限定の型ガードに狭める）。
  *
  * Bases API 接触（`config.getAsPropertyId`／`entry.getValue`）をアダプタ層に閉じ込める。
- * absent 判定は実機検証（#33・`scripts/e2e` プローブ）で確定した NullValue の**型同一性**で行う:
- * 欠損プロパティの `getValue` は **NullValue（singleton）** を返すため `value instanceof NullValue`
- * で absent を検出し、明示 `false`（BooleanValue）と区別する（`isTruthy()` だけでは absent と false を
- * 区別できず欠損ノートを最低象限 Delete に誤分類する）。
+ * v1 は **boolean 軸限定**のため、`normalizeAxis` は **値の型が `BooleanValue` の軸だけ**を
+ * `isTruthy()` で boolean 化し、それ以外（absent＝`NullValue`・非 boolean＝`NumberValue`／
+ * `StringValue` 等）は `undefined`（未分類）へ退避する（正の許可リスト `instanceof BooleanValue`・#34）。
+ * これにより非 boolean の `note.*` 軸が 4 象限に並んでドラッグ→両軸 `true/false` 上書きで
+ * 元の数値/文字列を破壊する事故（データ損失）を防ぐ。absent（`NullValue`）も非 `BooleanValue` として
+ * 自然に未分類へ落ちるため、#33 の absent 区別（欠損を最低象限 Delete に誤分類しない）を包含する。
  *
- * 旧実装は `toString()===null` で判定していたが、実機の `NullValue.toString()` は文字列 "null" を
- * 返す（型契約どおり string）ため機能せず、absent が false に誤判定されていた（スパイク #16 の誤観測）。
- * 型同一性（instanceof）は constructor 名が minify されても（実機は `"t"`）成立し、文字列表現に依存しない。
+ * 型同一性（instanceof）で判定するのは #33 の知見による: 旧実装の `toString()===null` は実機の
+ * `NullValue.toString()` が文字列 "null" を返す（型契約どおり string）ため機能せず、`constructor.name`
+ * も実機は minify 済み（`"t"`）で壊れる。instanceof は prototype チェーンで成立し文字列表現・minify に依存しない。
  *
- * NullValue（値）は obsidian から import する（実機は外部提供・esbuild external）。型は `import type`、
- * 単体テストは vitest が obsidian の値 import を `src/test-support/obsidianStub.ts` へ解決する。
+ * `BooleanValue`（値）は obsidian から import する（実機は外部提供・esbuild external）。型は `import type`、
+ * 単体テストは vitest が obsidian の値 import を `src/test-support/obsidianStub.ts`（`BooleanValue`／
+ * `NullValue`／`NumberValue`／`StringValue` を提供）へ解決する。⚠️ スタブ＝実機の同値性は単体では
+ * 検証不能（`instanceof BooleanValue` の実機成立は `scripts/e2e` の placements 検証で担保）。
  */
-import { NullValue } from "obsidian";
+import { BooleanValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import type { AxisValues } from "../logic/quadrant";
@@ -115,13 +120,19 @@ export function resolveWritableAxisKeys(
 }
 
 /**
- * 1 軸の Value を boolean | undefined に正規化する。
- * absent（NullValue singleton）と `getValue` 自体の null を undefined にし、
- * 値があれば `isTruthy()` で boolean 化する（absent 判定は `instanceof NullValue`＝型同一性）。
+ * 1 軸の Value を boolean | undefined に正規化する（v1 は boolean 軸限定・#34）。
+ * `getValue` 自体の null と、値の型が `BooleanValue` でないもの（absent＝`NullValue`・
+ * 非 boolean＝`NumberValue`／`StringValue` 等）を `undefined`（未分類）へ退避し、
+ * `BooleanValue` の値だけ `isTruthy()` で boolean 化する（正の許可リスト＝型同一性 `instanceof`）。
+ * 非 boolean は `isTruthy()` の真偽ではなく**型**で退避する（falsy な数値 0・空文字を `false`＝Delete 象限に
+ * 落とさない）。未知/新規の Value 型も既定で未分類になり（安全側）、v2 は許可リストに型別ブランチを足す。
+ * 本関数は**値の型だけ**を見る（propertyId の `note.*` 判定は呼び出し側 {@link readSingleAxis} が担う）。
  */
 function normalizeAxis(value: Value | null): boolean | undefined {
   if (value == null) return undefined; // getValue 自体の null（防御）
-  if (value instanceof NullValue) return undefined; // absent（NullValue singleton）
+  // BooleanValue 以外（NullValue=absent・NumberValue・StringValue 等）は未分類へ退避し、
+  // 非 boolean をドラッグ→両軸 true/false 上書き（データ破壊）させない（#34）。
+  if (!(value instanceof BooleanValue)) return undefined;
   return value.isTruthy();
 }
 

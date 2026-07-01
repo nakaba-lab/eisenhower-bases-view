@@ -24,3 +24,48 @@ export class NullValue {
   /** 実機同様の singleton（`NullValue.value` が唯一のインスタンス）。 */
   static value = new NullValue();
 }
+
+/**
+ * boolean 軸の値（実機 `BooleanValue extends PrimitiveValue<boolean>` 相当・#34）。
+ * v1 は boolean 軸限定のため、`readAxis.normalizeAxis` は **`instanceof BooleanValue` の値だけ**
+ * を `isTruthy()` で boolean 化する。`readAxis.ts` が値 import する型はこのスタブへ解決される。
+ * ⚠️ 単体では「スタブ＝実機の BooleanValue」の同値性は検証できない（`NullValue` と同型の限界。
+ * 実機での `instanceof BooleanValue` 成立は `scripts/e2e` の placements 検証で担保する）。
+ */
+export class BooleanValue {
+  constructor(private readonly value: boolean) {}
+  toString(): string {
+    return String(this.value);
+  }
+  isTruthy(): boolean {
+    return this.value;
+  }
+}
+
+/**
+ * 数値軸の値（実機 `NumberValue extends PrimitiveValue<number>` 相当・#34 の型ガード検証用）。
+ * v1 boolean 軸限定では非 boolean のため未分類へ退避される（`instanceof BooleanValue` に一致しない）。
+ */
+export class NumberValue {
+  constructor(private readonly value: number) {}
+  toString(): string {
+    return String(this.value);
+  }
+  isTruthy(): boolean {
+    return this.value !== 0;
+  }
+}
+
+/**
+ * 文字列軸の値（実機 `StringValue extends PrimitiveValue<string>` 相当・#34 の型ガード検証用）。
+ * v1 boolean 軸限定では非 boolean のため未分類へ退避される（`instanceof BooleanValue` に一致しない）。
+ */
+export class StringValue {
+  constructor(private readonly value: string) {}
+  toString(): string {
+    return this.value;
+  }
+  isTruthy(): boolean {
+    return this.value.length > 0;
+  }
+}

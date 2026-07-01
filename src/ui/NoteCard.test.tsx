@@ -39,6 +39,16 @@ describe("NoteCard — カードを開く導線（#22 F5 AC1/AC2/AC4）", () => 
     expect(onOpenCard).toHaveBeenCalledWith("a.md", { newLeaf: true });
   });
 
+  it("NoteCard_Mod（ctrl）+クリック_新タブで開く（newLeaf=true・AC2 win）", () => {
+    // given: Windows は Ctrl 修飾。mac の Cmd（metaKey）と同じく新タブへ（AC2 のクロスプラットフォーム）。
+    const onOpenCard = vi.fn();
+    render(<NoteCard entry={entry()} onOpenCard={onOpenCard} />);
+    // when
+    fireEvent.click(screen.getByRole("button"), { ctrlKey: true });
+    // then
+    expect(onOpenCard).toHaveBeenCalledWith("a.md", { newLeaf: true });
+  });
+
   it("NoteCard_Enter_現在のリーフで開く（AC4）", () => {
     // given
     const onOpenCard = vi.fn();
@@ -67,6 +77,13 @@ describe("NoteCard — カードを開く導線（#22 F5 AC1/AC2/AC4）", () => 
     fireEvent.keyDown(screen.getByRole("button"), { key: " " });
     // then
     expect(onOpenCard).not.toHaveBeenCalled();
+  });
+
+  it("NoteCard_カードはフォーカス可能（tabIndex=0）_Tab で到達できる（AC4 の下限）", () => {
+    // given / when: dnd-kit の attributes が role=button・tabIndex=0 を付与する（フォーカス可視の前提）。
+    render(<NoteCard entry={entry()} />);
+    // then: 視覚のフォーカスリングは frontend-reviewer で目視。ここでは focusable であることを非視覚で担保。
+    expect(screen.getByRole("button").tabIndex).toBe(0);
   });
 });
 

@@ -90,7 +90,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, {
-      keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] },
+      // start は Space のみ（Enter は「開く」に解放）。end は Space に加え **Tab も残す**＝
+      // ドラッグ中に Tab でフォーカスを移すと dnd-kit がドロップ確定する既定挙動を保つ（Enter だけ外す。レビュー指摘）。
+      keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Tab"] },
     }),
   );
 

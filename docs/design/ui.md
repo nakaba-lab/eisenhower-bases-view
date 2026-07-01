@@ -124,7 +124,7 @@ sequenceDiagram
     end
 ```
 
-### カード操作（開く/新タブ/プレビュー/キーボード・#22 F5・draft）
+### カード操作（開く/新タブ/プレビュー/キーボード・#22 F5）
 
 カードは **ドラッグ元（#20）かつ「開く」対象**を兼ねる（専用ハンドルを設けずレイアウト据え置き）。開く・プレビューは Bases/Obsidian に触れず `MatrixCallbacks` 経由でアダプタへ委譲する（`onMoveCard` と同じ疎結合＝AC5）。
 
@@ -134,7 +134,7 @@ sequenceDiagram
 - **クリック（AC1/AC2）**: `NoteCard` 内側のドラッグ可能 `<div>` の `onClick` で、修飾キー（mac=`metaKey`／win=`ctrlKey`。`Keymap.isModEvent` 相当）を見て `newLeaf` を決め `onOpenCard` を呼ぶ。素のクリック＝現在のリーフ、Mod+クリック＝新タブ。
 - **クリックとドラッグの両立**: `PointerSensor` に `activationConstraint: { distance: 5 }` を付け、5px 未満の移動は掴みにせずクリック（開く）として成立させる（ドラッグ直後の誤オープンを避ける・#20 の Pointer 無制約から変更）。
 - **キーボード（AC4）**: `KeyboardSensor` の起動キーを **Space のみ**に remap（`keyboardCodes.start = ["Space"]`）して Enter を「開く」に解放する。`NoteCard` の `onKeyDown` で `Enter`（＋Mod で新タブ）→ `onOpenCard`。フォーカスは既存の `:focus-visible` インセットリングで可視（#20 から据え置き）。
-- **ホバー（AC3）**: `onPointerEnter`（またはマウス移動）で `onHoverCard` を呼ぶ。連続発火はコア側がデバウンスするため UI では抑制しない。native `title` 属性は撤去（コアプレビューと二重の素朴ツールチップを出さない）。
+- **ホバー（AC3）**: `onMouseEnter` で `onHoverCard` を呼ぶ。連続発火はコア側がデバウンスするため UI では抑制しない。native `title` 属性は撤去（コアプレビューと二重の素朴ツールチップを出さない）。
 
 ```mermaid
 sequenceDiagram

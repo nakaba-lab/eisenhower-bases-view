@@ -1,4 +1,11 @@
-import { BasesView, Notice, TFile, type QueryController } from "obsidian";
+import {
+  BasesView,
+  Notice,
+  TFile,
+  type HoverParent,
+  type HoverPopover,
+  type QueryController,
+} from "obsidian";
 import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolveWritableAxisKeys } from "./readAxis";
@@ -19,8 +26,15 @@ import type { EisenhowerSettings } from "../settings";
  * `extends BasesView` のため obsidian ランタイムが必要で、単体テストの対象外。
  * 登録・描画・書き戻しの往復は手動/結合で担保する（DoD・スパイク #16 で実機確認済み）。
  */
-export class EisenhowerBasesView extends BasesView {
+export class EisenhowerBasesView extends BasesView implements HoverParent {
   type = VIEW_ID;
+
+  /**
+   * core page-preview が読み書きするホバーポップオーバー slot（`HoverParent` 契約・#22 F5）。
+   * `workspace.trigger("hover-link", { hoverParent: this, … })` の相手として、
+   * コアがプレビューの生成・重複排除・破棄をここに紐付ける（未実装だと lifecycle が壊れる）。
+   */
+  hoverPopover: HoverPopover | null = null;
 
   private readonly viewContainerEl: HTMLElement;
   /** 最新の設定を取得する（設定タブ変更後も陳腐化しないよう getter で受ける）。 */
@@ -122,7 +136,15 @@ export class EisenhowerBasesView extends BasesView {
   private openNote(entryId: string, newLeaf: boolean): void {
     const file = this.resolveTargetFile(entryId, "開けません");
     if (!file) return;
-    void this.app.workspace.getLeaf(newLeaf ? "tab" : false).openFile(file);
+    // openFile は Promise を返す。resolveTargetFile 後にファイルが消える等で reject しうるため、
+    // 握りつぶさず catch して通知する（未処理 rejection と無言失敗を防ぐ＝書き戻し経路と同じ扱い・レビュー指摘）。
+    void this.app.workspace
+      .getLeaf(newLeaf ? "tab" : false)
+      .openFile(file)
+      .catch((error) => {
+        console.error("[Eisenhower Matrix] ノートのオープンに失敗しました", error);
+        new Notice("Eisenhower Matrix: ノートを開けませんでした。");
+      });
   }
 
   /**

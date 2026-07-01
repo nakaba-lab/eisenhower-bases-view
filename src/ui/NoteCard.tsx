@@ -44,9 +44,11 @@ export function NoteCard({ entry, onOpenCard, onHoverCard }: NoteCardProps) {
   const handleClick = (event: JSX.TargetedMouseEvent<HTMLDivElement>) => {
     onOpenCard?.(entry.id, openLeafIntent(event));
   };
-  // Enter で開く（AC4）。それ以外のキー（Space=掴む 等）は dnd-kit の onKeyDown へ委譲する。
+  // Enter で開く（AC4）。ただし**キーボードでドラッグ中**（Space で掴んだ最中）の Enter は開かず、
+  // dnd-kit へ委譲する（掴んだまま別リーフが開いてドラッグが宙ぶらりんになるのを防ぐ＝レビュー指摘。
+  // ドロップは Space/Tab、キャンセルは Esc）。それ以外のキー（Space=掴む 等）も dnd-kit へ委譲する。
   const handleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
-    if (isOpenKey(event)) {
+    if (isOpenKey(event) && !isDragging) {
       event.preventDefault();
       onOpenCard?.(entry.id, openLeafIntent(event));
       return;

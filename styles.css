@@ -129,7 +129,7 @@
   min-width: 0;
 }
 
-/* 1 ノートのカード（ドラッグで象限移動＝#20。クリックで開くは後続 F5/#22）。 */
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。 */
 .eisenhower-note-card {
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
   border-radius: var(--radius-s, 4px);
@@ -139,9 +139,15 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* ドラッグ可能であることを示す（#20）。 */
+  /* ドラッグ可能であることを示す（#20）。開く導線（#22）は role=button で伝わる。 */
   cursor: grab;
   touch-action: none;
+}
+
+/* クリックで開けることを示すホバー（#22 F5）。ドラッグ affordance（grab）は保ちつつ、
+ * 背景をテーマのホバー色にして操作可能性を示す（ハードコードせずテーマ変数に追従）。 */
+.eisenhower-note-card:hover {
+  background-color: var(--background-modifier-hover);
 }
 
 /* キーボード操作時のフォーカス可視（dnd-kit が role=button・tabindex を付与＝AC5）。

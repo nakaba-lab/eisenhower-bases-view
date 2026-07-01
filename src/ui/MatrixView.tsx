@@ -54,11 +54,15 @@ const QUADRANTS = [
 const UNCLASSIFIED_LABEL = "未分類";
 const UNCLASSIFIED_AXIS_LABEL = "軸欠損・ドロップ不可";
 
-/** スクリーンリーダー向けのキーボード操作説明（dnd-kit の既定英語文を日本語へ差し替える）。 */
+/**
+ * スクリーンリーダー向けのキーボード操作説明（dnd-kit の既定英語文を日本語へ差し替える）。
+ * #22（F5）で Enter を「開く」に割り当てたため、掴む/ドロップは **Space** に整理する
+ *（`KeyboardSensor` の起動キーも Space のみに remap 済み）。
+ */
 const SCREEN_READER_INSTRUCTIONS = {
   draggable:
-    "スペースまたは Enter キーで掴み、矢印キーで象限へ移動し、" +
-    "スペースまたは Enter でドロップします。Esc でキャンセルします。",
+    "スペースキーで掴み、矢印キーで象限へ移動し、" +
+    "スペースキーでドロップします。Esc でキャンセルします。Enter でノートを開きます。",
 };
 
 interface MatrixViewProps {
@@ -80,7 +84,17 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const nextGenerationRef = useRef(0);
   // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
   const inFlightRef = useRef<Map<string, number>>(new Map());
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+  // #22（F5）: クリック（開く）とドラッグを両立させるため PointerSensor に距離活性化制約を付け、
+  // 5px 未満の移動は掴みにせずクリックとして成立させる。KeyboardSensor の起動/ドロップキーは
+  // Space のみに remap し、Enter を「開く」（NoteCard の onKeyDown）へ解放する。
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      // start は Space のみ（Enter は「開く」に解放）。end は Space に加え **Tab も残す**＝
+      // ドラッグ中に Tab でフォーカスを移すと dnd-kit がドロップ確定する既定挙動を保つ（Enter だけ外す。レビュー指摘）。
+      keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Tab"] },
+    }),
+  );
 
   // aria-live へ通知する（同一文言でも nextAnnouncement が差分化して再読み上げを促す）。
   const announce = (message: string) =>
@@ -255,6 +269,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               axisLabel={quadrant.axisLabel}
               entries={placements[quadrant.key]}
               emptyText={EMPTY_QUADRANT_TEXT}
+              onOpenCard={callbacks.onOpenCard}
+              onHoverCard={callbacks.onHoverCard}
             />
           ))}
         </div>
@@ -269,6 +285,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             entries={placements.unclassified}
             emptyText={EMPTY_QUADRANT_TEXT}
             variant="unclassified"
+            onOpenCard={callbacks.onOpenCard}
+            onHoverCard={callbacks.onHoverCard}
           />
         )}
       </section>

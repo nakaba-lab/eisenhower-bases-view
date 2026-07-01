@@ -1,4 +1,11 @@
-import { BasesView, Notice, TFile, type QueryController } from "obsidian";
+import {
+  BasesView,
+  Notice,
+  TFile,
+  type HoverParent,
+  type HoverPopover,
+  type QueryController,
+} from "obsidian";
 import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolveWritableAxisKeys } from "./readAxis";
@@ -19,8 +26,15 @@ import type { EisenhowerSettings } from "../settings";
  * `extends BasesView` のため obsidian ランタイムが必要で、単体テストの対象外。
  * 登録・描画・書き戻しの往復は手動/結合で担保する（DoD・スパイク #16 で実機確認済み）。
  */
-export class EisenhowerBasesView extends BasesView {
+export class EisenhowerBasesView extends BasesView implements HoverParent {
   type = VIEW_ID;
+
+  /**
+   * core page-preview が読み書きするホバーポップオーバー slot（`HoverParent` 契約・#22 F5）。
+   * `workspace.trigger("hover-link", { hoverParent: this, … })` の相手として、
+   * コアがプレビューの生成・重複排除・破棄をここに紐付ける（未実装だと lifecycle が壊れる）。
+   */
+  hoverPopover: HoverPopover | null = null;
 
   private readonly viewContainerEl: HTMLElement;
   /** 最新の設定を取得する（設定タブ変更後も陳腐化しないよう getter で受ける）。 */
@@ -38,6 +52,9 @@ export class EisenhowerBasesView extends BasesView {
     this.getSettings = getSettings;
     this.callbacks = {
       onMoveCard: (entryId, axisValues) => this.writeBackAxes(entryId, axisValues),
+      onOpenCard: (entryId, opts) => this.openNote(entryId, opts.newLeaf),
+      onHoverCard: (entryId, targetEl, event) =>
+        this.previewNote(entryId, targetEl, event),
     };
     // データ到着前は loading シェルを描画し、onDataUpdated で実データに差し替える。
     render(this.viewContainerEl, {
@@ -61,6 +78,18 @@ export class EisenhowerBasesView extends BasesView {
   }
 
   /**
+   * `entryId`（=file.path）から操作対象の `TFile` を解決する（書き戻し #20／オープン #22 で共通）。
+   * 見つからなければ `actionLabel` を差し込んだ `Notice` を出して `null` を返す
+   *（呼び出し側は移動なら throw でロールバック、オープンなら return と制御を分ける）。
+   */
+  private resolveTargetFile(entryId: string, actionLabel: string): TFile | null {
+    const file = this.app.vault.getAbstractFileByPath(entryId);
+    if (file instanceof TFile) return file;
+    new Notice(`Eisenhower Matrix: 対象ファイルが見つからないため${actionLabel}。`);
+    return null;
+  }
+
+  /**
    * ドラッグ書き戻し（#20 F3）: 両軸を明示 `true/false` で frontmatter へ書き込む（`delete` しない）。
    *
    * 軸 propertyId を解決し（ビュー options 主・設定デフォルト）、`note.<key>` のキーへ
@@ -80,9 +109,8 @@ export class EisenhowerBasesView extends BasesView {
       throw new Error("axis property is not writable (formula/file)");
     }
 
-    const file = this.app.vault.getAbstractFileByPath(entryId);
-    if (!(file instanceof TFile)) {
-      new Notice("Eisenhower Matrix: 対象ファイルが見つからないため移動できません。");
+    const file = this.resolveTargetFile(entryId, "移動できません");
+    if (!file) {
       throw new Error(`target file not found: ${entryId}`);
     }
 
@@ -96,5 +124,48 @@ export class EisenhowerBasesView extends BasesView {
       new Notice("Eisenhower Matrix: 書き戻しに失敗しました。元に戻します。");
       throw error;
     }
+  }
+
+  /**
+   * カードのノートを開く（#22 F5・AC1/AC2/AC4）。
+   *
+   * `entryId`（=file.path）から `TFile` を解決し、`newLeaf`（Cmd/Ctrl+ で true）に応じて
+   * 現在のリーフ（`false`）または新規タブ（`"tab"`）で開く。ファイル欠落時は `Notice`（読みと同系統の防御）。
+   * UI は `obsidian` 型に触れず、`workspace` 操作はここ（アダプタ）に隔離する（AC5）。
+   */
+  private openNote(entryId: string, newLeaf: boolean): void {
+    const file = this.resolveTargetFile(entryId, "開けません");
+    if (!file) return;
+    // openFile は Promise を返す。resolveTargetFile 後にファイルが消える等で reject しうるため、
+    // 握りつぶさず catch して通知する（未処理 rejection と無言失敗を防ぐ＝書き戻し経路と同じ扱い・レビュー指摘）。
+    void this.app.workspace
+      .getLeaf(newLeaf ? "tab" : false)
+      .openFile(file)
+      .catch((error) => {
+        console.error("[Eisenhower Matrix] ノートのオープンに失敗しました", error);
+        new Notice("Eisenhower Matrix: ノートを開けませんでした。");
+      });
+  }
+
+  /**
+   * カードのホバーでページプレビューを起動する（#22 F5・AC3）。
+   *
+   * Obsidian コアの page-preview へ `hover-link` イベントを発火するだけで、実際に表示するかは
+   * ユーザーのコア「ページプレビュー」設定（例: Ctrl 必須）に委ねる（プラグインは preview を再実装しない）。
+   * `linktext`/`sourcePath` は entryId（file.path）、`targetEl` はプレビュー位置決めのカード要素。
+   */
+  private previewNote(
+    entryId: string,
+    targetEl: HTMLElement,
+    event: MouseEvent,
+  ): void {
+    this.app.workspace.trigger("hover-link", {
+      event,
+      source: VIEW_ID,
+      hoverParent: this,
+      targetEl,
+      linktext: entryId,
+      sourcePath: entryId,
+    });
   }
 }

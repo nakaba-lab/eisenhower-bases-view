@@ -2,14 +2,14 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 33]
+relatedIssues: [18, 19, 20, 21, 22, 33]
 updated: 2026-07-01
 kind: api
 ---
 
 # Bases アダプタ層 設計
 
-> Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項」に接地する。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。** **#33 で absent 判定を `toString()===null`（スパイク #16 の誤観測）から `instanceof NullValue`（型同一性）へ是正した（実機 `scripts/e2e` プローブで確定）。** **#21（F4）で軸プロパティ設定 UI（ビュー options＝主・プラグイン設定＝デフォルトのハイブリッド）を本領域に積み増した: `registerBasesView` の `options` に `note.*` のみ選択可の軸プロパティセレクタを 2 つ宣言し、選択時（`filter`）・読み取り時・書き戻し時の 3 面で「書き戻せる `note.*` 軸」を単一述語 `isWritableAxisProperty` で判定する。**
+> Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項」に接地する。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。** **#33 で absent 判定を `toString()===null`（スパイク #16 の誤観測）から `instanceof NullValue`（型同一性）へ是正した（実機 `scripts/e2e` プローブで確定）。** **#21（F4）で軸プロパティ設定 UI（ビュー options＝主・プラグイン設定＝デフォルトのハイブリッド）を本領域に積み増した: `registerBasesView` の `options` に `note.*` のみ選択可の軸プロパティセレクタを 2 つ宣言し、選択時（`filter`）・読み取り時・書き戻し時の 3 面で「書き戻せる `note.*` 軸」を単一述語 `isWritableAxisProperty` で判定する。** **#22（F5）でカード操作（開く/新タブ/プレビュー）を本領域に積み増した: `MatrixCallbacks` に `onOpenCard`/`onHoverCard` を追加し、アダプタが `workspace.getLeaf(...).openFile` と `workspace.trigger("hover-link", …)` を実装する（UI は修飾キー→`newLeaf` の plain データを渡すだけ＝AC5 維持。UI 側の相互作用設計は `ui.md`）。**
 
 ## 責務（このユニットは何をするか）
 
@@ -91,14 +91,17 @@ sequenceDiagram
     entries: MatrixEntry[];   // F1 ではシェル表示用（配置は #19）
   }
   export interface MatrixCallbacks {
-    // F3（#20）でドラッグ書き戻しを追加。F5（#22）でカードを開く導線を足す。
-    // 書き戻しは両軸の boolean を渡すだけで、TFile 解決・processFrontMatter は
-    // アダプタ（EisenhowerBasesView）が担う（UI は obsidian 型に触れない＝AC5）。
+    // F3（#20）でドラッグ書き戻し、F5（#22）で開く/プレビューを追加。いずれも UI は plain データを
+    // 渡すだけで、TFile 解決・processFrontMatter・workspace 操作はアダプタ（EisenhowerBasesView）が
+    // 担う（UI は obsidian 型に触れない＝AC5）。
     onMoveCard?(entryId: string, axisValues: { urgent: boolean; important: boolean }): Promise<void>;
+    onOpenCard?(entryId: string, opts: { newLeaf: boolean }): void;                       // #22 F5
+    onHoverCard?(entryId: string, targetEl: HTMLElement, event: MouseEvent): void;        // #22 F5
   }
   ```
 - **UI 入口**: `render(containerEl: HTMLElement, viewModel: MatrixViewModel, callbacks: MatrixCallbacks): void`（Preact `render()` を内部で呼ぶ命令的橋渡し）。`unmount(containerEl)` で破棄。
 - **書き戻し（#20 F3）**: `EisenhowerBasesView` が `onMoveCard` を実装し、`entryId`（file.path）→ `app.vault.getAbstractFileByPath` で `TFile` を解決、解決済み軸 propertyId（`note.<key>`）から frontmatter キー（`<key>`）を取り出し、`app.fileManager.processFrontMatter(file, fm => { fm[urgentKey] = urgent; fm[importantKey] = important; })` で**両軸を明示 `true/false`** 書き込みする（`delete` しない＝v1 boolean 軸）。読み取り（`getValue`）と書き込み（`processFrontMatter`）は別系統。`processFrontMatter` が reject したら UI 側がロールバック＋`Notice`（`ui.md` のシーケンス参照）。
+- **開く/プレビュー（#22 F5）**: `EisenhowerBasesView` が `onOpenCard`/`onHoverCard` を実装する。開く: `entryId`（file.path）→ 共通 `resolveTargetFile`（`getAbstractFileByPath`＋`instanceof TFile`。書き戻しと共有・欠落は `Notice`）で `TFile` を解決し、`app.workspace.getLeaf(newLeaf ? "tab" : false).openFile(file)`（素=現在リーフ／Mod+=新タブ）。プレビュー: `app.workspace.trigger("hover-link", { event, source: VIEW_ID, hoverParent: this, targetEl, linktext: entryId, sourcePath: entryId })` でコア page-preview を発火（表示可否はユーザーのコア設定に委ねる）。読み取り（`getValue`）とは別系統で、UI は `obsidian` 型に触れない。
 - **ビルド**: esbuild（`main.js`）。`minAppVersion` 1.12.0・`isDesktopOnly: true`（確定）。
 
 ## 主要な設計判断（現行の理由）
@@ -111,6 +114,7 @@ sequenceDiagram
 - **F1 で境界型を先に確定**（`MatrixCallbacks` は空でも置く）: F2〜F5 が同じ境界に積み増せるよう、契約面を最初に固定して後続の手戻りを避ける。
 - **手動再描画は持たない**: 書き戻し→`onDataUpdated` 自動再発火で反応ループが閉じる（スパイク #16 確定）。F1 は描画経路の確立まで。
 - **書き戻しはアダプタに隔離（#20）**: `MatrixCallbacks.onMoveCard` は両軸の boolean だけを受け、`TFile` 解決・frontmatter キー算出・`app.fileManager.processFrontMatter` 実行をアダプタ（`EisenhowerBasesView`）が担う。UI・logic に `obsidian` 型を漏らさず（AC5 維持）、書き込み経路を読み取り経路（`getValue`）と同じく 1 領域へ集約する。frontmatter キーの取り出し（`note.urgent`→`urgent`）は純関数として切り出し単体テスト対象にする（`extends BasesView` 本体は obsidian ランタイム必須で対象外のため、テスト可能な純度をキー算出に逃がす）。
+- **開く/プレビューもアダプタに隔離（#22 F5）**: `onOpenCard`/`onHoverCard` は UI から plain データ（`entryId`・`newLeaf`・`targetEl`）だけを受け、`TFile` 解決・`workspace.openFile`・`hover-link` 発火をアダプタが担う（`onMoveCard` と同じ疎結合＝AC5 維持）。TFile 解決は書き戻しと共通の `resolveTargetFile` に集約して重複を避ける（#22 リファクタで抽出）。ホバープレビューはコア page-preview へ委譲し（`workspace.trigger("hover-link", …)`）プラグイン側で preview UI を再実装しない（表示可否はユーザーのコア設定に従う）。`extends BasesView` 本体は obsidian ランタイム必須で単体テスト対象外のため、開く/プレビューの往復は手動/結合で担保し、UI 側の意図算出（修飾キー→`newLeaf`・Enter 判定）は純関数（`src/ui/cardInteraction.ts`）として単体テストする。
 - **absent 判定は型同一性 `instanceof NullValue`（#33）**: 欠損プロパティの `getValue` は **NullValue（singleton）** を返す。これを `value instanceof NullValue` で検出し、明示 `false`（BooleanValue・`isTruthy()===false`）と区別する。
   - **却下: `toString()===null`（旧実装・スパイク #16 の誤観測）** — 実機の `NullValue.toString()` は型契約どおり**文字列 `"null"`** を返す（JS `null` ではない）ため判定が機能せず、absent が false に誤判定され欠損ノートが Delete 象限に落ちていた（`scripts/e2e` の getValue プローブで `toStringType:"string"`・`toString:"null"` を実測）。
   - **却下: `constructor.name === "NullValue"`** — 実機ランタイムは minify 済みで constructor 名は `"t"`（プローブで実測）。名前依存は壊れる。型同一性（instanceof）は prototype チェーンで成立し、minify・文字列表現に依存しない。

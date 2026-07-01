@@ -1,7 +1,9 @@
 import type { BasesEntry, BasesViewConfig } from "obsidian";
 import { DEFAULT_SETTINGS, type EisenhowerSettings } from "../settings";
 import { classifyQuadrant } from "../logic/quadrant";
+import { messagesFor, type Messages } from "../i18n";
 import { readAxisValues, resolveAxisPropertyIds } from "./readAxis";
+import { resolvePresentation } from "./presentation";
 import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "./types";
 
 /**
@@ -23,7 +25,11 @@ export function toViewModel(
   entries: readonly BasesEntry[] | undefined | null,
   config?: Pick<BasesViewConfig, "getAsPropertyId"> | null,
   settings: EisenhowerSettings = DEFAULT_SETTINGS,
+  messages: Messages = messagesFor("ja"),
 ): MatrixViewModel {
+  // ラベル/色/言語文言を解決して UI へ渡す（#23 F6）。状態に依らず常に載せる。
+  const presentation = resolvePresentation(settings, messages);
+
   // クエリ未初期化・失敗で data が undefined/null になっても落ちないよう防御する。
   if (!entries || entries.length === 0) {
     return {
@@ -31,6 +37,7 @@ export function toViewModel(
       entries: [],
       placements: emptyPlacements(),
       showUnclassified: settings.showUnclassified,
+      presentation,
     };
   }
 
@@ -54,5 +61,6 @@ export function toViewModel(
     entries: mapped,
     placements,
     showUnclassified: settings.showUnclassified,
+    presentation,
   };
 }

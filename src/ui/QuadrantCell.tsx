@@ -24,6 +24,11 @@ export interface QuadrantCellProps {
   emptyText?: string;
   /** レイアウト上の種別（未分類ゾーンはフル幅・ドロップ不可）。 */
   variant?: "quadrant" | "unclassified";
+  /**
+   * 象限アクセント色（#23 F6）。非空なら CSS 変数 `--eisenhower-quadrant-accent` として
+   * セルに付与し、`styles.css` が参照する。空/未指定はテーマ既定（`--interactive-accent`）に委ねる。
+   */
+  accentColor?: string;
   /** カードを開く（#22 F5）。各 NoteCard へ委譲する。 */
   onOpenCard?: (entryId: string, opts: { newLeaf: boolean }) => void;
   /** カードのホバーでプレビュー（#22 F5）。各 NoteCard へ委譲する。 */
@@ -39,6 +44,7 @@ export function QuadrantCell({
   entries,
   emptyText = DEFAULT_EMPTY_TEXT,
   variant = "quadrant",
+  accentColor,
   onOpenCard,
   onHoverCard,
 }: QuadrantCellProps) {
@@ -52,10 +58,16 @@ export function QuadrantCell({
   const className =
     `eisenhower-quadrant eisenhower-quadrant--${variant}` +
     (isOver && !isDropDisabled ? " eisenhower-quadrant--over" : "");
+  // カスタム色（非空）はインライン CSS 変数で付与。空/未指定はテーマ既定にフォールバック（#23 F6）。
+  const accentStyle =
+    accentColor && accentColor.length > 0
+      ? { "--eisenhower-quadrant-accent": accentColor }
+      : undefined;
   return (
     <section
       ref={setNodeRef}
       class={className}
+      style={accentStyle}
       aria-label={`${label}（${axisLabel}）`}
     >
       <header class="eisenhower-quadrant__header">

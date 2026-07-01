@@ -8,10 +8,12 @@ import {
 } from "obsidian";
 import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
+import { resolvePresentation } from "./presentation";
 import { resolveWritableAxisKeys } from "./readAxis";
 import { VIEW_ID } from "./registerView";
 import type { AxisWriteValues, MatrixCallbacks } from "./types";
 import type { EisenhowerSettings } from "../settings";
+import type { Messages } from "../i18n";
 
 /**
  * Bases カスタムビュー本体（`BasesView` サブクラス）。
@@ -39,6 +41,10 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
   private readonly viewContainerEl: HTMLElement;
   /** 最新の設定を取得する（設定タブ変更後も陳腐化しないよう getter で受ける）。 */
   private readonly getSettings: () => EisenhowerSettings;
+  /** 最新の解決済み言語メッセージを取得する（設定の言語変更後も陳腐化しない・#23 F6）。 */
+  private readonly getMessages: () => Messages;
+  /** 生存中ビューの登録簿（設定変更時の再描画対象）。プラグインが所有し onunload で解除する。 */
+  private readonly registry: Set<EisenhowerBasesView> | null;
   /** UI から委譲される操作（#20: ドラッグ書き戻し）。 */
   private readonly callbacks: MatrixCallbacks;
 
@@ -46,10 +52,16 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     controller: QueryController,
     containerEl: HTMLElement,
     getSettings: () => EisenhowerSettings,
+    getMessages: () => Messages,
+    registry?: Set<EisenhowerBasesView>,
   ) {
     super(controller);
     this.viewContainerEl = containerEl;
     this.getSettings = getSettings;
+    this.getMessages = getMessages;
+    this.registry = registry ?? null;
+    // 設定変更時の再描画対象として自身を登録する（#23 F6・AC1/AC2）。
+    this.registry?.add(this);
     this.callbacks = {
       onMoveCard: (entryId, axisValues) => this.writeBackAxes(entryId, axisValues),
       onOpenCard: (entryId, opts) => this.openNote(entryId, opts.newLeaf),
@@ -61,19 +73,34 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       state: "loading",
       entries: [],
       placements: emptyPlacements(),
+      presentation: resolvePresentation(getSettings(), getMessages()),
     });
   }
 
   onDataUpdated(): void {
-    // this.data がまだ無い異常状態でも落とさず空シェルを描く（防御的アクセス）。
+    this.renderCurrent();
+  }
+
+  /**
+   * 現在の `this.data`・設定・言語で再描画する（#23 F6）。`onDataUpdated`（Bases のデータ更新）と
+   * `refresh`（設定変更時のプラグイン起点の再描画）が共有する。this.data が無い異常状態でも
+   * 落とさず空シェルを描く（防御的アクセス）。
+   */
+  private renderCurrent(): void {
     render(
       this.viewContainerEl,
-      toViewModel(this.data?.data, this.config, this.getSettings()),
+      toViewModel(this.data?.data, this.config, this.getSettings(), this.getMessages()),
       this.callbacks,
     );
   }
 
+  /** 設定変更後に最新設定/言語で即時再描画する（プラグインが登録簿経由で呼ぶ・AC1/AC2）。 */
+  refresh(): void {
+    this.renderCurrent();
+  }
+
   onunload(): void {
+    this.registry?.delete(this);
     unmount(this.viewContainerEl);
   }
 

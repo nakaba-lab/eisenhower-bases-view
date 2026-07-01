@@ -12,7 +12,8 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { axisValuesForQuadrant, type Quadrant } from "../logic/quadrant";
+import { QUADRANT_KEYS, axisValuesForQuadrant, type Quadrant } from "../logic/quadrant";
+import { messagesFor, type Messages } from "../i18n";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
 import {
   applyPendingMoves,
@@ -37,32 +38,15 @@ import { QuadrantCell } from "./QuadrantCell";
  * 配色はハードコードせず Obsidian テーマ変数（styles.css）に追従する。
  */
 
-// ユーザー向け文言。i18n（#23 F6）導入時はここを起点に翻訳テーブルへ差し替える。
-const MATRIX_LABEL = "Eisenhower Matrix";
-const LOADING_TEXT = "読み込み中…";
-const EMPTY_TEXT = "表示するノートがありません";
-const EMPTY_QUADRANT_TEXT = "なし";
-
-/** 2×2 グリッドの象限定義（ワイヤーフレーム順: 上段 Do/Schedule、下段 Delegate/Delete）。 */
-const QUADRANTS = [
-  { key: "do", label: "Do", axisLabel: "重要 × 緊急" },
-  { key: "schedule", label: "Schedule", axisLabel: "重要 × 非緊急" },
-  { key: "delegate", label: "Delegate", axisLabel: "非重要 × 緊急" },
-  { key: "delete", label: "Delete", axisLabel: "非重要 × 非緊急" },
-] as const;
-
-const UNCLASSIFIED_LABEL = "未分類";
-const UNCLASSIFIED_AXIS_LABEL = "軸欠損・ドロップ不可";
-
 /**
- * スクリーンリーダー向けのキーボード操作説明（dnd-kit の既定英語文を日本語へ差し替える）。
- * #22（F5）で Enter を「開く」に割り当てたため、掴む/ドロップは **Space** に整理する
- *（`KeyboardSensor` の起動キーも Space のみに remap 済み）。
+ * ユーザー向け文言は ViewModel の `presentation`（#23 F6）から受け取る。
+ * `presentation` 省略時（後方互換・ローディングシェル）は下記の既定にフォールバックする＝
+ * **現行のハードコード挙動**（英ラベル＋日本語文言）。ja メッセージをベースに象限ラベルだけ
+ * 英語へ差し替えて再現する（アダプタは常に `presentation` を載せるため実機では解決済み文言を使う）。
  */
-const SCREEN_READER_INSTRUCTIONS = {
-  draggable:
-    "スペースキーで掴み、矢印キーで象限へ移動し、" +
-    "スペースキーでドロップします。Esc でキャンセルします。Enter でノートを開きます。",
+const FALLBACK_MESSAGES: Messages = {
+  ...messagesFor("ja"),
+  quadrantLabels: { do: "Do", schedule: "Schedule", delegate: "Delegate", delete: "Delete" },
 };
 
 interface MatrixViewProps {
@@ -71,6 +55,13 @@ interface MatrixViewProps {
 }
 
 function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
+  // 表示情報（ラベル/色/言語文言）を presentation から取り出す（#23 F6）。
+  // 省略時（後方互換・ローディングシェル）は現行挙動の既定へフォールバックする。
+  const presentation = viewModel.presentation;
+  const messages = presentation?.messages ?? FALLBACK_MESSAGES;
+  const quadrantLabels = presentation?.quadrantLabels ?? FALLBACK_MESSAGES.quadrantLabels;
+  const quadrantColors = presentation?.quadrantColors;
+
   // 楽観移動の保留（entryId → 目的両軸値＋世代）。書込確定で reconcile が落とす（#20）。
   const [pending, setPending] = useState<PendingMoves>(() => new Map());
   // 最新の保留を非同期 settle から参照するためのミラー（毎レンダリングで同期）。
@@ -122,26 +113,25 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const titleOf = (id: string): string =>
     viewModel.entries.find((entry) => entry.id === id)?.title ?? id;
   const labelOf = (quadrant: Quadrant): string =>
-    QUADRANTS.find((q) => q.key === quadrant)?.label ??
-    (quadrant === "unclassified" ? UNCLASSIFIED_LABEL : quadrant);
+    quadrant === "unclassified" ? messages.unclassifiedLabel : quadrantLabels[quadrant];
 
-  // スクリーンリーダーへ各操作段階を日本語で読み上げる（dnd-kit 既定の英語＋内部 ID を置換）。
+  // スクリーンリーダーへ各操作段階を読み上げる（dnd-kit 既定の英語＋内部 ID を言語文言＋名称へ置換）。
   const announcements = {
     onDragStart({ active }: DragStartEvent) {
-      return `「${titleOf(String(active.id))}」を掴みました。象限へ移動してください。`;
+      return messages.grabbed(titleOf(String(active.id)));
     },
     onDragOver({ over }: DragOverEvent) {
       return over
-        ? `${labelOf(String(over.id) as Quadrant)} の上にあります。`
-        : "ドロップ可能な象限の外にあります。";
+        ? messages.over(labelOf(String(over.id) as Quadrant))
+        : messages.outside;
     },
     onDragEnd({ active, over }: DragEndEvent) {
       return over
-        ? `「${titleOf(String(active.id))}」を ${labelOf(String(over.id) as Quadrant)} にドロップしました。`
-        : `「${titleOf(String(active.id))}」を元の位置に戻しました。`;
+        ? messages.dropped(titleOf(String(active.id)), labelOf(String(over.id) as Quadrant))
+        : messages.returnedToOrigin(titleOf(String(active.id)));
     },
     onDragCancel({ active }: DragCancelEvent) {
-      return `「${titleOf(String(active.id))}」の移動をキャンセルしました。`;
+      return messages.cancelled(titleOf(String(active.id)));
     },
   };
 
@@ -201,10 +191,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       }
       switch (settleAnnouncement(failed, isLatest)) {
         case "failure":
-          announce(`「${titleOf(entryId)}」の移動に失敗しました。元に戻しました。`);
+          announce(messages.moveFailed(titleOf(entryId)));
           break;
         case "success":
-          announce(`「${titleOf(entryId)}」を ${labelOf(target)} へ移動しました。`);
+          announce(messages.moveSucceeded(titleOf(entryId), labelOf(target)));
           break;
       }
     };
@@ -222,7 +212,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         role="status"
         aria-live="polite"
       >
-        {LOADING_TEXT}
+        {messages.loading}
       </div>
     );
   }
@@ -232,9 +222,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       <section
         class="eisenhower-matrix eisenhower-matrix--empty"
         role="group"
-        aria-label={MATRIX_LABEL}
+        aria-label={messages.matrixLabel}
       >
-        <p class="eisenhower-matrix__placeholder">{EMPTY_TEXT}</p>
+        <p class="eisenhower-matrix__placeholder">{messages.empty}</p>
       </section>
     );
   }
@@ -251,24 +241,25 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       onDragCancel={handleDragCancel}
       accessibility={{
         announcements,
-        screenReaderInstructions: SCREEN_READER_INSTRUCTIONS,
+        screenReaderInstructions: { draggable: messages.screenReaderDraggable },
       }}
     >
-      <section class="eisenhower-matrix" role="group" aria-label={MATRIX_LABEL}>
+      <section class="eisenhower-matrix" role="group" aria-label={messages.matrixLabel}>
         {/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ通知する視覚的非表示のライブ領域。
             文言は nextAnnouncement で差分化済み（同一文言でも再読み上げされる）。 */}
         <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
           {liveStatus}
         </div>
         <div class="eisenhower-matrix__grid">
-          {QUADRANTS.map((quadrant) => (
+          {QUADRANT_KEYS.map((key) => (
             <QuadrantCell
-              key={quadrant.key}
-              quadrant={quadrant.key}
-              label={quadrant.label}
-              axisLabel={quadrant.axisLabel}
-              entries={placements[quadrant.key]}
-              emptyText={EMPTY_QUADRANT_TEXT}
+              key={key}
+              quadrant={key}
+              label={quadrantLabels[key]}
+              axisLabel={messages.axisLabels[key]}
+              accentColor={quadrantColors?.[key]}
+              entries={placements[key]}
+              emptyText={messages.emptyQuadrant}
               onOpenCard={callbacks.onOpenCard}
               onHoverCard={callbacks.onHoverCard}
             />
@@ -280,10 +271,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         {showUnclassified && (
           <QuadrantCell
             quadrant="unclassified"
-            label={UNCLASSIFIED_LABEL}
-            axisLabel={UNCLASSIFIED_AXIS_LABEL}
+            label={messages.unclassifiedLabel}
+            axisLabel={messages.unclassifiedAxisLabel}
             entries={placements.unclassified}
-            emptyText={EMPTY_QUADRANT_TEXT}
+            emptyText={messages.emptyQuadrant}
             variant="unclassified"
             onOpenCard={callbacks.onOpenCard}
             onHoverCard={callbacks.onHoverCard}

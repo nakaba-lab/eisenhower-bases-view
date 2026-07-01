@@ -103,7 +103,7 @@ interface EisenhowerSettings {
 }
 ```
 
-**i18n（`src/i18n.ts` 新規）**: `en`/`ja` の翻訳テーブルと、`resolveLanguage(setting, appLang)`（`auto` → Obsidian のアプリ言語〔`moment.locale()`／`localStorage['language']`〕から `en`/`ja` を導出、未知は `en` フォールバック）、`t(lang, key)` を持つ。`MatrixView.tsx` のハードコード文言（`MATRIX_LABEL`/`LOADING_TEXT`/`EMPTY_TEXT`/`EMPTY_QUADRANT_TEXT`／象限の既定ラベル・軸ラベル／未分類ラベル／SR 操作説明・アナウンス）を翻訳キー経由に置換する。**言語解決とキー→文言の確定はアダプタ側**で行い、確定済み文字列を `MatrixViewModel` に載せる（UI は `language` を知らず dumb を維持＝AC5 の疎結合を崩さない）。
+**i18n（`src/i18n.ts` 新規）**: `en`/`ja` の言語別メッセージ束（`Messages`）と、`resolveLanguage(setting, appLang)`（`auto` → `appLang`〔`main.ts` の `getObsidianLanguage()` が `localStorage['language']` を読む〕が `ja` 系なら ja、それ以外・未知・未設定は en にフォールバック）、束を返す `messagesFor(lang)` を持つ。`MatrixView.tsx` のハードコード文言（`MATRIX_LABEL`/`LOADING_TEXT`/`EMPTY_TEXT`/`EMPTY_QUADRANT_TEXT`／象限の既定ラベル・軸ラベル／未分類ラベル／SR 操作説明・アナウンス）を `Messages` のフィールド経由に置換する。**言語解決とメッセージ束の確定はアダプタ側**（`main.ts` の `resolveMessages()`）で行い、`toViewModel` が確定済み文字列を `MatrixViewModel.presentation` に載せる（UI は `language` を知らず dumb を維持＝AC5 の疎結合を崩さない）。
 
 **色の適用**: 解決済みの象限色を `MatrixViewModel` に載せ、`QuadrantCell` が当該セルへ**インライン CSS 変数** `--eisenhower-quadrant-accent` として付与、`styles.css` は `border-inline-start-color: var(--eisenhower-quadrant-accent, var(--interactive-accent))` で参照する。**空文字は変数を付けず、テーマの `--interactive-accent`（ライト/ダーク追従）にフォールバックする**（既定色を独自定数で持たない）。背景・文字はテーマ変数追従を維持し、アクセント色のみ上書きする。設定タブのカラーピッカーは未設定象限に対し、実描画と一致させるためテーマの `--interactive-accent`（hex 時）を初期スウォッチに出す。
 

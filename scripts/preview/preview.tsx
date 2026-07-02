@@ -14,7 +14,9 @@
  * カスタムラベルで上書きし、言語切替でも保持されること（残りは言語既定）を目視する。
  * 設定タブ本体は Obsidian 標準 `Setting` のため実機/手動で確認する（ここでは描画しない）。
  */
+import { render as preactRender } from "preact";
 import { render } from "../../src/ui/MatrixView";
+import { UndoToast } from "../../src/ui/UndoToast";
 import { resolvePresentation } from "../../src/bases/presentation";
 import { messagesFor, type Language } from "../../src/i18n";
 import { DEFAULT_SETTINGS } from "../../src/settings";
@@ -78,5 +80,30 @@ if (root) {
     root
       .querySelector<HTMLElement>(".eisenhower-note-card")
       ?.classList.add("eisenhower-note-card--dragging");
+  }
+
+  // undo（最小実装）: ?undo=1 で「元に戻す」トースト（UndoToast）をマトリクス下部に描画して
+  // 静止画に写す（実際の表示は移動成功時の内部状態で出るため、分離コンポーネントを直接描画する）。
+  if (params.get("undo") === "1") {
+    const section = root.querySelector<HTMLElement>(".eisenhower-matrix");
+    if (section) {
+      const messages = messagesFor(lang);
+      const holder = document.createElement("div");
+      section.appendChild(holder);
+      preactRender(
+        <UndoToast
+          message={messages.moveSucceeded(
+            "請求書を今日中に送る",
+            lang === "ja" ? "実行" : "Do",
+          )}
+          regionLabel={messages.undoRegionLabel}
+          undoLabel={messages.undoMove}
+          dismissLabel={messages.undoDismiss}
+          onUndo={() => {}}
+          onDismiss={() => {}}
+        />,
+        holder,
+      );
+    }
   }
 }

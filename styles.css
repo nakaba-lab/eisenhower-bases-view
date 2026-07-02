@@ -195,3 +195,64 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* 移動成功直後の「元に戻す」トースト（undo・最小実装）。ビュー下部に控えめに出し、
+ * テーマ変数に追従する（配色をハードコードしない）。次のドラッグ開始・タイムアウト・
+ * undo 実行で消える（表示制御は MatrixView）。sticky でスクロールしても下部に留まる。 */
+.eisenhower-undo-toast {
+  position: sticky;
+  bottom: var(--size-4-2, 8px);
+  align-self: center;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2, 8px);
+  max-width: 100%;
+  margin-top: var(--size-4-2, 8px);
+  padding: var(--size-4-2, 8px) var(--size-4-3, 12px);
+  color: var(--text-normal);
+  background-color: var(--background-secondary-alt, var(--background-secondary));
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  box-shadow: var(--shadow-l, 0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+/* 長いノート名は 1 行省略にしてボタンを押し出さない。 */
+.eisenhower-undo-toast__message {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「元に戻す」はアクセントボタンとして馴染ませる（Obsidian の第一級アクション色）。 */
+.eisenhower-undo-toast__undo {
+  flex: 0 0 auto;
+  color: var(--text-on-accent);
+  background-color: var(--interactive-accent);
+}
+
+.eisenhower-undo-toast__undo:hover {
+  background-color: var(--interactive-accent-hover, var(--interactive-accent));
+}
+
+/* 「閉じる」は控えめなアイコンボタン（× 記号）。縦にもパディングを持たせクリック標的を確保する。 */
+.eisenhower-undo-toast__dismiss {
+  flex: 0 0 auto;
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  color: var(--text-muted);
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.eisenhower-undo-toast__dismiss:hover {
+  color: var(--text-normal);
+}
+
+/* フォーカスリングは Obsidian 既定に頼らず明示する（NoteCard と同じ方針・box-shadow 依存で薄くなる懸念を排す）。 */
+.eisenhower-undo-toast__undo:focus-visible,
+.eisenhower-undo-toast__dismiss:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}

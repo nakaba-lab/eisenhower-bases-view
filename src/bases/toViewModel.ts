@@ -21,6 +21,18 @@ export function emptyPlacements(): QuadrantPlacements {
   return { do: [], schedule: [], delegate: [], delete: [], unclassified: [] };
 }
 
+/**
+ * 配置対象は **Markdown ノート（`file.extension === "md"`）のみ**（要件 §9）。
+ *
+ * Bases のクエリ結果には Base 自身の `.base` ファイルや `.canvas`・画像等の非ノートが
+ * （フィルタ未設定時に）混ざりうる。v1 は boolean **frontmatter** 軸のみ扱うため、
+ * frontmatter を持たない非 md はカード化せず（未分類ゾーンにも出さず）除外する。
+ * これにより `.base` 自己エントリが未分類カードとして現れる混乱を防ぐ。
+ */
+function isPlaceableNote(entry: BasesEntry): boolean {
+  return entry.file?.extension === "md";
+}
+
 export function toViewModel(
   entries: readonly BasesEntry[] | undefined | null,
   config?: Pick<BasesViewConfig, "getAsPropertyId"> | null,
@@ -31,7 +43,9 @@ export function toViewModel(
   const presentation = resolvePresentation(settings, messages);
 
   // クエリ未初期化・失敗で data が undefined/null になっても落ちないよう防御する。
-  if (!entries || entries.length === 0) {
+  // 非 Markdown（.base 自身・.canvas・画像等）は配置対象外のため事前に除外する（要件 §9）。
+  const notes = entries ? entries.filter(isPlaceableNote) : [];
+  if (notes.length === 0) {
     return {
       state: "empty",
       entries: [],
@@ -43,7 +57,7 @@ export function toViewModel(
 
   const ids = resolveAxisPropertyIds(config, settings);
   const placements = emptyPlacements();
-  const mapped: MatrixEntry[] = entries.map((entry) => {
+  const mapped: MatrixEntry[] = notes.map((entry) => {
     const axis = readAxisValues(entry, ids);
     const quadrant = classifyQuadrant(axis);
     const matrixEntry: MatrixEntry = {

@@ -8,7 +8,9 @@ import {
   safeRegisterBasesView,
 } from "./bases/registerView";
 import { buildAxisViewOptions } from "./bases/viewOptions";
+import { runUndo } from "./bases/undoWriteBack";
 import { EisenhowerSettingTab } from "./settingsTab";
+import { UndoManager } from "./logic/undo";
 import { messagesFor, resolveLanguage, type Messages } from "./i18n";
 
 /**
@@ -24,10 +26,22 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
   settings: EisenhowerSettings = DEFAULT_SETTINGS;
   /** 生存中の Eisenhower ビュー（設定変更時に再描画する登録簿・#23 F6）。 */
   private readonly liveViews = new Set<EisenhowerBasesView>();
+  /** 「直前 1 手」の undo 記録（全ビュー＋コマンドで共有・undo 最小実装）。 */
+  private readonly undoManager = new UndoManager();
 
   async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new EisenhowerSettingTab(this.app, this));
+
+    // 直前の移動を元に戻すコマンド（ホットキーはユーザーが割当・Ctrl+Z 非統合）。
+    // 名称は登録時点の解決言語で確定する（Obsidian はコマンド名を設定変更で再ローカライズしない）。
+    this.addCommand({
+      id: "undo-last-move",
+      name: this.resolveMessages().undoCommandName,
+      callback: () => {
+        void runUndo(this.app, this.undoManager, this.resolveMessages());
+      },
+    });
 
     safeRegisterBasesView(
       () =>
@@ -41,6 +55,7 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
               () => this.settings,
               () => this.resolveMessages(),
               this.liveViews,
+              this.undoManager,
             ),
           // 軸プロパティ選択 UI（#21 F4）: note.* のみ選択可の property セレクタを
           // Configure view へ宣言する（filter は書き戻し可能な note.* 判定・AC1）。

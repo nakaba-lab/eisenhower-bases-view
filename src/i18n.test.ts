@@ -83,3 +83,24 @@ describe("messagesFor — 言語別メッセージ束（AC4）", () => {
     expect(messagesFor("ja").moveFailed("タスクA")).toContain("タスクA");
   });
 });
+
+describe("messagesFor — undo（直前1手の元に戻す）文言（draft）", () => {
+  it("messagesFor — undo の静的文言（トーストボタン/コマンド名/該当なし）が言語で切り替わる", () => {
+    for (const lang of ["en", "ja"] as Language[]) {
+      const messages = messagesFor(lang);
+      expect(messages.undoRegionLabel.length).toBeGreaterThan(0); // トースト領域の aria-label
+      expect(messages.undoMove.length).toBeGreaterThan(0); // トーストのボタンラベル
+      expect(messages.undoCommandName.length).toBeGreaterThan(0); // コマンドパレット名
+      expect(messages.noUndo.length).toBeGreaterThan(0); // 記録なし時の Notice
+    }
+    // ja と en で異なる（実際に翻訳されている）
+    expect(messagesFor("ja").undoMove).not.toBe(messagesFor("en").undoMove);
+  });
+
+  it("messagesFor — undone/undoFailed テンプレートがノート名を差し込む", () => {
+    expect(messagesFor("ja").undone("タスクA")).toContain("タスクA");
+    expect(messagesFor("en").undone("TaskA")).toContain("TaskA");
+    expect(messagesFor("ja").undoFailed("タスクA")).toContain("タスクA");
+    expect(messagesFor("en").undoFailed("TaskA")).toContain("TaskA");
+  });
+});

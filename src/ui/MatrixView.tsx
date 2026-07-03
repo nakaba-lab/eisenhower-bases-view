@@ -25,6 +25,10 @@ import {
 } from "./optimisticMove";
 import { nextAnnouncement } from "./liveStatus";
 import { QuadrantCell } from "./QuadrantCell";
+import { UndoToast } from "./UndoToast";
+
+/** 「元に戻す」トーストの自動消滅までの時間（ms）。次のドラッグ開始・undo 実行でも消える。 */
+const UNDO_TOAST_TIMEOUT_MS = 8000;
 
 /**
  * Matrix ビューの命令的な描画入口（アダプタ層が onDataUpdated 内で呼ぶ＝AC3）。
@@ -71,6 +75,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   // 移動結果（成功/失敗）をスクリーンリーダーへ伝える aria-live 文言（再読み上げ用に差分化済み）。
   const [liveStatus, setLiveStatus] = useState("");
+  // 移動成功直後に出す「元に戻す」トースト（undo・最小実装）。null で非表示。
+  // entryId は onUndoMove に渡し、記録が別移動へ置き換わった陳腐化トーストで別ノートを戻さないためのガード。
+  const [undoToast, setUndoToast] = useState<
+    { message: string; entryId: string } | null
+  >(null);
+  // トーストの自動消滅タイマー（次のドラッグ開始・undo 実行・アンマウントでもクリアする）。
+  const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 楽観移動の世代採番（連番）。最新の書き込みだけを確定/ロールバックの対象にする。
   const nextGenerationRef = useRef(0);
   // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
@@ -90,6 +101,30 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // aria-live へ通知する（同一文言でも nextAnnouncement が差分化して再読み上げを促す）。
   const announce = (message: string) =>
     setLiveStatus((prev) => nextAnnouncement(prev, message));
+
+  // 自動消滅タイマーを止める（show/dismiss/アンマウントで共有）。
+  const clearUndoToastTimer = () => {
+    if (undoToastTimerRef.current !== null) {
+      clearTimeout(undoToastTimerRef.current);
+      undoToastTimerRef.current = null;
+    }
+  };
+  // 「元に戻す」トーストを消す（タイマーも止める）。undo 実行・閉じる・次のドラッグ開始で呼ぶ。
+  const dismissUndoToast = () => {
+    clearUndoToastTimer();
+    setUndoToast(null);
+  };
+  // 移動成功時にトーストを出し、一定時間後に自動で消す（古い提案を残さない）。
+  const showUndoToast = (message: string, entryId: string) => {
+    clearUndoToastTimer();
+    setUndoToast({ message, entryId });
+    undoToastTimerRef.current = setTimeout(() => {
+      undoToastTimerRef.current = null;
+      setUndoToast(null);
+    }, UNDO_TOAST_TIMEOUT_MS);
+  };
+  // アンマウント時に残ったタイマーを掃除する（リーク防止）。
+  useEffect(() => clearUndoToastTimer, []);
 
   // 新しい viewModel（onDataUpdated 由来）が来たら、サーバ値が追いついた保留を解除する。
   // in-flight 中の entry は値一致でも確定しない（coincidental match 防止）。
@@ -137,6 +172,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
+    // 新しいドラッグを始めたら、直前の移動の「元に戻す」提案は古くなるため消す。
+    dismissUndoToast();
   };
   const handleDragCancel = () => setActiveId(null);
 
@@ -193,9 +230,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         case "failure":
           announce(messages.moveFailed(titleOf(entryId)));
           break;
-        case "success":
-          announce(messages.moveSucceeded(titleOf(entryId), labelOf(target)));
+        case "success": {
+          const successMessage = messages.moveSucceeded(titleOf(entryId), labelOf(target));
+          announce(successMessage);
+          // undo が配線されているときだけ「元に戻す」トーストを出す（onUndoMove 未提供なら出さない）。
+          if (callbacks.onUndoMove) showUndoToast(successMessage, entryId);
           break;
+        }
       }
     };
     // 書き戻しを委譲。成功/失敗いずれも settle へ（Notice はアダプタが出す）。
@@ -278,6 +319,22 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             variant="unclassified"
             onOpenCard={callbacks.onOpenCard}
             onHoverCard={callbacks.onHoverCard}
+          />
+        )}
+        {/* 移動成功直後の「元に戻す」トースト（undo・最小実装）。onUndoMove 配線時のみ。
+            クリックでアダプタの復元経路へ委譲し、閉じる/次ドラッグ/タイムアウトで消える。 */}
+        {undoToast && callbacks.onUndoMove && (
+          <UndoToast
+            message={undoToast.message}
+            regionLabel={messages.undoRegionLabel}
+            undoLabel={messages.undoMove}
+            dismissLabel={messages.undoDismiss}
+            onUndo={() => {
+              // 名指しノートの entryId を渡す（記録が別移動へ置き換わっていたら戻さないガード）。
+              callbacks.onUndoMove?.(undoToast.entryId);
+              dismissUndoToast();
+            }}
+            onDismiss={dismissUndoToast}
           />
         )}
       </section>

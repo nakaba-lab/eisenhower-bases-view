@@ -3,13 +3,15 @@ title: UI 設計
 area: ui
 status: active
 relatedIssues: [18, 19, 20, 22, 23, 33, 34]
-updated: 2026-07-01
+updated: 2026-07-02
 kind: ui
 ---
 
 # UI 設計
 
 > 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。** **#22（F5）のカード操作（開く/新タブ/プレビュー/キーボード）を実装し `status: active` に確定した。** **#23（F6）の設定タブ（デフォルト軸・象限ラベル/色・欠損表示・i18n 言語）を実装し `status: active` に確定した。**
+>
+> **undo（直前1手の元に戻す・最小実装）を実装し `status: active` に確定した（2026-07-02）**: ドラッグ書き戻しは破壊的（両軸を `true/false` 上書き）なため、**直前 1 手だけ**を元に戻す最小の undo を足した。トリガーは **(a) Obsidian コマンド（ホットキー割当可・パレット表示）と (b) 移動直後にビュー内へ出すトースト**の**両方**（人間承認済み）。いずれも **Obsidian ネイティブの Ctrl+Z とは非統合**（独自コマンドとして登録し、ネイティブ undo をフックしない）。復元は **完全復元**＝移動前の frontmatter 値を捕捉し、present は値を代入、**absent はキーを delete して未分類へ戻す**（人間承認済み。`delete` はこの undo 経路のみで、分類ドラッグは引き続き delete しない＝v1 boolean 軸限定の制約を崩さない）。トーストは分離コンポーネント `UndoToast`（`role="group"`＋aria-label＝二重読み上げ回避・明示 focus-visible）で、frontend-reviewer 指摘を反映済み。詳細な捕捉/復元の配線（`UndoRecord`・`UndoManager`・`runUndo`・コマンド登録）は `bases.md`。
 >
 > **#23（F6）の確定事項（2026-07-01・人間承認済み・実装済み）**: 設定タブ（`PluginSettingTab`＝`src/settingsTab.ts`）でデフォルト軸プロパティ・欠損ノート表示トグル・象限ラベル/色・表示言語を編集し `saveData` で永続化する（AC5。再読込は `mergeSettings` が浅い `Object.assign` の欠損を補完）。確定した設計判断: ① **データフローは ViewModel 拡張**＝`toViewModel` が解決済みの象限ラベル（カスタム or 言語既定）・色・UI 文言を `MatrixViewModel.presentation`（`src/bases/presentation.ts`）に載せ、UI は受領値を描画（既存 `showUnclassified` と同一経路・UI は Bases 非依存維持・単体テスト可）。② **i18n は Auto 追従＋手動上書き**＝既定は Obsidian のアプリ言語（en/ja）に追従し、設定の言語ドロップダウン（Auto/English/日本語）で明示上書き可。翻訳テーブルは `src/i18n.ts`（`en`/`ja`）に集約し `MatrixView.tsx` のハードコード文言を置換（同ファイル冒頭コメントが起点と明示）。③ **色は象限ごとカラーピッカー＋リセット**＝4 象限それぞれ hex を設定でき ↺ でカスタムを消しテーマ既定へ戻せる。**未設定象限はテーマの `--interactive-accent`（ライト/ダーク追従）で描画し、既定色を独自定数で持たない**（プラグインの「配色をハードコードしない」方針と整合。カスタム値の AA 確保はユーザー責務）。設定タブのカラーピッカーは未設定時にテーマの `--interactive-accent`（hex 時）を初期スウォッチに出し、設定画面と実描画の食い違いを防ぐ。④ **設定タブはセクション区分レイアウト**（`setHeading` で 軸／表示／象限ラベル・色／言語 を区分）。⑤ **反映タイミング**＝設定変更時に開いている Eisenhower ビューを再描画し即時反映（AC1/AC2。プラグインが live ビュー登録簿 `Set<EisenhowerBasesView>` を保持し、各ビューの `constructor` で登録・`onunload` で解除・`saveSettings` 後に `refresh`）。⑥ **ラベル×言語の相互作用**＝カスタムラベルは空（空白のみを含む）＝言語既定にフォールバック。言語切替は空項目の既定文言のみ変え、明示入力したカスタムラベルは保持（リセット ↺ でカスタムを消し言語既定へ戻す）。⑦ **軸の向き反転は対象外**（v2・要件「未決事項」）。
 >
@@ -204,6 +206,26 @@ sequenceDiagram
     end
 ```
 
+### undo（直前1手の元に戻す・最小実装）
+
+ドラッグ書き戻し（#20）は両軸を `true/false` で上書きする破壊的操作のため、**直前 1 手だけ**を元に戻す最小の undo を足す。UI 側の責務は **(a) 移動成功直後にトーストを出す・(b) トーストの「元に戻す」ボタン／コマンドから `MatrixCallbacks.onUndoMove()` を呼ぶ**の 2 点で、実際の frontmatter 復元（値の代入／absent の delete）と「直前 1 手」の保持はアダプタ層（`bases.md` の `UndoManager`／`runUndo`）に隔離する（`onMoveCard` と同じ疎結合＝AC5 維持。UI は `obsidian` 型に触れない）。
+
+- **境界契約の追加（`src/bases/types.ts`）**: `onUndoMove?(expectedEntryId?: string): void` — トースト／コマンドが起動する。アダプタが保持する「直前 1 手」の記録を復元し、無ければ `Notice`（「元に戻せる移動がありません」）を出す。**トースト起動時は名指しノートの `expectedEntryId` を渡す**（記録が別ビューの移動へ置き換わっていたら戻さないガード＝code-reviewer 指摘）。コマンド起動は省略し無条件に直前 1 手を戻す。復元の実体はアダプタ責務。
+- **トースト（分離コンポーネント `src/ui/UndoToast.tsx`）**: `NoteCard`/`QuadrantCell` と同じく**分離した純 UI 部品**にして単体テスト可能にする（`MatrixView` は移動成功時に表示状態＝`{ message, entryId }` を持ち条件描画する。`entryId` は `onUndoMove` のガードに渡す）。props は `{ message; regionLabel; undoLabel; dismissLabel; onUndo; onDismiss }`。`message` は移動成功文言（`messages.moveSucceeded` を流用）、`undoLabel` は `messages.undoMove`（「元に戻す」）。トーストは非モーダル。**表示の解除**は ① 「元に戻す」クリック（→`onUndoMove(entryId)` 後に消える）／② 次のドラッグ開始（`onDragStart` で消す・古い提案を残さない）／③ タイムアウト（数秒）／④ アンマウント。ビュー内下部に重ねて出し、`DragOverlay` と競合しない z 順にする。
+- **コマンド（`main.ts`・`bases.md` が正）**: `addCommand({ id: "undo-last-move", name: messages.undoCommandName })` を登録し、コマンドパレット／ユーザー割当ホットキー（Ctrl+Z 以外）から `onUndoMove` 相当（`UndoManager` の記録復元）を呼ぶ。
+
+```
+（移動成功直後・ビュー下部にトースト）
++-------------------------------------------------+
+| 「タスク」を Do へ移動しました   [ 元に戻す ] [ × ] |
++-------------------------------------------------+
+```
+
+**トーストの a11y**:
+- トーストは **非ライブの識別可能領域**にする＝`role="group"` ＋ `aria-label`（`messages.undoRegionLabel`「移動の取り消し」）。`role="status"` は**暗黙の `aria-live="polite"` ライブ領域**になり、中身の移動成功文言が既存 `.eisenhower-matrix__sr-status`（`aria-live=polite`）と**二重読み上げ**されるため採らない（frontend-reviewer 指摘）。移動結果の読み上げは sr-status に一本化し、トーストは視覚 affordance＋操作導線に徹する。
+- 「元に戻す」「×（閉じる）」は本物の `<button>`（キーボード操作可）。`undoLabel`／閉じるボタンの `aria-label` を i18n から与える。**フォーカスリングは Obsidian 既定に頼らず明示** `outline: 2px solid var(--interactive-accent)`（`NoteCard` と同じ方針＝`box-shadow` 依存で薄くなる懸念を排す）。
+- コントラストはテーマ変数（`--background-modifier-*`／`--text-normal`）に追従し独自色を持たない（既存方針と整合）。「×」の休止色 `--text-muted` はホバーで `--text-normal` へ上げる（desktop-only のため下限で許容）。
+
 ### 状態設計（初期・ローディング・空・成功・エラー）
 
 > **F1（#18）実装済みの範囲＝ビューのシェル＋状態表示**（`src/ui/MatrixView.tsx` の `render`/`unmount`）。2×2 グリッドの実レイアウトとカード配置は #19 で充填する。スクリーンショット: `docs/screenshots/18-matrix-shell-{desktop,mobile}-after.png`（ライト/ダーク×loading/empty/ready）。
@@ -223,6 +245,8 @@ sequenceDiagram
 | 書き戻し成功 | `onDataUpdated` 自動再発火で再描画し `reconcilePendingMoves` が保留を解除して整合（keyed 差分でちらつき/スクロール維持＝#20） |
 | 書き戻し失敗 | 当該保留移動を破棄して再描画でロールバック＋`Notice` 表示（#20） |
 | 書込不可プロパティ選択 | 選択を弾く＋Notice（F4/#21） |
+| 書き戻し成功直後（undo） | ビュー下部に「元に戻す」トースト（`UndoToast`）を表示。次のドラッグ開始・タイムアウト・undo 実行で消える |
+| undo 実行 | 移動前の frontmatter へ復元（present は代入・absent は delete）→`onDataUpdated` 自動再発火で再配置。元に戻せる移動が無ければ `Notice` |
 
 ### デザイントークン参照
 
@@ -268,3 +292,6 @@ Obsidian 実機ロードを前提とするビュー本体は Storybook での再
 - **設定変更の即時反映のため live ビュー登録簿を持つ（#23・AC1/AC2）**: プラグインが生存中の `EisenhowerBasesView` を `Set` で保持（`constructor` 登録・`onunload` 解除）し、設定 `onChange`→`saveSettings()` 後に各ビューを再描画（再 `render(toViewModel(...))`）する。`getSettings()` getter で値は既に最新だが、設定変更は `onDataUpdated` を自動発火しないため、登録簿経由で明示的に再描画して「反映される」の即時性を満たす。
 - **設定タブはセクション区分レイアウト（#23・ワイヤーフレーム案 A・人間承認済み）**: `setHeading` で 軸／表示／象限ラベル・色／言語 を区分する。却下「フラット縦積み（Obsidian 標準）」: 実装は最小だが象限×(ラベル＋色) で行が増え目的の項目を探しにくい。
 - **軸の向き反転は F6 の対象外（v2）**: 要件「未決事項」で v1 は向き反転を持たないと確定済み。F6 はラベル・色・言語・欠損表示・既定軸のみ扱う。
+- **undo は「直前 1 手」の最小実装＋トリガー 2 系統（コマンド＋トースト）（人間承認済み）**: 要件「未決事項」の undo（Ctrl+Z 非統合）を最小実装する。redo・多段 undo は持たず、直前 1 手だけを `UndoManager` が保持する。トリガーはコマンド（ホットキー割当可・パレット表示）とビュー内トーストの**両方**（コマンドは発見性とキーボード運用、トーストは移動直後の即時性を担う）。却下「トーストのみ」: 発見性は高いがキーボード/後追い操作に弱い。却下「コマンドのみ」: 最小だが「今動かしたものを即戻す」導線が弱い。いずれも Obsidian ネイティブ Ctrl+Z とは非統合（独自コマンドとして登録し native undo をフックしない＝Obsidian のドキュメント編集 undo と競合させない。README/設定に明記）。
+- **undo は完全復元（absent は delete で戻す）（人間承認済み）**: undo は「移動前の状態をそのまま復元する」意味論を採り、元が未分類（軸 absent）だった移動は frontmatter キーを **delete して未分類へ戻す**。`delete` はこの undo 経路のみで、分類ドラッグ（#20）は引き続き両軸明示・delete しない（v1 boolean 軸限定の制約を崩さない）。却下「厳密 no-delete（absent 由来は undo 不可）」: 制約は厳守できるが「元に戻す」が実際には戻らない驚きを生む。捕捉値は boolean に限定せず verbatim（生値）で保持し、非 boolean の元値もデータ破壊を残さず復元する（`bases.md` の `UndoRecord`）。
+- **undo トーストは分離した純 UI 部品（`UndoToast`）**: `NoteCard`/`QuadrantCell` と同じく Bases・obsidian 非依存の分離コンポーネントにして単体テスト（描画・ボタン click→`onUndo`・a11y）を可能にする。`MatrixView` は移動成功時の表示状態と解除（次ドラッグ・タイムアウト・undo 実行）だけを持つ細い結線に留める（dnd-kit 実操作の往復は手動/`frontend-reviewer` で担保する既存方針と整合）。

@@ -96,4 +96,17 @@ export interface MatrixCallbacks {
    * `targetEl` はプレビュー位置決めに使うカード要素、`event` は発火元のマウスイベント。
    */
   onHoverCard?(entryId: string, targetEl: HTMLElement, event: MouseEvent): void;
+  /**
+   * 直前 1 手の移動を元に戻す（undo・最小実装）。
+   *
+   * ビュー内の「元に戻す」トースト（{@link MatrixViewModel} 描画側）とコマンドの双方がこれを起動する。
+   * frontmatter 復元（present は代入・absent は delete）・「直前 1 手」の保持はアダプタ
+   *（`EisenhowerBasesView`／`UndoManager`）が担う（`onMoveCard` と同じ疎結合＝AC5）。元に戻せる移動が
+   * 無ければアダプタが `Notice` を出す。
+   *
+   * `expectedEntryId` を渡すと、**現在の記録がその entry の移動である場合のみ**戻す（トーストが特定
+   * ノートを名指しするため、複数ビュー併用で記録が別の移動に置き換わっていたら誤って別ノートを戻さない
+   * ようにするガード）。省略時（コマンド起動）は「直前 1 手」を無条件に戻す。
+   */
+  onUndoMove?(expectedEntryId?: string): void;
 }

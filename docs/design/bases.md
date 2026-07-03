@@ -3,7 +3,7 @@ title: Bases アダプタ層 設計
 area: bases
 status: active
 relatedIssues: [18, 19, 20, 21, 22, 33, 34]
-updated: 2026-07-01
+updated: 2026-07-02
 kind: api
 ---
 
@@ -97,11 +97,17 @@ sequenceDiagram
     onMoveCard?(entryId: string, axisValues: { urgent: boolean; important: boolean }): Promise<void>;
     onOpenCard?(entryId: string, opts: { newLeaf: boolean }): void;                       // #22 F5
     onHoverCard?(entryId: string, targetEl: HTMLElement, event: MouseEvent): void;        // #22 F5
+    onUndoMove?(): void;                                                                  // undo（最小実装）
   }
   ```
 - **UI 入口**: `render(containerEl: HTMLElement, viewModel: MatrixViewModel, callbacks: MatrixCallbacks): void`（Preact `render()` を内部で呼ぶ命令的橋渡し）。`unmount(containerEl)` で破棄。
 - **書き戻し（#20 F3）**: `EisenhowerBasesView` が `onMoveCard` を実装し、`entryId`（file.path）→ `app.vault.getAbstractFileByPath` で `TFile` を解決、解決済み軸 propertyId（`note.<key>`）から frontmatter キー（`<key>`）を取り出し、`app.fileManager.processFrontMatter(file, fm => { fm[urgentKey] = urgent; fm[importantKey] = important; })` で**両軸を明示 `true/false`** 書き込みする（`delete` しない＝v1 boolean 軸）。読み取り（`getValue`）と書き込み（`processFrontMatter`）は別系統。`processFrontMatter` が reject したら UI 側がロールバック＋`Notice`（`ui.md` のシーケンス参照）。
 - **開く/プレビュー（#22 F5）**: `EisenhowerBasesView` が `onOpenCard`/`onHoverCard` を実装する。開く: `entryId`（file.path）→ 共通 `resolveTargetFile`（`getAbstractFileByPath`＋`instanceof TFile`。書き戻しと共有・欠落は `Notice`）で `TFile` を解決し、`app.workspace.getLeaf(newLeaf ? "tab" : false).openFile(file)`（素=現在リーフ／Mod+=新タブ）。プレビュー: `app.workspace.trigger("hover-link", { event, source: VIEW_ID, hoverParent: this, targetEl, linktext: entryId, sourcePath: entryId })` でコア page-preview を発火（表示可否はユーザーのコア設定に委ねる）。読み取り（`getValue`）とは別系統で、UI は `obsidian` 型に触れない。
+- **undo（直前1手の元に戻す・最小実装）**: ドラッグ書き戻し（#20）が破壊的（両軸を `true/false` 上書き）なため、移動前の frontmatter 値を捕捉して復元する最小 undo を足す。純ロジックは `src/logic/undo.ts`（obsidian 非依存・単体テスト対象）、実機接触（`processFrontMatter`・`getAbstractFileByPath`・`addCommand`）はアダプタ／プラグインに隔離する。
+  - **捕捉（`writeBackAxes` 内）**: `processFrontMatter` のコールバック内で**上書き前に**両軸キーの現在値を `capturePreviousAxes(frontmatter, keys)` で捕捉し（`hasOwnProperty` で absent と `false`/`undefined` を区別・値は verbatim 保持）、`UndoRecord { entryId, title(file.basename), keys, previous }` を組む。書き込み成功後に `UndoManager.record(record)` で「直前 1 手」として保存（既存記録は上書き＝保持は 1 手のみ）。
+  - **記録の所有（`UndoManager`・`src/logic/undo.ts`）**: プラグイン（`main.ts`）が単一の `UndoManager` を持ち、各 `EisenhowerBasesView` に注入する。コマンド（プラグイン全体）とビュー内トーストの双方がこの 1 記録を共有し「直前の移動」を一意に指す（複数ビューでは最後の移動を指す＝最小実装の割り切り）。
+  - **復元（`runUndo(app, undoManager, messages, expectedEntryId?)`）**: `UndoManager` の記録を取り、`record.entryId` から `TFile` を解決（欠落は記録 `clear`＋`Notice`）し、`processFrontMatter(file, fm => applyUndo(fm, record))` で present は代入・absent は delete。成功で `clear`。純関数 `applyUndo`/`capturePreviousAxes` を単体テストし、`extends BasesView`／`app` 接触面（`runUndo`）は手動/結合で担保する（`writeBackAxes` と同じ切り分け）。`onDataUpdated` 自動再発火で再配置され、手動再描画は不要。**`expectedEntryId` ガード（複数ビュー誤爆対策・code-reviewer 指摘）**: トーストは特定ノートを名指しするため、トースト起動時は名指しノートの entryId を渡し、**現在の記録がその entry の移動でない場合（別ビューの移動で記録が置き換わった等）は戻さず `Notice`** を出す（無言で別ノートを undo しない）。コマンド起動は `expectedEntryId` を省略し「直前 1 手」を無条件に戻す。
+  - **トリガー（コマンド＋トースト）**: `main.ts` が `addCommand({ id: "undo-last-move", name: messages.undoCommandName, callback })` を登録（ホットキーはユーザーが割当・Ctrl+Z 以外＝ネイティブ undo 非統合）。ビュー内トーストの「元に戻す」は `MatrixCallbacks.onUndoMove` 経由で同じ復元経路を呼ぶ（コマンドとトーストで `runUndo` を単一化＝重複させない）。記録が無いときは `Notice`（`messages.noUndo`）。
 - **ビルド**: esbuild（`main.js`）。`minAppVersion` 1.12.0・`isDesktopOnly: true`（確定）。
 
 ## 主要な設計判断（現行の理由）
@@ -129,6 +135,8 @@ sequenceDiagram
   - **却下: 各面で `startsWith("note.")` をインライン** — 記述は最小だが 3 箇所に散り、v2 で数値/タグ軸の許容ルールを足すとき同期漏れが起きる。
   - **却下: 述語を `viewOptions.ts` に置く（初期ドラフト案）** — `viewOptions` が `readAxis` のキーを import し、`readAxis` が `viewOptions` の述語を import する双方向依存（循環）になる。ESM live-binding で動きはするが code smell のため、依存を一方向（`viewOptions`→`readAxis`）に正した。
 - **options 宣言は純ビルダー `buildAxisViewOptions()` に切り出す（#21 F4）**: `registerBasesView` の `options` 配列を `main.ts` にインラインせず純関数へ逃がし、`filter` 挙動・option キー（`config.getAsPropertyId` が読むキーと一致）・`type` を単体テストで固定する。`main.ts`／`extends BasesView` は obsidian ランタイム必須で単体対象外のため、テスト可能な純度をビルダーへ寄せる（`safeRegisterBasesView` と同じ設計判断の踏襲）。churn しやすい options 型は実装時に実機 `obsidian.d.ts`（1.13.x）に照合済み: `options?: (config: BasesViewConfig) => BasesAllOptions[]`（関数形）・`BasesPropertyOption`（`type:'property'`・`key`・`displayName`・`filter?: (prop: BasesPropertyId) => boolean`）。スパイクは読み取り `getAsPropertyId` のみ確定だったが、options 登録型は型定義で確定した（AC ヒント `filter: (prop) => prop.startsWith("note.")` と一致）。
+- **undo は純ロジック（捕捉/復元/1手保持）とアダプタ隔離（実機接触）に分ける**: 「何を捕捉し、どう復元するか」（`capturePreviousAxes`/`applyUndo`/`UndoManager`）を `src/logic/undo.ts` の obsidian 非依存な純関数・純状態に切り出して単体テストで固定し、`processFrontMatter`/`getAbstractFileByPath`/`addCommand` の実機接触は `writeBackAxes`（捕捉）・`runUndo`（復元）・`main.ts`（コマンド登録）に隔離する。`writeBackAxes` の破壊性テスト不能面（`extends BasesView`）に純ロジックを逃がす既存流儀（`resolveWritableAxisKeys`・`cardInteraction`）を踏襲。捕捉値は boolean に限定せず verbatim で持ち、万一非 boolean 値が書き込まれても undo で可逆に戻せる（#34 のデータ破壊防止を undo でも二重化）。
+- **undo の記録は単一 `UndoManager` をプラグインが所有しビューへ注入**: コマンド（プラグイン全体）とビュー内トーストの双方が同一の「直前 1 手」を指すよう、記録の真実源を 1 箇所（プラグインの `UndoManager`）に置く。ビューは書き込み成功時に `record`、トリガーは `runUndo` で復元して `clear`。却下「ビューごとに記録を持つ」: コマンドがどのビューの記録を指すか曖昧になり、複数ビューで不整合。却下「トーストのローカル状態だけで復元」: コマンド経路と二重管理になる。複数ビューで別々に動かした場合は「最後の移動」を指す割り切り（最小実装・redo/多段なし）。**ただしトーストは特定ノートを名指しするため、`onUndoMove(expectedEntryId)` のガードで「記録が名指しの移動でなければ戻さず `Notice`」とし、無言で別ノートを undo する鋭いハザードだけは塞ぐ（code-reviewer 指摘）。コマンドは名指ししないため無条件に「直前 1 手」を戻す。**
 - **AC1/AC4 の UI はすべて Bases ネイティブ（独自 Preact コンポーネントを持たない）（#21 F4）**: 軸選択 UI は Bases の Configure view が options 宣言から自動描画し、options 変更→`onDataUpdated` 自動再発火で再配置される（手動再描画なし）。書込不可軸のガードは既存 Notice を流用。ゆえに F4 は `src/ui` に差分を持たず、ビジュアル/UX 検証はロジック（filter/ガード/再解決）の単体テストと結合（実機 Configure view 操作）で担保する。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）

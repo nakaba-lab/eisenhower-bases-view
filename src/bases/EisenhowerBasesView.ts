@@ -10,7 +10,9 @@ import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolvePresentation } from "./presentation";
 import { resolveWritableAxisKeys } from "./readAxis";
+import { runUndo } from "./undoWriteBack";
 import { VIEW_ID } from "./registerView";
+import { capturePreviousAxes, type UndoManager, type UndoRecord } from "../logic/undo";
 import type { AxisWriteValues, MatrixCallbacks } from "./types";
 import type { EisenhowerSettings } from "../settings";
 import type { Messages } from "../i18n";
@@ -45,6 +47,8 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
   private readonly getMessages: () => Messages;
   /** 生存中ビューの登録簿（設定変更時の再描画対象）。プラグインが所有し onunload で解除する。 */
   private readonly registry: Set<EisenhowerBasesView> | null;
+  /** 「直前 1 手」の undo 記録（プラグインが所有・コマンドと共有）。 */
+  private readonly undoManager: UndoManager | null;
   /** UI から委譲される操作（#20: ドラッグ書き戻し）。 */
   private readonly callbacks: MatrixCallbacks;
 
@@ -54,12 +58,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     getSettings: () => EisenhowerSettings,
     getMessages: () => Messages,
     registry?: Set<EisenhowerBasesView>,
+    undoManager?: UndoManager,
   ) {
     super(controller);
     this.viewContainerEl = containerEl;
     this.getSettings = getSettings;
     this.getMessages = getMessages;
     this.registry = registry ?? null;
+    this.undoManager = undoManager ?? null;
     // 設定変更時の再描画対象として自身を登録する（#23 F6・AC1/AC2）。
     this.registry?.add(this);
     this.callbacks = {
@@ -67,6 +73,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       onOpenCard: (entryId, opts) => this.openNote(entryId, opts.newLeaf),
       onHoverCard: (entryId, targetEl, event) =>
         this.previewNote(entryId, targetEl, event),
+      onUndoMove: (expectedEntryId) => this.undoLastMove(expectedEntryId),
     };
     // データ到着前は loading シェルを描画し、onDataUpdated で実データに差し替える。
     render(this.viewContainerEl, {
@@ -141,8 +148,17 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       throw new Error(`target file not found: ${entryId}`);
     }
 
+    // 上書き前の両軸値を捕捉して undo 記録を組む（present/absent を区別・値は verbatim 保持）。
+    // 書き込み成功後に UndoManager へ「直前 1 手」として保存する（undo・最小実装）。
+    let undoRecord: UndoRecord | null = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        undoRecord = {
+          entryId,
+          title: file.basename,
+          keys,
+          previous: capturePreviousAxes(frontmatter, keys),
+        };
         frontmatter[keys.urgent] = axisValues.urgent;
         frontmatter[keys.important] = axisValues.important;
       });
@@ -151,6 +167,17 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       new Notice("Eisenhower Matrix: 書き戻しに失敗しました。元に戻します。");
       throw error;
     }
+    if (undoRecord) this.undoManager?.record(undoRecord);
+  }
+
+  /**
+   * 直前 1 手の移動を元に戻す（undo・最小実装）。ビュー内トースト（`onUndoMove`）と
+   * コマンド（`main.ts`）が共有する {@link runUndo} へ委譲する（`UndoManager` の記録を復元）。
+   * トースト起動時は名指しノートの `expectedEntryId` を渡し、記録が別の移動へ置き換わっていたら戻さない。
+   */
+  private undoLastMove(expectedEntryId?: string): void {
+    if (!this.undoManager) return;
+    void runUndo(this.app, this.undoManager, this.getMessages(), expectedEntryId);
   }
 
   /**

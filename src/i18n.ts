@@ -51,6 +51,20 @@ export interface Messages {
   moveSucceeded(title: string, label: string): string;
   /** 書き戻し失敗（ロールバック）のライブ通知。 */
   moveFailed(title: string): string;
+  /** undo トーストの領域アクセシブル名（`role="group"` の aria-label・undo）。 */
+  undoRegionLabel: string;
+  /** undo トーストの「元に戻す」ボタンラベル（undo）。 */
+  undoMove: string;
+  /** undo トーストの「閉じる」ボタンのアクセシブル名（undo）。 */
+  undoDismiss: string;
+  /** undo コマンド（コマンドパレット）の名称（undo）。 */
+  undoCommandName: string;
+  /** 元に戻せる移動が無いときの Notice（undo）。 */
+  noUndo: string;
+  /** undo 成功の Notice（undo）。 */
+  undone(title: string): string;
+  /** undo 失敗の Notice（undo）。 */
+  undoFailed(title: string): string;
 }
 
 const JA: Messages = {
@@ -83,6 +97,13 @@ const JA: Messages = {
   cancelled: (title) => `「${title}」の移動をキャンセルしました。`,
   moveSucceeded: (title, label) => `「${title}」を ${label} へ移動しました。`,
   moveFailed: (title) => `「${title}」の移動に失敗しました。元に戻しました。`,
+  undoRegionLabel: "移動の取り消し",
+  undoMove: "元に戻す",
+  undoDismiss: "閉じる",
+  undoCommandName: "直前の移動を元に戻す",
+  noUndo: "元に戻せる移動がありません。",
+  undone: (title) => `「${title}」の移動を元に戻しました。`,
+  undoFailed: (title) => `「${title}」の移動を元に戻せませんでした。`,
 };
 
 const EN: Messages = {
@@ -115,6 +136,13 @@ const EN: Messages = {
   cancelled: (title) => `Cancelled moving "${title}".`,
   moveSucceeded: (title, label) => `Moved "${title}" to ${label}.`,
   moveFailed: (title) => `Failed to move "${title}". Reverted.`,
+  undoRegionLabel: "Undo move",
+  undoMove: "Undo",
+  undoDismiss: "Dismiss",
+  undoCommandName: "Undo last move",
+  noUndo: "No move to undo.",
+  undone: (title) => `Reverted the move of "${title}".`,
+  undoFailed: (title) => `Failed to revert the move of "${title}".`,
 };
 
 /** 言語別メッセージ束を返す。 */

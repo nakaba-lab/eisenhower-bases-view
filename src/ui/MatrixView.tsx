@@ -1,4 +1,5 @@
 import { render as preactRender } from "preact";
+import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   DndContext,
@@ -380,14 +381,28 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
           />
         )}
       </section>
-      {/* 掴んでいるカードを象限の overflow:hidden にクリップされず指/カーソルへ追従描画する。 */}
-      <DragOverlay>
-        {activeId ? (
-          <div class="eisenhower-note-card eisenhower-note-card--overlay">
-            {titleOf(activeId)}
-          </div>
-        ) : null}
-      </DragOverlay>
+      {/* 掴んでいるカードを象限の overflow:hidden にクリップされず指/カーソルへ追従描画する DragOverlay。
+          position:fixed だが、Obsidian の .workspace-leaf は `contain: strict`（layout/paint 包含）で
+          **fixed の包含ブロックを新規作成**するため、この階層に置くと原点がビューポートではなくリーフ左上へ
+          ずれ、掴んだカードがカーソルからリーフの画面オフセットぶん一定量ずれる（実機バグ・contain は
+          devtools で確認済み）。contain されない body 直下へ portal して原点をビューポートへ戻す。
+          createPortal は DOM 位置だけを移し、仮想ツリー上は DndContext の子のままなので context は貫通する。
+          portal 先はビューが属する document の body（`ownerDocument.body`）＝メイン window でもポップアウト
+          別ウィンドウでもそのビュー自身の window に描く（`document.body` グローバル固定だと popout 時に
+          overlay がメイン window へ出て消える）。matrixSectionRef はドラッグ中（activeId 非 null）は必ず
+          mount 済みで埋まっており、`?? document.body` は activeId=null の描画前だけ通る（そのとき overlay は
+          空で実害なし）。「ポップアウトでカードを掴めない」件（センサーの別 document 解決）は本 portal とは
+          別問題＝#44 で追跡。 */}
+      {createPortal(
+        <DragOverlay>
+          {activeId ? (
+            <div class="eisenhower-note-card eisenhower-note-card--overlay">
+              {titleOf(activeId)}
+            </div>
+          ) : null}
+        </DragOverlay>,
+        matrixSectionRef.current?.ownerDocument.body ?? document.body,
+      )}
     </DndContext>
   );
 }

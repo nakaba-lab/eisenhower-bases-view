@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { waitFor } from "@testing-library/preact";
 import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../bases/types";
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor, type Language } from "../i18n";
@@ -32,6 +33,12 @@ function readyViewModel(placements: Partial<QuadrantPlacements>): MatrixViewMode
 }
 
 afterEach(() => {
+  // 進行中の KeyboardSensor ドラッグを Escape で確定的にキャンセルし、dnd-kit が document/window に
+  // 張ったリスナーを回収する（dnd-kit は unmount では detach せず handleEnd/handleCancel でのみ detach
+  // するため、掴んだまま終わるテストのリスナーが次テストへ漏れて二重ハンドリングを起こすのを防ぐ・レビュー指摘）。
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { code: "Escape", key: "Escape", bubbles: true, cancelable: true }),
+  );
   document.body.innerHTML = "";
 });
 
@@ -280,5 +287,93 @@ describe("MatrixView unmount", () => {
     expect(container.childElementCount).toBeGreaterThan(0);
     unmount(container);
     expect(container.childElementCount).toBe(0);
+  });
+});
+
+describe("MatrixView — DragOverlay の body への portal（#43 回帰ガード）", () => {
+  // #43: DragOverlay を DndContext 直下（＝Obsidian の .workspace-leaf 内）に置くと、leaf の
+  // contain:strict が position:fixed の包含ブロックになり座標原点がずれる。createPortal で
+  // ビューの ownerDocument.body へ出して原点をビューポートへ戻すのが本 fix。視覚的オフセットそのものは
+  // jsdom に描画エンジンが無く検証不能（実機/frontend-reviewer・E2E ハーネスで担保）だが、DOM 配置
+  //（overlay が render コンテナの外＝body 側へ出る／unmount で撤去される／ビューの ownerDocument の body
+  // に出る＝グローバル document.body 固定ではない）は KeyboardSensor（Space・keydown ベースで PointerEvent
+  // 不要）経由で固定できる。将来 portal ラッパを外す/document.body グローバル固定へ戻す回帰を CI で捕らえる。
+
+  const SPACE = { code: "Space", key: " ", bubbles: true, cancelable: true };
+  const ESCAPE = { code: "Escape", key: "Escape", bubbles: true, cancelable: true };
+
+  // カードを Space で掴む（KeyboardSensor 活性化）。overlay 出現を waitFor でポーリングして card を返す
+  //（固定 sleep のフレーキーを避ける。活性化→setActiveId→overlay 描画は Preact の render flush 後）。
+  async function grabFirstCard(container: HTMLElement): Promise<HTMLElement> {
+    const card = container.querySelector('[role="button"]') as HTMLElement;
+    const otherBody = card.ownerDocument.body;
+    card.focus();
+    card.dispatchEvent(new KeyboardEvent("keydown", SPACE));
+    // overlay の「出現」を待つ。どの document.body に出たか（グローバル or ビューの ownerDocument）は
+    // 各テストの明示アサーションで判定するため、ここでは両方を見る（片方に限定すると回帰時に waitFor が
+    // timeout で落ち "overlay 未描画" と誤診断になり、明示 assert が死にコードになる・レビュー指摘）。
+    await waitFor(() => {
+      const shown =
+        otherBody.querySelector(".eisenhower-note-card--overlay") ??
+        document.body.querySelector(".eisenhower-note-card--overlay");
+      if (!shown) throw new Error("overlay 未描画");
+    });
+    // dnd-kit は KeyboardSensor の document keydown リスナーを setTimeout(0) 遅延で attach する
+    //（overlay 描画は同期経路のため waitFor 解決時点ではまだ未 attach）。ここで 1 マクロタスク flush して
+    // attach を確定させ、後続の Escape cancel が実際にドラッグを終了しリスナーを回収できるようにする
+    //（さもないと Escape は空振りし、リーク回収が実行順依存になる・レビュー指摘）。
+    await new Promise((resolve) => setTimeout(resolve));
+    return card;
+  }
+
+  it("ドラッグ中（Space で掴む）にオーバーレイが render コンテナの外＝body 側へ portal される", async () => {
+    const container = mountContainer();
+    render(container, readyViewModel({ do: [entry("do.md", "掴むカード")] }), {});
+    // 掴む前は overlay 無し
+    expect(document.querySelector(".eisenhower-note-card--overlay")).toBeNull();
+    const card = await grabFirstCard(container);
+    // overlay が出て、かつ container の外（body 側）に portal されている（象限の overflow:hidden を回避）
+    const overlay = document.querySelector(".eisenhower-note-card--overlay");
+    expect(overlay).not.toBeNull();
+    expect(container.contains(overlay)).toBe(false);
+    // ドラッグを cancel してセンサーのリスナーを回収し、unmount で preact の unmount ライフサイクル
+    //（effect cleanup）も走らせる（test2/test3 と対称。DOM を innerHTML="" で剥がすだけの掃除にしない）。
+    card.dispatchEvent(new KeyboardEvent("keydown", ESCAPE));
+    unmount(container);
+  });
+
+  it("unmount するとポータルした body 側オーバーレイ DOM が撤去される（残骸なし＝AC4 の DOM 部分）", async () => {
+    const container = mountContainer();
+    render(container, readyViewModel({ do: [entry("do.md", "掴むカード")] }), {});
+    await grabFirstCard(container);
+    expect(document.querySelector(".eisenhower-note-card--overlay")).not.toBeNull();
+    // ドラッグ中にビューを破棄しても body に overlay の DOM 残骸が残らない（preact の portal cleanup）。
+    // dnd-kit センサーのリスナー回収は unmount では起きないため afterEach の Escape が担う（別レイヤ）。
+    unmount(container);
+    expect(document.querySelector(".eisenhower-note-card--overlay")).toBeNull();
+  });
+
+  it("portal 先はグローバル document.body ではなくビューの ownerDocument.body（別 document で確認）", async () => {
+    // 2dfbb2d の実変更（document.body → matrixSectionRef.current?.ownerDocument.body）の
+    // 「ownerDocument.body 分岐」を固定する。単一 document の jsdom では ownerDocument.body===document.body
+    // で区別できないため、別 document(createHTMLDocument) に container を置き、overlay がグローバル
+    // document.body ではなくその別 document.body に出ることを確認する（document.body 固定へ revert すると
+    // 下の明示 assert が FAIL する）。
+    // 注1: これは portal 先の解決分岐を固定するもので、実 Obsidian の popout ドラッグ（センサーの別 document
+    //       解決＝#44・未対応）そのものは検証しない（grab は otherDoc カードへ native Space を直接 dispatch し
+    //       て #44 を迂回する）。ui.md の #43 portal 項がいう「先取り担保」と同義。
+    // 注2: cross-document の cleanup は jsdom が createHTMLDocument 間で HTMLElement 同一性を共有する挙動に
+    //       依存する（将来 jsdom が realm を分離したら要見直し）。
+    const otherDoc = document.implementation.createHTMLDocument("popout");
+    const container = otherDoc.createElement("div");
+    otherDoc.body.appendChild(container);
+    render(container, readyViewModel({ do: [entry("do.md", "掴むカード")] }), {});
+    const card = await grabFirstCard(container);
+    // ビュー自身の document.body に出て、グローバル document.body には出ない
+    expect(otherDoc.body.querySelector(".eisenhower-note-card--overlay")).not.toBeNull();
+    expect(document.body.querySelector(".eisenhower-note-card--overlay")).toBeNull();
+    // 別 document のドラッグを cancel（afterEach のグローバル Escape は otherDoc に届かないため明示）
+    card.dispatchEvent(new KeyboardEvent("keydown", ESCAPE));
+    unmount(container);
   });
 });

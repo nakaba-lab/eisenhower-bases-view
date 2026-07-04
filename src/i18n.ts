@@ -81,6 +81,8 @@ export interface Messages {
   writeBackFailed: string;
   /** アダプタ層 Notice: ノートを開けなかった。 */
   openFailed: string;
+  /** アダプタ層 Notice: Bases が無効でカスタムビューを登録できなかった（登録失敗フォールバック）。 */
+  basesUnavailable: string;
   /** 設定タブ（#23 F6）の各文言（見出し・名前・説明・ツールチップ）。 */
   settings: SettingsMessages;
   /** Bases Configure view の軸プロパティセレクタ displayName（viewOptions）。 */
@@ -150,6 +152,7 @@ const JA: Messages = {
   axisNotWritable: "書き戻せない軸プロパティ（note. 以外）のため移動できません。",
   writeBackFailed: "書き戻しに失敗しました。元に戻します。",
   openFailed: "ノートを開けませんでした。",
+  basesUnavailable: "Bases が無効なためビューを登録できませんでした。",
   settings: {
     axisHeading: "軸（デフォルト）",
     urgencyName: "緊急度プロパティ",
@@ -206,7 +209,7 @@ const EN: Messages = {
   noUndo: "No move to undo.",
   undone: (title) => `Reverted the move of "${title}".`,
   undoFailed: (title) => `Failed to revert the move of "${title}".`,
-  itemCount: (count) => `${count} items`,
+  itemCount: (count) => `${count} ${count === 1 ? "item" : "items"}`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
   fileNotFoundForMove: "Target file not found; cannot move.",
@@ -214,6 +217,7 @@ const EN: Messages = {
   axisNotWritable: "Axis property is not writable (not note.*); cannot move.",
   writeBackFailed: "Failed to write back. Reverting.",
   openFailed: "Failed to open the note.",
+  basesUnavailable: "Bases is disabled, so the view could not be registered.",
   settings: {
     axisHeading: "Axes (defaults)",
     urgencyName: "Urgency property",

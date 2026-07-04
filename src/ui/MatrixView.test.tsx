@@ -282,3 +282,44 @@ describe("MatrixView unmount", () => {
     expect(container.childElementCount).toBe(0);
   });
 });
+
+describe("MatrixView — DragOverlay の body への portal（#43 回帰ガード）", () => {
+  // #43: DragOverlay を DndContext 直下（＝Obsidian の .workspace-leaf 内）に置くと、leaf の
+  // contain:strict が position:fixed の包含ブロックになり座標原点がずれる。createPortal で body 側へ
+  // 出して原点をビューポートへ戻すのが本 fix。視覚的オフセットそのものは jsdom に描画エンジンが無く
+  // 検証不能（実機/frontend-reviewer 担保）だが、「overlay が render コンテナの外＝body 側に portal
+  // される／unmount で撤去される」という DOM 配置は KeyboardSensor（Space・keydown ベースで PointerEvent
+  // 不要）経由で決定論的に固定できる。将来 portal ラッパを外して #43 を再発させる回帰を CI で捕らえる。
+  async function grabFirstCardWithSpace(container: HTMLElement): Promise<void> {
+    const card = container.querySelector('[role="button"]') as HTMLElement;
+    card.focus();
+    card.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "Space", key: " ", bubbles: true, cancelable: true }),
+    );
+    // KeyboardSensor の活性化は requestAnimationFrame 遅延のため 1 tick flush する
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  it("ドラッグ中（Space で掴む）にオーバーレイが render コンテナの外＝body 側へ portal される", async () => {
+    const container = mountContainer();
+    render(container, readyViewModel({ do: [entry("do.md", "掴むカード")] }), {});
+    // 掴む前は overlay 無し
+    expect(document.querySelector(".eisenhower-note-card--overlay")).toBeNull();
+    await grabFirstCardWithSpace(container);
+    // overlay が出て、かつ container の外（body 側）に portal されている
+    const overlay = document.querySelector(".eisenhower-note-card--overlay");
+    expect(overlay).not.toBeNull();
+    expect(container.contains(overlay)).toBe(false);
+    unmount(container);
+  });
+
+  it("ドラッグ中に unmount するとポータルした body 側オーバーレイも撤去される（AC4 リーク防止）", async () => {
+    const container = mountContainer();
+    render(container, readyViewModel({ do: [entry("do.md", "掴むカード")] }), {});
+    await grabFirstCardWithSpace(container);
+    expect(document.querySelector(".eisenhower-note-card--overlay")).not.toBeNull();
+    // ドラッグ中にビューを破棄しても body に overlay 残骸が残らない
+    unmount(container);
+    expect(document.querySelector(".eisenhower-note-card--overlay")).toBeNull();
+  });
+});

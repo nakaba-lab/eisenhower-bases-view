@@ -44,10 +44,10 @@ export class EisenhowerSettingTab extends PluginSettingTab {
     const accentPlaceholder = HEX6.test(themeAccent) ? themeAccent : PLACEHOLDER_ACCENT;
 
     // ▸ 軸（デフォルト）
-    new Setting(containerEl).setName("軸（デフォルト）").setHeading();
+    new Setting(containerEl).setName(messages.settings.axisHeading).setHeading();
     new Setting(containerEl)
-      .setName("緊急度プロパティ")
-      .setDesc("ビュー未設定時に使う緊急度軸の frontmatter プロパティ名。")
+      .setName(messages.settings.urgencyName)
+      .setDesc(messages.settings.urgencyDesc)
       .addText((text) =>
         text.setValue(settings.defaultUrgencyProperty).onChange(async (value) => {
           settings.defaultUrgencyProperty = value.trim();
@@ -55,8 +55,8 @@ export class EisenhowerSettingTab extends PluginSettingTab {
         }),
       );
     new Setting(containerEl)
-      .setName("重要度プロパティ")
-      .setDesc("ビュー未設定時に使う重要度軸の frontmatter プロパティ名。")
+      .setName(messages.settings.importanceName)
+      .setDesc(messages.settings.importanceDesc)
       .addText((text) =>
         text
           .setValue(settings.defaultImportanceProperty)
@@ -67,10 +67,10 @@ export class EisenhowerSettingTab extends PluginSettingTab {
       );
 
     // ▸ 表示
-    new Setting(containerEl).setName("表示").setHeading();
+    new Setting(containerEl).setName(messages.settings.displayHeading).setHeading();
     new Setting(containerEl)
-      .setName("欠損ノートを未分類に表示")
-      .setDesc("軸プロパティを持たないノートを未分類ゾーンに表示する。")
+      .setName(messages.settings.showUnclassifiedName)
+      .setDesc(messages.settings.showUnclassifiedDesc)
       .addToggle((toggle) =>
         toggle.setValue(settings.showUnclassified).onChange(async (value) => {
           settings.showUnclassified = value;
@@ -79,11 +79,11 @@ export class EisenhowerSettingTab extends PluginSettingTab {
       );
 
     // ▸ 象限ラベル・色
-    new Setting(containerEl).setName("象限ラベル・色").setHeading();
+    new Setting(containerEl).setName(messages.settings.quadrantHeading).setHeading();
     for (const key of QUADRANT_KEYS) {
       new Setting(containerEl)
-        .setName(`${messages.quadrantLabels[key]}（${messages.axisLabels[key]}）`)
-        .setDesc("象限のラベルとアクセント色（色未設定時はテーマのアクセント色を使用）。")
+        .setName(messages.labelWithAxis(messages.quadrantLabels[key], messages.axisLabels[key]))
+        .setDesc(messages.settings.quadrantRowDesc)
         .addText((text) =>
           text
             .setPlaceholder(messages.quadrantLabels[key])
@@ -104,7 +104,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
         .addExtraButton((button) =>
           button
             .setIcon("rotate-ccw")
-            .setTooltip("既定に戻す（ラベル・色）")
+            .setTooltip(messages.settings.resetTooltip)
             .onClick(async () => {
               settings.quadrantLabels[key] = "";
               settings.quadrantColors[key] = "";
@@ -115,10 +115,10 @@ export class EisenhowerSettingTab extends PluginSettingTab {
     }
 
     // ▸ 言語
-    new Setting(containerEl).setName("言語").setHeading();
+    new Setting(containerEl).setName(messages.settings.languageHeading).setHeading();
     new Setting(containerEl)
-      .setName("表示言語")
-      .setDesc("Auto は Obsidian の表示言語に追従します。")
+      .setName(messages.settings.languageName)
+      .setDesc(messages.settings.languageDesc)
       .addDropdown((dropdown) =>
         dropdown
           .addOption("auto", "Auto")

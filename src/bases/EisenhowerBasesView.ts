@@ -113,13 +113,13 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
 
   /**
    * `entryId`（=file.path）から操作対象の `TFile` を解決する（書き戻し #20／オープン #22 で共通）。
-   * 見つからなければ `actionLabel` を差し込んだ `Notice` を出して `null` を返す
+   * 見つからなければ `notFoundMessage`（解決済み言語の Notice 本文）で `Notice` を出して `null` を返す
    *（呼び出し側は移動なら throw でロールバック、オープンなら return と制御を分ける）。
    */
-  private resolveTargetFile(entryId: string, actionLabel: string): TFile | null {
+  private resolveTargetFile(entryId: string, notFoundMessage: string): TFile | null {
     const file = this.app.vault.getAbstractFileByPath(entryId);
     if (file instanceof TFile) return file;
-    new Notice(`Eisenhower Matrix: 対象ファイルが見つからないため${actionLabel}。`);
+    new Notice(`Eisenhower Matrix: ${notFoundMessage}`);
     return null;
   }
 
@@ -135,15 +135,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     axisValues: AxisWriteValues,
   ): Promise<void> {
     // 書込可能な note.* 軸か（両軸）を frontmatter に触れる前に判定して弾く（AC3）。
+    const messages = this.getMessages();
     const keys = resolveWritableAxisKeys(this.config, this.getSettings());
     if (keys === null) {
-      new Notice(
-        "Eisenhower Matrix: 書き戻せない軸プロパティ（note. 以外）のため移動できません。",
-      );
+      new Notice(`Eisenhower Matrix: ${messages.axisNotWritable}`);
       throw new Error("axis property is not writable (formula/file)");
     }
 
-    const file = this.resolveTargetFile(entryId, "移動できません");
+    const file = this.resolveTargetFile(entryId, messages.fileNotFoundForMove);
     if (!file) {
       throw new Error(`target file not found: ${entryId}`);
     }
@@ -164,7 +163,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       });
     } catch (error) {
       console.error("[Eisenhower Matrix] frontmatter 書き戻しに失敗しました", error);
-      new Notice("Eisenhower Matrix: 書き戻しに失敗しました。元に戻します。");
+      new Notice(`Eisenhower Matrix: ${messages.writeBackFailed}`);
       throw error;
     }
     if (undoRecord) this.undoManager?.record(undoRecord);
@@ -188,7 +187,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
    * UI は `obsidian` 型に触れず、`workspace` 操作はここ（アダプタ）に隔離する（AC5）。
    */
   private openNote(entryId: string, newLeaf: boolean): void {
-    const file = this.resolveTargetFile(entryId, "開けません");
+    const file = this.resolveTargetFile(entryId, this.getMessages().fileNotFoundForOpen);
     if (!file) return;
     // openFile は Promise を返す。resolveTargetFile 後にファイルが消える等で reject しうるため、
     // 握りつぶさず catch して通知する（未処理 rejection と無言失敗を防ぐ＝書き戻し経路と同じ扱い・レビュー指摘）。
@@ -197,7 +196,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       .openFile(file)
       .catch((error) => {
         console.error("[Eisenhower Matrix] ノートのオープンに失敗しました", error);
-        new Notice("Eisenhower Matrix: ノートを開けませんでした。");
+        new Notice(`Eisenhower Matrix: ${this.getMessages().openFailed}`);
       });
   }
 

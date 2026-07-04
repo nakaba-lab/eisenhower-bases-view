@@ -33,9 +33,21 @@ export interface QuadrantCellProps {
   onOpenCard?: (entryId: string, opts: { newLeaf: boolean }) => void;
   /** カードのホバーでプレビュー（#22 F5）。各 NoteCard へ委譲する。 */
   onHoverCard?: (entryId: string, targetEl: HTMLElement, event: MouseEvent) => void;
+  /**
+   * 領域（section）のアクセシブル名（例: "Do (Important × Urgent)"）。#23 F6 の i18n で
+   * `messages.labelWithAxis` により言語別の括弧で組んで渡す。省略時は現行の全角括弧結合にフォールバック。
+   */
+  regionLabel?: string;
+  /**
+   * 件数バッジのアクセシブル名を件数から組む（例: "5 items" / "5 件"）。#23 F6 の i18n で
+   * `messages.itemCount` を渡す。省略時は現行の日本語「件」にフォールバック。
+   */
+  itemCountLabel?: (count: number) => string;
 }
 
 const DEFAULT_EMPTY_TEXT = "なし";
+/** 後方互換フォールバック（presentation 未配線時）: 現行の日本語カウンタと全角括弧結合。 */
+const DEFAULT_ITEM_COUNT = (count: number) => `${count} 件`;
 
 export function QuadrantCell({
   quadrant,
@@ -47,6 +59,8 @@ export function QuadrantCell({
   accentColor,
   onOpenCard,
   onHoverCard,
+  regionLabel,
+  itemCountLabel = DEFAULT_ITEM_COUNT,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
   const isDropDisabled = variant === "unclassified";
@@ -68,12 +82,15 @@ export function QuadrantCell({
       ref={setNodeRef}
       class={className}
       style={accentStyle}
-      aria-label={`${label}（${axisLabel}）`}
+      aria-label={regionLabel ?? `${label}（${axisLabel}）`}
     >
       <header class="eisenhower-quadrant__header">
         <h3 class="eisenhower-quadrant__title">{label}</h3>
         <span class="eisenhower-quadrant__axis">{axisLabel}</span>
-        <span class="eisenhower-quadrant__count" aria-label={`${entries.length} 件`}>
+        <span
+          class="eisenhower-quadrant__count"
+          aria-label={itemCountLabel(entries.length)}
+        >
           {entries.length}
         </span>
       </header>

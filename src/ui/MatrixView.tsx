@@ -298,6 +298,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               quadrant={key}
               label={quadrantLabels[key]}
               axisLabel={messages.axisLabels[key]}
+              regionLabel={messages.labelWithAxis(quadrantLabels[key], messages.axisLabels[key])}
+              itemCountLabel={messages.itemCount}
               accentColor={quadrantColors?.[key]}
               entries={placements[key]}
               emptyText={messages.emptyQuadrant}
@@ -314,6 +316,11 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             quadrant="unclassified"
             label={messages.unclassifiedLabel}
             axisLabel={messages.unclassifiedAxisLabel}
+            regionLabel={messages.labelWithAxis(
+              messages.unclassifiedLabel,
+              messages.unclassifiedAxisLabel,
+            )}
+            itemCountLabel={messages.itemCount}
             entries={placements.unclassified}
             emptyText={messages.emptyQuadrant}
             variant="unclassified"

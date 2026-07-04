@@ -59,7 +59,8 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
             ),
           // 軸プロパティ選択 UI（#21 F4）: note.* のみ選択可の property セレクタを
           // Configure view へ宣言する（filter は書き戻し可能な note.* 判定・AC1）。
-          options: () => buildAxisViewOptions(),
+          // displayName は評価時点の解決言語に追従する（#23 F6 の i18n・AC4）。
+          options: () => buildAxisViewOptions(this.resolveMessages()),
         }),
       () => {
         console.warn(

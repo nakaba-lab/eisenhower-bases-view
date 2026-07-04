@@ -65,6 +65,44 @@ export interface Messages {
   undone(title: string): string;
   /** undo 失敗の Notice（undo）。 */
   undoFailed(title: string): string;
+  /** 象限の件数バッジのアクセシブル名（例: "5 items" / "5 件"）。 */
+  itemCount(count: number): string;
+  /** 「ラベル（軸ラベル）」の言語別ジョイナ（英=半角括弧・日=全角括弧）。象限領域名・設定行名で共有。 */
+  labelWithAxis(label: string, axisLabel: string): string;
+  /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
+  cardLockedLabel(title: string): string;
+  /** アダプタ層 Notice: 対象ファイルが見つからず移動できない。 */
+  fileNotFoundForMove: string;
+  /** アダプタ層 Notice: 対象ファイルが見つからず開けない。 */
+  fileNotFoundForOpen: string;
+  /** アダプタ層 Notice: 書き戻せない軸（note. 以外）のため移動できない。 */
+  axisNotWritable: string;
+  /** アダプタ層 Notice: frontmatter 書き戻しに失敗（ロールバック）。 */
+  writeBackFailed: string;
+  /** アダプタ層 Notice: ノートを開けなかった。 */
+  openFailed: string;
+  /** 設定タブ（#23 F6）の各文言（見出し・名前・説明・ツールチップ）。 */
+  settings: SettingsMessages;
+  /** Bases Configure view の軸プロパティセレクタ displayName（viewOptions）。 */
+  axisOption: { urgency: string; important: string };
+}
+
+/** 設定タブの i18n 文言（見出し・設定名・説明・ツールチップ）。 */
+export interface SettingsMessages {
+  axisHeading: string;
+  urgencyName: string;
+  urgencyDesc: string;
+  importanceName: string;
+  importanceDesc: string;
+  displayHeading: string;
+  showUnclassifiedName: string;
+  showUnclassifiedDesc: string;
+  quadrantHeading: string;
+  quadrantRowDesc: string;
+  resetTooltip: string;
+  languageHeading: string;
+  languageName: string;
+  languageDesc: string;
 }
 
 const JA: Messages = {
@@ -104,6 +142,31 @@ const JA: Messages = {
   noUndo: "元に戻せる移動がありません。",
   undone: (title) => `「${title}」の移動を元に戻しました。`,
   undoFailed: (title) => `「${title}」の移動を元に戻せませんでした。`,
+  itemCount: (count) => `${count} 件`,
+  labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
+  cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
+  fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
+  fileNotFoundForOpen: "対象ファイルが見つからないため開けません。",
+  axisNotWritable: "書き戻せない軸プロパティ（note. 以外）のため移動できません。",
+  writeBackFailed: "書き戻しに失敗しました。元に戻します。",
+  openFailed: "ノートを開けませんでした。",
+  settings: {
+    axisHeading: "軸（デフォルト）",
+    urgencyName: "緊急度プロパティ",
+    urgencyDesc: "ビュー未設定時に使う緊急度軸の frontmatter プロパティ名。",
+    importanceName: "重要度プロパティ",
+    importanceDesc: "ビュー未設定時に使う重要度軸の frontmatter プロパティ名。",
+    displayHeading: "表示",
+    showUnclassifiedName: "欠損ノートを未分類に表示",
+    showUnclassifiedDesc: "軸プロパティを持たないノートを未分類ゾーンに表示する。",
+    quadrantHeading: "象限ラベル・色",
+    quadrantRowDesc: "象限のラベルとアクセント色（色未設定時はテーマのアクセント色を使用）。",
+    resetTooltip: "既定に戻す（ラベル・色）",
+    languageHeading: "言語",
+    languageName: "表示言語",
+    languageDesc: "Auto は Obsidian の表示言語に追従します。",
+  },
+  axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
 };
 
 const EN: Messages = {
@@ -143,6 +206,32 @@ const EN: Messages = {
   noUndo: "No move to undo.",
   undone: (title) => `Reverted the move of "${title}".`,
   undoFailed: (title) => `Failed to revert the move of "${title}".`,
+  itemCount: (count) => `${count} items`,
+  labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
+  cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
+  fileNotFoundForMove: "Target file not found; cannot move.",
+  fileNotFoundForOpen: "Target file not found; cannot open.",
+  axisNotWritable: "Axis property is not writable (not note.*); cannot move.",
+  writeBackFailed: "Failed to write back. Reverting.",
+  openFailed: "Failed to open the note.",
+  settings: {
+    axisHeading: "Axes (defaults)",
+    urgencyName: "Urgency property",
+    urgencyDesc: "Frontmatter property for the urgency axis when the view has none set.",
+    importanceName: "Importance property",
+    importanceDesc: "Frontmatter property for the importance axis when the view has none set.",
+    displayHeading: "Display",
+    showUnclassifiedName: "Show notes with missing axes as unclassified",
+    showUnclassifiedDesc: "Show notes without axis properties in the unclassified zone.",
+    quadrantHeading: "Quadrant labels & colors",
+    quadrantRowDesc:
+      "Label and accent color for the quadrant (uses the theme accent color when unset).",
+    resetTooltip: "Reset to defaults (label & color)",
+    languageHeading: "Language",
+    languageName: "Display language",
+    languageDesc: "Auto follows Obsidian's display language.",
+  },
+  axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
 };
 
 /** 言語別メッセージ束を返す。 */

@@ -219,6 +219,16 @@ describe("toViewModel — 非 boolean 軸カードのロック（ドラッグ不
     expect(card?.locked).toBe(true);
   });
 
+  it("toViewModel — important 軸だけが非 boolean（数値）でも locked=true（対称・|| 第2オペランド）", () => {
+    // given: urgent=false(boolean)・important=数値 → 未分類だが important 側が破壊対象
+    const entries = [mockEntry("imp.md", "imp", FALSE, new NumberValue(3))];
+    // when
+    const { placements } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then
+    const card = placements.unclassified.find((e) => e.id === "imp.md");
+    expect(card?.locked).toBe(true);
+  });
+
   it("toViewModel — 軸 absent の md ノートは locked を付けない（分類として書けるのでドラッグ可）", () => {
     // given: 両軸 absent（欠損）。ドロップは両軸を新規に true/false 書き込みするだけで破壊しない
     const entries = [mockEntry("x.md", "x", ABSENT, ABSENT)];

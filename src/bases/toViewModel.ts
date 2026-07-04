@@ -34,7 +34,9 @@ export function emptyPlacements(): QuadrantPlacements {
  * これにより `.base` 自己エントリが未分類カードとして現れる混乱を防ぐ。
  */
 function isPlaceableNote(entry: BasesEntry): boolean {
-  return entry.file?.extension === "md";
+  // entry?.file?.extension: Bases 境界から予期しない要素（null/undefined・file 欠落）が混じっても
+  // throw せず「配置対象外」として弾く（`isWritableAxisProperty` と同じ churn 耐性の境界防御）。
+  return entry?.file?.extension === "md";
 }
 
 export function toViewModel(

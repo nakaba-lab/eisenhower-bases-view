@@ -124,6 +124,8 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
+> **Obsidian プラグインのタグは例外（`v` 接頭辞なし）**: Obsidian コミュニティプラグインは、GitHub release のタグ名が `manifest.json` の `version` と**完全一致**する必要がある（例: `0.1.0`。`v0.1.0` は不可）。本プロジェクト（`kind: desktop`＝Obsidian プラグイン）のリリースタグは**生のバージョン番号**（`git tag 1.0.0 && git push origin 1.0.0`）で打ち、`manifest.json`・`versions.json` と一致させる（`/release-tasks` のタグ付けもこれに従う）。上表の `v*` 例は汎用テンプレの既定で、Obsidian ではこの例外を優先する（同梱 `release-deploy.yml` は `v*` と生バージョンの両方で起動するよう設定済み）。
+
 > **タグ→デプロイ接続**: タグ push（`v*`）を起点に、同梱 CI のデプロイ雛形（`.github/workflows/release-deploy.yml`／`.gitlab/ci/deploy.yml`）が起動する。デプロイ先固有の手順への接続はプロジェクトの CI に委ねる（`/project-setup` が `commands.deploy` の確定時に有効化する。デプロイしないプロジェクトでは削除してよい）。
 >
 > **リリース工程のタスク敷設は `/release-tasks`**: リリース判定→総合テスト→受入チェック→リリースノート確定（`/release-notes`）→release ブランチ→`main` マージ＋タグ→`develop` への戻しマージ→リリース後スモーク→マニュアル・ドキュメント最終確認、の一連の工程は `/release-tasks` がタスクとして敷設・進行する（本ファイルはブランチ・タグ・マージの規則のみを定め、工程の手順は重複定義しない）。

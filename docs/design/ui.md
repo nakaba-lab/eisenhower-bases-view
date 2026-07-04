@@ -3,7 +3,7 @@ title: UI 設計
 area: ui
 status: active
 relatedIssues: [18, 19, 20, 22, 23, 33, 34]
-updated: 2026-07-02
+updated: 2026-07-03
 kind: ui
 ---
 
@@ -19,7 +19,7 @@ kind: ui
 >
 > **#20（F3）の確定事項（2026-06-30・人間承認済み）**: ① レイアウトは #19 から据え置き（2×2 グリッド＋下部フル幅の未分類行）。F3 はドラッグ/ドロップのフィードバックとフォーカス可視を上乗せするだけ（新規ワイヤーフレーム比較なし）。② 楽観移動＋ロールバックは**純レデューサ抽出**＝`applyPendingMoves`（placements に保留中の移動を重ねる純関数）と `reconcilePendingMoves`（到着 props と突合して確定済みを落とす純関数）を `src/ui` の単体テスト対象として切り出す。dnd-kit 配線とドラッグ実操作は手動/`frontend-reviewer` で担保（DoD「軸値算出=単体、DnD往復=手動/結合」）。③ **4 象限のみドロップ可。未分類ゾーンはドロップ先にしない（AC4）。** ④ **未分類ゾーンのカード（両軸 absent）も象限へドラッグ可**＝ドロップで両軸を明示 `true/false` 書き込みして分類する（書き戻しは「両軸明示・`delete` しない」方針と整合）。⑤ AC2「ちらつき抑制」＝楽観移動で書込前から目的象限に見せ、`onDataUpdated` 再描画は `file.path` keyed 差分で吸収。「スクロール位置保持」＝コンテナ DOM を破棄せず Preact 差分更新する（`unmount` はビュー破棄時のみ）。⑥ 書き込み失敗は保留移動を取り消して再描画でロールバックし、`Notice` でエラー表示（AC3）。
 >
-> **#19（F2）の確定事項（2026-06-30・人間承認済み）**: ① レイアウトは「2×2 グリッド＋下部フル幅の未分類行」（下記ワイヤーフレーム）。② ViewModel は**事前グルーピング**＝アダプタ（`toViewModel`）が象限ごとに entries を振り分け、UI は dumb に描画する。③ `.base` 自身・軸プロパティ無しノートは**未分類ゾーンに表示**（両軸 absent → 自然に未分類へ落ちるため特別なフィルタは持たない）。④ absent 判定は `getValue(...) instanceof NullValue`（型同一性）で行い、`false` と区別する（`isTruthy()` だけでは区別不可＝最低象限 Delete への誤分類バグになる。#33 で `toString()===null` から是正＝スパイク #16 の誤観測。詳細は `bases.md`）。⑤ 各象限の `aria-label` は「象限名（軸ラベル）」（件数は可視ヘッダで読み上げ）、空状態「なし」は AA を満たす `--text-muted`。
+> **#19（F2）の確定事項（2026-06-30・人間承認済み）**: ① レイアウトは「2×2 グリッド＋下部フル幅の未分類行」（下記ワイヤーフレーム）。② ViewModel は**事前グルーピング**＝アダプタ（`toViewModel`）が象限ごとに entries を振り分け、UI は dumb に描画する。③ 軸プロパティ無しノートは**未分類ゾーンに表示**（両軸 absent → 自然に未分類へ落ちる）。〔後日改定: `.base` 自身・非 md は `isPlaceableNote`（`file.extension === "md"`）で配置対象から除外＝未分類にも出さない。現行は下記「主要な設計判断」を正とする〕④ absent 判定は `getValue(...) instanceof NullValue`（型同一性）で行い、`false` と区別する（`isTruthy()` だけでは区別不可＝最低象限 Delete への誤分類バグになる。#33 で `toString()===null` から是正＝スパイク #16 の誤観測。詳細は `bases.md`）。⑤ 各象限の `aria-label` は「象限名（軸ラベル）」（件数は可視ヘッダで読み上げ）、空状態「なし」は AA を満たす `--text-muted`。
 
 ## 責務（このユニットは何をするか）
 
@@ -132,7 +132,7 @@ flowchart LR
 
 - **軸 propertyId 解決**: ビュー options（`config.getAsPropertyId(key)`）を主とし、未設定時は設定タブのデフォルト（`settings.defaultUrgencyProperty` / `defaultImportanceProperty`）にフォールバック（要件定義書 F4）。
 - **absent 判定**: `entry.getValue(propertyId) instanceof NullValue` で absent（NullValue singleton）を検出し `undefined` に正規化（#33 で `toString()===null` から是正＝実機の `NullValue.toString()` は文字列 "null" を返すため。詳細は `bases.md`）。**値が `BooleanValue` の軸だけ** `isTruthy()` で boolean 化し、非 boolean の `note.*`（数値 `NumberValue`／文字列 `StringValue` 等）は `undefined`（未分類）へ退避する（v1 boolean 軸限定の正の許可リスト `instanceof BooleanValue`・#34。詳細は `bases.md`）。片方でも absent/非 boolean なら `classifyQuadrant` が `unclassified` を返す。
-- **`.base` 自身・軸無しノート**: 両軸 absent → `unclassified` に落ちるため特別扱い不要（カードとして未分類ゾーンに表示。AC6）。
+- **非 md（`.base` 自身・`.canvas`・画像）**: `toViewModel` の入口 `isPlaceableNote`（`file.extension === "md"`）で配置対象から除外する（象限にも未分類にも出さない。md 0 件は `state: "empty"`）。軸無し（両軸 absent）の md ノートは `unclassified` に落ちて未分類ゾーンに表示（AC6）。詳細は `bases.md`。
 
 ### ドラッグ書き戻し（楽観更新＋ロールバック・#20 F3）
 
@@ -269,7 +269,7 @@ Obsidian 実機ロードを前提とするビュー本体は Storybook での再
 
 - **ViewModel 事前グルーピング（#19 設計オプション比較で選択）**: `toViewModel` が象限ごとに entries を振り分け件数まで組む（`placements`）。配置・absent 区別・件数・空状態を Bases 非依存の純関数で単体テストでき、UI は描画に専念する。却下「フラット＋`quadrant` フィールド」: 型変更は最小だがグルーピング/件数判定が UI に漏れテストしにくい。
 - **未分類ゾーンを独立領域にする**: absent（未定義）と `false`（最低象限 Delete）を視覚的に区別するため。欠損はドロップ不可（書き戻しは両軸明示が前提）。レイアウトは 2×2 グリッドの下にフル幅で常時表示（#19 で「下部フル幅 vs 折りたたみ」を比較し、常時表示の単純さ・縦積みのレスポンシブ性で前者を採択）。
-- **`.base` 自身・軸無しノートは未分類に表示（除外しない）**: AC6「未分類（誤配置しない）」の literal な解釈。両軸 absent → `classifyQuadrant` が `unclassified` を返すため特別なフィルタを持たず、誤分類経路を増やさない（#19 で確認）。
+- **非 md（`.base` 自身・`.canvas`・画像）は配置対象から除外＝`file.extension === "md"` の正の許可リスト**: v1 は boolean **frontmatter** 軸のみ扱うため、`toViewModel` の入口 `isPlaceableNote` で md ノートだけを配置対象とし、非 md は象限にも未分類にも出さない（md 0 件は `state: "empty"`）。当初は「両軸 absent → 未分類に落ちるので特別なフィルタは持たない」としていたが、`.base` 自身がドロップ不可の未分類カードとして現れる混乱を避けるため明示除外に改めた（却下案＝`.base` だけ名指し除外／除外せず未分類に残す、は `bases.md`「主要な設計判断」）。軸無し（両軸 absent）の **md ノート**は従来どおり未分類ゾーンに表示（AC6）。
 - **非 boolean の `note.*` 軸を 4 象限へ自動配置しない（#34）**: 軸が数値/文字列 `note.*`（例 `note.priority: 3`）を指しても 4 象限に並べず未分類ゾーンに置く。これで**無操作での自動配置＝ドラッグ露出**（4 象限に並んだカードがそのまま掴めてしまう）を断ち、非 boolean 値がドロップで `true/false` 上書きされ破壊される最も起きやすい経路を塞ぐ。**ただし未分類ゾーンのカードは既存挙動どおり `useDraggable`** で、ユーザーが手動で 4 象限へドラッグ→ドロップすると `resolveWritableAxisKeys` は `note.*` を書込可能と判定して通過し（**boolean 型は検査しない**）、`writeBackAxes` が非 boolean 値を上書きしうる。この**手動ドラッグ書き戻しの無効化（読み書きの boolean 対称化・ドラッグ無効化 UX）は F4/#21 の範囲**として残す（読み取り側だけを boolean に狭めた非対称が残る既知の残存点＝レビュー指摘）。UI レイヤの差分は無く、`readAxis.normalizeAxis` を `instanceof BooleanValue` の正の許可リストに狭めて実現（v1 boolean 軸限定・詳細は `bases.md`）。数値/タグ軸の型別解釈は v2。
 - **未分類ゾーンの非表示設定（`showUnclassified`）を配線する（レビュー指摘で確定）**: 設定値（`settings.ts`・既定 true）を `toViewModel` が `MatrixViewModel.showUnclassified` に載せ、`MatrixView` が `false` のとき未分類ゾーンを描画しない。当初は「切替 UI（設定タブ F6/#23）が無いうちは死に設定でよい」としていたが、`data.json` 直編集でも設定できる永続フィールドであり、定義・文書化された契約が黙って無視される（死に設定）状態を解消する。切替 UI 自体は F6（#23）で追加済み。
 - **楽観移動の競合を世代＋in-flight で堅牢化（レビュー指摘で確定）**: 当初の「失敗時に entryId で無条件ロールバック」「reconcile は値一致のみで確定」は、同一カードを in-flight 中に連続ドラッグした際に (a) 古い書き込みの失敗が新しい移動を巻き戻す、(b) 古いサーバスナップショットの coincidental match で最新保留を早期に落とす、という競合を持っていた。書き込みに世代を付け最新世代の失敗のみロールバックし、in-flight 中の entry は reconcile で確定対象外にして解消した。dnd-kit 実操作は引き続き手動/`frontend-reviewer`、状態遷移（in-flight 込み reconcile）は純レデューサの単体テストで守る。

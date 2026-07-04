@@ -5,6 +5,8 @@ import { DEFAULT_SETTINGS } from "../settings";
 import {
   IMPORTANT_OPTION_KEY,
   URGENT_OPTION_KEY,
+  hasUnsupportedAxisValue,
+  isUnsupportedAxisValue,
   readAxisValues,
   resolveAxisPropertyIds,
   resolveWritableAxisKeys,
@@ -179,6 +181,68 @@ describe("readAxisValues", () => {
     // then: どちらも undefined（未分類）。false（Delete）に誤分類しない
     expect(axis.urgent).toBeUndefined();
     expect(axis.important).toBeUndefined();
+  });
+});
+
+describe("isUnsupportedAxisValue / hasUnsupportedAxisValue（非 boolean 上書き破壊の検出・ドラッグ不可ガード）", () => {
+  const ids: AxisPropertyIds = {
+    urgent: "note.urgent" as BasesPropertyId,
+    important: "note.important" as BasesPropertyId,
+  };
+
+  it("isUnsupportedAxisValue — present な非 boolean（数値/文字列）は true（上書きで破壊される）", () => {
+    expect(isUnsupportedAxisValue(new NumberValue(3))).toBe(true);
+    expect(isUnsupportedAxisValue(new StringValue("high"))).toBe(true);
+    // falsy な非 boolean（0/空文字）も型で判定する（true）
+    expect(isUnsupportedAxisValue(new NumberValue(0))).toBe(true);
+    expect(isUnsupportedAxisValue(new StringValue(""))).toBe(true);
+  });
+
+  it("isUnsupportedAxisValue — boolean・absent・null は false（上書きで破壊しない）", () => {
+    expect(isUnsupportedAxisValue(TRUE)).toBe(false);
+    expect(isUnsupportedAxisValue(FALSE)).toBe(false);
+    expect(isUnsupportedAxisValue(ABSENT)).toBe(false); // NullValue=欠損は分類として書ける
+    expect(isUnsupportedAxisValue(null)).toBe(false);
+  });
+
+  it("hasUnsupportedAxisValue — どちらかの note.* 軸が非 boolean 値を持てば true", () => {
+    // given: 緊急軸が数値、重要軸は boolean
+    const entry = mockEntry({
+      "note.urgent": new NumberValue(3),
+      "note.important": TRUE,
+    });
+    // when / then: ドロップで両軸 true/false 上書き→数値破壊のため、ドラッグ不可にすべき
+    expect(hasUnsupportedAxisValue(entry, ids)).toBe(true);
+  });
+
+  it("hasUnsupportedAxisValue — 両軸 boolean / 両軸 absent は false（通常のドラッグ対象）", () => {
+    expect(
+      hasUnsupportedAxisValue(
+        mockEntry({ "note.urgent": TRUE, "note.important": FALSE }),
+        ids,
+      ),
+    ).toBe(false);
+    // 両軸 absent（＝分類として書ける・破壊しない）は false
+    expect(
+      hasUnsupportedAxisValue(
+        mockEntry({ "note.urgent": ABSENT, "note.important": ABSENT }),
+        ids,
+      ),
+    ).toBe(false);
+  });
+
+  it("hasUnsupportedAxisValue — 非 note.*（formula/file）軸の非 boolean 値は対象外（書き込み自体が弾かれ破壊しない）", () => {
+    // given: formula.* 軸に文字列。書き戻しは resolveWritableAxisKeys が null で弾くため破壊経路が無い
+    const mixedIds: AxisPropertyIds = {
+      urgent: "formula.score" as BasesPropertyId,
+      important: "note.important" as BasesPropertyId,
+    };
+    const entry = mockEntry({
+      "formula.score": new StringValue("x"),
+      "note.important": TRUE,
+    });
+    // when / then: formula 軸は書込不可なのでロック対象にしない（ドラッグ→Notice で弾かれる既存経路に委ねる）
+    expect(hasUnsupportedAxisValue(entry, mixedIds)).toBe(false);
   });
 });
 

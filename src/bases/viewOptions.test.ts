@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BasesPropertyId } from "obsidian";
 import { buildAxisViewOptions } from "./viewOptions";
+import { messagesFor } from "../i18n";
 import {
   IMPORTANT_OPTION_KEY,
   URGENT_OPTION_KEY,
@@ -47,7 +48,7 @@ describe("isWritableAxisProperty", () => {
 describe("buildAxisViewOptions（AC1: note.* のみ選択肢）", () => {
   it("buildAxisViewOptions — 緊急度・重要度の 2 軸を property セレクタで返す", () => {
     // when
-    const options = buildAxisViewOptions();
+    const options = buildAxisViewOptions(messagesFor("ja"));
     // then: 2 つの property セレクタ、キーは resolveAxisPropertyIds が読むキーと一致
     expect(options).toHaveLength(2);
     const [urgent, important] = options;
@@ -59,9 +60,20 @@ describe("buildAxisViewOptions（AC1: note.* のみ選択肢）", () => {
     expect(important.displayName.length).toBeGreaterThan(0);
   });
 
+  it("buildAxisViewOptions — displayName は渡した言語メッセージに追従する（#23 F6 i18n）", () => {
+    // given / when: 英語・日本語それぞれで組む
+    const [enUrgent, enImportant] = buildAxisViewOptions(messagesFor("en"));
+    const [jaUrgent, jaImportant] = buildAxisViewOptions(messagesFor("ja"));
+    // then: displayName が言語別（en は英語・ja は日本語）で、messages.axisOption を反映する
+    expect(enUrgent.displayName).toBe("Urgency axis property");
+    expect(enImportant.displayName).toBe("Importance axis property");
+    expect(jaUrgent.displayName).toBe("緊急度軸プロパティ");
+    expect(jaImportant.displayName).toBe("重要度軸プロパティ");
+  });
+
   it("buildAxisViewOptions — 各軸の filter は note.* のみ許可し formula/file を除外（AC1）", () => {
     // given
-    const options = buildAxisViewOptions();
+    const options = buildAxisViewOptions(messagesFor("ja"));
     // when / then: filter が両軸とも書込可能 note.* 述語で弾く
     for (const option of options) {
       expect(option.filter).toBeDefined();

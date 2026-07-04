@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BasesEntry, BasesPropertyId, Value } from "obsidian";
+import type { BasesEntry, BasesPropertyId, TFile, Value } from "obsidian";
 import { BooleanValue, NullValue, NumberValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor } from "../i18n";
@@ -22,6 +22,19 @@ const ABSENT: Value = NullValue.value;
 const TRUE: Value = new BooleanValue(true);
 const FALSE: Value = new BooleanValue(false);
 
+/**
+ * 実機 `TFile` を模した file スタブ。`extension` を path 末尾から導出し、md ノートと
+ * 非 md（`.base` 自身・`.canvas`・画像）を区別できるようにする（md 限定フィルタの検証用）。
+ */
+function fileStub(
+  path: string,
+  basename?: string,
+): Pick<TFile, "path" | "basename" | "extension"> {
+  const dot = path.lastIndexOf(".");
+  const extension = dot >= 0 ? path.slice(dot + 1) : "";
+  return { path, basename: basename ?? path.replace(/\.[^.]+$/, ""), extension };
+}
+
 /** 両軸の値を指定した最小モック entry（軸プロパティは note.urgent / note.important）。 */
 function mockEntry(
   path: string,
@@ -34,7 +47,7 @@ function mockEntry(
     "note.important": important,
   };
   return {
-    file: { path, basename },
+    file: fileStub(path, basename),
     getValue: (id: BasesPropertyId) => values[id] ?? null,
   } as unknown as BasesEntry;
 }
@@ -118,13 +131,13 @@ describe("toViewModel — absent / 未分類（AC5-6）", () => {
     ).toEqual([]);
   });
 
-  it("toViewModel — 両軸 absent（軸プロパティを持たないノート・.base 自身）は未分類", () => {
-    // given: getValue が両軸 null（プロパティ無し）
-    const entries = [mockEntry("Config.base", "Config", null, null)];
+  it("toViewModel — 軸プロパティを持たない md ノート（両軸 absent）は未分類", () => {
+    // given: getValue が両軸 null（プロパティ無し）の Markdown ノート
+    const entries = [mockEntry("Inbox/no-axes.md", "no-axes", null, null)];
     // when
     const { placements } = toViewModel(entries, null, DEFAULT_SETTINGS);
     // then
-    expect(placements.unclassified.map((e) => e.id)).toEqual(["Config.base"]);
+    expect(placements.unclassified.map((e) => e.id)).toEqual(["Inbox/no-axes.md"]);
     // 4 象限のいずれにも誤配置されない
     expect(
       placements.do.concat(placements.schedule, placements.delegate, placements.delete),
@@ -140,6 +153,113 @@ describe("toViewModel — absent / 未分類（AC5-6）", () => {
       urgent: true,
       important: undefined,
     });
+  });
+});
+
+describe("toViewModel — 非 Markdown（.base 自身・.canvas・画像等）の除外（要件 §9）", () => {
+  it("toViewModel — .base 自己エントリはマトリクスに出さない（象限にも未分類にも入れない）", () => {
+    // given: フィルタ無し時に Base 自身の .base ファイルが entries に混ざる
+    const entries = [
+      mockEntry("Tasks.base", "Tasks", null, null),
+      mockEntry("todo.md", "todo", TRUE, TRUE),
+    ];
+    // when
+    const { placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: .base は entries・全 placements から除外され、md ノートだけが残る
+    expect(mapped.map((e) => e.id)).toEqual(["todo.md"]);
+    expect(placements.unclassified).toEqual([]);
+    expect(placements.do.map((e) => e.id)).toEqual(["todo.md"]);
+  });
+
+  it("toViewModel — .canvas・画像等の非 md ノートも配置対象外（v1 は md frontmatter 軸のみ）", () => {
+    // given
+    const entries = [
+      mockEntry("board.canvas", "board", null, null),
+      mockEntry("photo.png", "photo", null, null),
+    ];
+    // when
+    const { placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: いずれもカード化されない
+    expect(mapped).toEqual([]);
+    expect(placements.unclassified).toEqual([]);
+  });
+
+  it("toViewModel — md ノートが 1 件も無い（.base のみ）Base は state=empty", () => {
+    // given
+    const entries = [mockEntry("Tasks.base", "Tasks", null, null)];
+    // when
+    const viewModel = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: 配置対象ゼロは空状態（empty プレースホルダを描画させる）
+    expect(viewModel.state).toBe("empty");
+    expect(viewModel.entries).toEqual([]);
+  });
+
+  it("toViewModel — 配列に null/undefined 要素が混じっても throw せず弾く（Bases 境界の防御）", () => {
+    // given: 予期しない null/undefined 要素＋正常な md ノート
+    const entries = [
+      null as unknown as ReturnType<typeof mockEntry>,
+      mockEntry("a.md", "a", TRUE, TRUE),
+      undefined as unknown as ReturnType<typeof mockEntry>,
+    ];
+    // when / then: null/undefined は isPlaceableNote が弾き、正常ノートだけ配置される（クラッシュしない）
+    const { placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    expect(mapped.map((e) => e.id)).toEqual(["a.md"]);
+    expect(placements.do.map((e) => e.id)).toEqual(["a.md"]);
+  });
+});
+
+describe("toViewModel — 非 boolean 軸カードのロック（ドラッグ不可フラグ・データ破壊防止）", () => {
+  it("toViewModel — 非 boolean（数値）軸を持つ未分類カードは locked=true", () => {
+    // given: 緊急軸が数値、重要軸は boolean → 未分類（#34）だが、ドロップ上書きで数値破壊しうる
+    const entries = [mockEntry("num.md", "num", new NumberValue(3), TRUE)];
+    // when
+    const { placements } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: 未分類に入り、locked=true（UI がドラッグ不可＋視覚マークにする）
+    const card = placements.unclassified.find((e) => e.id === "num.md");
+    expect(card?.locked).toBe(true);
+  });
+
+  it("toViewModel — 軸 absent の md ノートは locked を付けない（分類として書けるのでドラッグ可）", () => {
+    // given: 両軸 absent（欠損）。ドロップは両軸を新規に true/false 書き込みするだけで破壊しない
+    const entries = [mockEntry("x.md", "x", ABSENT, ABSENT)];
+    // when
+    const { placements } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: 未分類だが locked は付かない（ドラッグして分類できる）
+    const card = placements.unclassified.find((e) => e.id === "x.md");
+    expect(card?.locked).toBeUndefined();
+  });
+
+  it("toViewModel — boolean 軸で象限配置されたカードは locked を付けない", () => {
+    // given
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when / then
+    expect(toViewModel(entries, null, DEFAULT_SETTINGS).placements.do[0].locked).toBeUndefined();
+  });
+});
+
+describe("toViewModel — 数百件スケール（純パイプラインの回帰ガード）", () => {
+  it("toViewModel — 500 件を正しく 4 象限へ分類し、線形時間で完了する", () => {
+    // given: 4 象限に均等な 500 件の md ノート（i%4 で urgent/important を割り振る）
+    const entries = Array.from({ length: 500 }, (_, i) =>
+      mockEntry(`note-${i}.md`, `note-${i}`, i % 2 === 0 ? TRUE : FALSE, i % 4 < 2 ? TRUE : FALSE),
+    );
+    // when
+    const start = performance.now();
+    const { state, placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    const elapsedMs = performance.now() - start;
+    // then: 全件が象限に載り、未分類は空
+    expect(state).toBe("ready");
+    expect(mapped).toHaveLength(500);
+    const classified =
+      placements.do.length +
+      placements.schedule.length +
+      placements.delegate.length +
+      placements.delete.length;
+    expect(classified).toBe(500);
+    expect(placements.unclassified).toHaveLength(0);
+    // 純関数は O(n) で数百件は 1ms 未満。500ms は O(n^2) 退行を捕らえる緩い上限（描画ジャンクは
+    // 実機（docs/test/ の手動チェックリスト）で確認する。jsdom はレイアウトしないため描画時間は測れない）。
+    expect(elapsedMs).toBeLessThan(500);
   });
 });
 
@@ -170,7 +290,7 @@ describe("toViewModel — ビュー options の軸変更で再配置（#21 F4・
     values: Record<string, Value | null>,
   ): BasesEntry {
     return {
-      file: { path, basename: path.replace(/\.md$/, "") },
+      file: fileStub(path),
       getValue: (id: BasesPropertyId) => values[id] ?? null,
     } as unknown as BasesEntry;
   }
@@ -220,7 +340,7 @@ describe("toViewModel — presentation（ラベル/色/言語文言の解決・#
       "note.important": important,
     };
     return {
-      file: { path, basename: path.replace(/\.md$/, "") },
+      file: fileStub(path),
       getValue: (id: BasesPropertyId) => values[id] ?? null,
     } as unknown as BasesEntry;
   }

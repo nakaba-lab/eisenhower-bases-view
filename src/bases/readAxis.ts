@@ -19,7 +19,7 @@
  * `NullValue`／`NumberValue`／`StringValue` を提供）へ解決する。⚠️ スタブ＝実機の同値性は単体では
  * 検証不能（`instanceof BooleanValue` の実機成立は `scripts/e2e` の placements 検証で担保）。
  */
-import { BooleanValue } from "obsidian";
+import { BooleanValue, NullValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import type { AxisValues } from "../logic/quadrant";
@@ -159,4 +159,45 @@ export function readAxisValues(
     urgent: readSingleAxis(entry, ids.urgent),
     important: readSingleAxis(entry, ids.important),
   };
+}
+
+/**
+ * 値が「present だが boolean でない」（数値/文字列等）＝ドロップの両軸 `true/false` 上書きで
+ * **破壊される**値かを判定する。`null`・absent（`NullValue`）は `false`（欠損は上書きで破壊せず、
+ * 分類として新規に書けるため）。`BooleanValue` も `false`（boolean→boolean は再分類で破壊でない）。
+ * `normalizeAxis`（値を undefined へ潰す）と違い、**absent と「非 boolean が入っている」を区別する**
+ * ための述語（前者はドラッグ可・後者はドラッグ不可にする）。
+ */
+export function isUnsupportedAxisValue(value: Value | null): boolean {
+  if (value == null) return false;
+  if (value instanceof NullValue) return false; // absent（欠損）は破壊しない
+  return !(value instanceof BooleanValue);
+}
+
+/** 書込可能な `note.*` 軸に限り、その軸値が非 boolean（破壊対象）かを見る。 */
+function isUnsupportedOnWritableAxis(
+  entry: BasesEntry,
+  id: BasesPropertyId,
+): boolean {
+  // 非 note.*（formula/file）軸は書き戻し自体が `resolveWritableAxisKeys` で弾かれ破壊経路が無いため対象外。
+  if (!isWritableAxisProperty(id)) return false;
+  return isUnsupportedAxisValue(entry.getValue(id));
+}
+
+/**
+ * エントリのどちらかの軸が「書込可能 `note.*` 上の非 boolean 値」を持つか（#34 で未分類化した
+ * カードのうち、ドロップで両軸を `true/false` 上書きすると元の数値/文字列を破壊するもの）。
+ *
+ * `true` のカードは UI（`NoteCard`）で**未分類ゾーンでもドラッグ不可**にして誤ドロップによる
+ * データ破壊を防ぐ（#34 が読み取り側で塞げなかった「未分類からの手動ドラッグ」経路の封鎖）。
+ * 真に absent なカード（欠損）は `false`＝ドラッグして分類できる（破壊しない）ため区別する。
+ */
+export function hasUnsupportedAxisValue(
+  entry: BasesEntry,
+  ids: AxisPropertyIds,
+): boolean {
+  return (
+    isUnsupportedOnWritableAxis(entry, ids.urgent) ||
+    isUnsupportedOnWritableAxis(entry, ids.important)
+  );
 }

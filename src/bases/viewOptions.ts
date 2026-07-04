@@ -12,6 +12,7 @@
  * 軸許容ルールの真実源は `readAxis.isWritableAxisProperty`（読み取り・書き戻しと同一述語を共有）。
  */
 import type { BasesPropertyOption } from "obsidian";
+import type { Messages } from "../i18n";
 import {
   IMPORTANT_OPTION_KEY,
   URGENT_OPTION_KEY,
@@ -24,21 +25,23 @@ import {
  * 緊急度軸・重要度軸の 2 つを property セレクタとして宣言し、`filter` で書き戻し可能な `note.*` のみを
  * 選択候補にする（AC1）。`key` は {@link resolveAxisPropertyIds} が `config.getAsPropertyId(key)` で読む
  * キー（{@link URGENT_OPTION_KEY}／{@link IMPORTANT_OPTION_KEY}）と一致させ、ビュー options の選択値を
- * 軸解決へ橋渡しする。
+ * 軸解決へ橋渡しする。`displayName` は解決済み言語メッセージ（`messages.axisOption`）から出す（#23 F6 の
+ * i18n をビュー文言だけでなく Configure view の軸セレクタにも及ぼす）。呼び出し側（`main.ts`）は
+ * options 評価時点の `resolveMessages()` を渡し、言語設定に追従させる。
  */
-export function buildAxisViewOptions(): BasesPropertyOption[] {
+export function buildAxisViewOptions(messages: Messages): BasesPropertyOption[] {
   return [
     {
       key: URGENT_OPTION_KEY,
       type: "property",
-      displayName: "緊急度軸プロパティ",
+      displayName: messages.axisOption.urgency,
       placeholder: "note.urgent",
       filter: isWritableAxisProperty,
     },
     {
       key: IMPORTANT_OPTION_KEY,
       type: "property",
-      displayName: "重要度軸プロパティ",
+      displayName: messages.axisOption.important,
       placeholder: "note.important",
       filter: isWritableAxisProperty,
     },

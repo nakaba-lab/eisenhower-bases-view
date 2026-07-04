@@ -22,11 +22,19 @@ export interface NoteCardProps {
   onOpenCard?: (entryId: string, opts: { newLeaf: boolean }) => void;
   /** ホバーでページプレビュー（#22 F5）。`targetEl` はプレビュー位置決めのカード要素。 */
   onHoverCard?: (entryId: string, targetEl: HTMLElement, event: MouseEvent) => void;
+  /**
+   * ロックされたカード（`entry.locked`＝非 boolean 軸値でドラッグ不可）のアクセシブル名を組む
+   *（i18n の `messages.cardLockedLabel`）。省略時は `entry.title` のみ。
+   */
+  lockedLabel?: (title: string) => string;
 }
 
-export function NoteCard({ entry, onOpenCard, onHoverCard }: NoteCardProps) {
+export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCardProps) {
+  // 非 boolean 軸値のカードはドラッグ不可（ドロップの両軸 true/false 上書きで元値破壊を防ぐ・#34 補完）。
+  const locked = entry.locked ?? false;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: entry.id,
+    disabled: locked,
   });
   const className =
     "eisenhower-note-card" +
@@ -59,6 +67,30 @@ export function NoteCard({ entry, onOpenCard, onHoverCard }: NoteCardProps) {
   const handleMouseEnter = (event: JSX.TargetedMouseEvent<HTMLDivElement>) => {
     onHoverCard?.(entry.id, event.currentTarget, event);
   };
+
+  if (locked) {
+    // ロックカード: dnd 属性/listener を付けずドラッグ不可にする（掴めない＝誤ドロップでのデータ破壊を防ぐ）。
+    // 開く（クリック/Enter）とホバープレビューは残す（ユーザーがノートを開いて非 boolean 値を直せる）。
+    // 視覚は --locked（淡色・鍵アイコン）でマークし、アクセシブル名に移動不可の理由を含める。
+    return (
+      <li class="eisenhower-note-card-item">
+        <div
+          class={`${className} eisenhower-note-card--locked`}
+          role="button"
+          tabIndex={0}
+          aria-label={lockedLabel ? lockedLabel(entry.title) : entry.title}
+          onClick={handleClick}
+          onKeyDown={handleKeyDown}
+          onMouseEnter={handleMouseEnter}
+        >
+          <span class="eisenhower-note-card__lock" aria-hidden="true">
+            🔒
+          </span>
+          {entry.title}
+        </div>
+      </li>
+    );
+  }
 
   return (
     <li class="eisenhower-note-card-item">

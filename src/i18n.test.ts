@@ -104,3 +104,68 @@ describe("messagesFor — undo（直前1手の元に戻す）文言（draft）",
     expect(messagesFor("en").undoFailed("TaskA")).toContain("TaskA");
   });
 });
+
+describe("messagesFor — 設定タブ・Bases options の i18n（#23 F6 スコープ拡張）", () => {
+  it("messagesFor — 設定タブの全文言が言語別に定義され en/ja で異なる", () => {
+    const jaSettings = messagesFor("ja").settings;
+    const enSettings = messagesFor("en").settings;
+    const keys = Object.keys(jaSettings) as (keyof typeof jaSettings)[];
+    // 全キーが両言語で非空、かつ翻訳されている（同一文字列で取り残されていない）
+    for (const key of keys) {
+      expect(jaSettings[key].length).toBeGreaterThan(0);
+      expect(enSettings[key].length).toBeGreaterThan(0);
+      expect(jaSettings[key]).not.toBe(enSettings[key]);
+    }
+    // 代表値のスポットチェック
+    expect(jaSettings.languageDesc).toContain("Obsidian");
+    expect(enSettings.languageName).toBe("Display language");
+  });
+
+  it("messagesFor — Bases 軸セレクタの displayName が言語で切り替わる", () => {
+    expect(messagesFor("ja").axisOption.urgency).toBe("緊急度軸プロパティ");
+    expect(messagesFor("en").axisOption.urgency).toBe("Urgency axis property");
+    expect(messagesFor("ja").axisOption.important).not.toBe(
+      messagesFor("en").axisOption.important,
+    );
+  });
+});
+
+describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i18n", () => {
+  it("messagesFor — アダプタ層 Notice 本文が言語別に定義され en/ja で異なる", () => {
+    const noticeKeys = [
+      "fileNotFoundForMove",
+      "fileNotFoundForOpen",
+      "axisNotWritable",
+      "writeBackFailed",
+      "openFailed",
+    ] as const;
+    for (const key of noticeKeys) {
+      expect(messagesFor("ja")[key].length).toBeGreaterThan(0);
+      expect(messagesFor("en")[key].length).toBeGreaterThan(0);
+      expect(messagesFor("ja")[key]).not.toBe(messagesFor("en")[key]);
+    }
+  });
+
+  it("messagesFor — itemCount が件数を差し込み言語別（英 items / 日 件）", () => {
+    expect(messagesFor("en").itemCount(5)).toBe("5 items");
+    expect(messagesFor("ja").itemCount(5)).toBe("5 件");
+  });
+
+  it("messagesFor — labelWithAxis は英で半角括弧・日で全角括弧を使う（全角括弧の英混入を断つ）", () => {
+    // then: 英語文脈に全角括弧を混ぜない（nit の是正）
+    expect(messagesFor("en").labelWithAxis("Do", "Important × Urgent")).toBe(
+      "Do (Important × Urgent)",
+    );
+    expect(messagesFor("ja").labelWithAxis("実行", "重要 × 緊急")).toBe(
+      "実行（重要 × 緊急）",
+    );
+  });
+
+  it("messagesFor — cardLockedLabel はノート名を差し込み言語別", () => {
+    expect(messagesFor("en").cardLockedLabel("TaskA")).toContain("TaskA");
+    expect(messagesFor("ja").cardLockedLabel("タスクA")).toContain("タスクA");
+    expect(messagesFor("ja").cardLockedLabel("x")).not.toBe(
+      messagesFor("en").cardLockedLabel("x"),
+    );
+  });
+});

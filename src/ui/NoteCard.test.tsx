@@ -108,3 +108,47 @@ describe("NoteCard — ホバーでページプレビュー（#22 F5 AC3）", ()
     expect(screen.getByRole("button").getAttribute("title")).toBeNull();
   });
 });
+
+describe("NoteCard — 非 boolean 軸カードのロック（ドラッグ不可・データ破壊防止）", () => {
+  function lockedEntry(): MatrixEntry {
+    // 非 boolean 軸値のため未分類に落ち、locked が付いたカード（toViewModel が付与）。
+    return { id: "num.md", title: "数値タスク", urgent: undefined, important: undefined, locked: true };
+  }
+
+  it("NoteCard_通常カードはドラッグ可能（aria-roledescription=draggable を持つ・対照）", () => {
+    // given / when: locked でない通常カードは dnd-kit の draggable 属性を持つ
+    render(<NoteCard entry={entry()} />);
+    // then
+    expect(
+      screen.getByRole("button").getAttribute("aria-roledescription"),
+    ).toBe("draggable");
+  });
+
+  it("NoteCard_ロックカードはドラッグ不可（draggable 属性を付けず --locked クラスを持つ）", () => {
+    // given / when
+    render(<NoteCard entry={lockedEntry()} />);
+    const el = screen.getByRole("button");
+    // then: dnd-kit の draggable 属性を付けない（掴めない）＋視覚マークのクラス
+    expect(el.getAttribute("aria-roledescription")).toBeNull();
+    expect(el.classList.contains("eisenhower-note-card--locked")).toBe(true);
+  });
+
+  it("NoteCard_ロックカードもクリックで開ける（値を直せるよう開く導線は残す）", () => {
+    // given
+    const onOpenCard = vi.fn();
+    render(<NoteCard entry={lockedEntry()} onOpenCard={onOpenCard} />);
+    // when
+    fireEvent.click(screen.getByRole("button"));
+    // then
+    expect(onOpenCard).toHaveBeenCalledWith("num.md", { newLeaf: false });
+  });
+
+  it("NoteCard_ロックカードは lockedLabel でアクセシブル名に移動不可の理由を含める", () => {
+    // given / when
+    render(
+      <NoteCard entry={lockedEntry()} lockedLabel={(title) => `${title}（移動不可）`} />,
+    );
+    // then: SR には「移動できない理由」が伝わる
+    expect(screen.getByRole("button", { name: "数値タスク（移動不可）" })).toBeTruthy();
+  });
+});

@@ -124,6 +124,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     setUndoToast({ message, entryId });
     undoToastTimerRef.current = setTimeout(() => {
       undoToastTimerRef.current = null;
+      // 自動消滅でも、フォーカスがトースト内にある（キーボードで元に戻す/×へ移して待っていた）なら
+      // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない
+      // （activeElement ガード＝ボタン操作時の戻し〔レビュー第3周〕と同じ失敗クラスの自動消滅経路を塞ぐ）。
+      const toast = matrixSectionRef.current?.querySelector(".eisenhower-undo-toast");
+      if (toast?.contains(document.activeElement)) {
+        matrixSectionRef.current?.focus();
+      }
       setUndoToast(null);
     }, UNDO_TOAST_TIMEOUT_MS);
   };

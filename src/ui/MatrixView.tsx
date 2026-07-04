@@ -87,6 +87,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const nextGenerationRef = useRef(0);
   // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
   const inFlightRef = useRef<Map<string, number>>(new Map());
+  // マトリクス領域の参照。トーストのボタンをキーボードで操作するとボタンが即アンマウントされ
+  // フォーカスが body へ落ちるため、操作直後にこの安定した受け皿へフォーカスを戻す（a11y・レビュー指摘）。
+  const matrixSectionRef = useRef<HTMLElement>(null);
   // #22（F5）: クリック（開く）とドラッグを両立させるため PointerSensor に距離活性化制約を付け、
   // 5px 未満の移動は掴みにせずクリックとして成立させる。KeyboardSensor の起動/ドロップキーは
   // Space のみに remap し、Enter を「開く」（NoteCard の onKeyDown）へ解放する。
@@ -286,7 +289,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         screenReaderInstructions: { draggable: messages.screenReaderDraggable },
       }}
     >
-      <section class="eisenhower-matrix" role="group" aria-label={messages.matrixLabel}>
+      <section
+        ref={matrixSectionRef}
+        class="eisenhower-matrix"
+        role="group"
+        aria-label={messages.matrixLabel}
+        tabIndex={-1}
+      >
         {/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ通知する視覚的非表示のライブ領域。
             文言は nextAnnouncement で差分化済み（同一文言でも再読み上げされる）。 */}
         <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
@@ -354,8 +363,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               // 名指しノートの entryId を渡す（記録が別移動へ置き換わっていたら戻さないガード）。
               callbacks.onUndoMove?.(undoToast.entryId);
               dismissUndoToast();
+              // 操作したボタンが消えるので、フォーカスをマトリクス領域へ戻す（body へ落とさない）。
+              matrixSectionRef.current?.focus();
             }}
-            onDismiss={dismissUndoToast}
+            onDismiss={() => {
+              dismissUndoToast();
+              matrixSectionRef.current?.focus();
+            }}
           />
         )}
       </section>

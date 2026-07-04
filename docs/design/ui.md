@@ -2,7 +2,7 @@
 title: UI 設計
 area: ui
 status: active
-relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43]
+relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44]
 updated: 2026-07-04
 kind: ui
 ---

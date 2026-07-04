@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>#43 E2E — contain:strict 包含ブロック再現</title>
+    <style>
+      :root,
+      .theme-light {
+        --background-primary: #ffffff;
+        --background-primary-alt: #f5f6f8;
+        --background-secondary: #f2f3f5;
+        --background-modifier-border: #d4d6da;
+        --background-modifier-hover: #e9eaee;
+        --text-normal: #1f2328;
+        --text-muted: #5c6066;
+        --text-faint: #8a8f98;
+        --text-on-accent: #ffffff;
+        --interactive-accent: #7b6cd9;
+        --interactive-accent-hover: #6a5bc8;
+        --size-4-1: 4px;
+        --size-4-2: 8px;
+        --size-4-3: 12px;
+        --radius-s: 4px;
+        --radius-m: 8px;
+        --shadow-l: 0 4px 12px rgba(0, 0, 0, 0.3);
+        --font-ui-small: 13px;
+        --font-ui-smaller: 12px;
+        --font-semibold: 600;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: -apple-system, "Segoe UI", sans-serif;
+        background: #c9ccd1;
+      }
+      /* .workspace-leaf を模す: contain:strict（＝position:fixed の包含ブロックを新規作成）で、
+         かつビューポート原点から (320,160) オフセットした位置に置く（実機のサイドペイン相当）。
+         #43 の修正が効いていれば DragOverlay は body へ portal されこの包含ブロックの影響を受けない。 */
+      #leaf {
+        position: fixed;
+        left: 320px;
+        top: 160px;
+        right: 24px;
+        bottom: 24px;
+        contain: strict;
+        overflow: hidden;
+        border: 2px solid #7b6cd9;
+        background: var(--background-primary);
+      }
+      #root {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      #leaf::before {
+        content: "#leaf (contain: strict, offset 320×160)";
+        position: absolute;
+        top: 2px;
+        right: 6px;
+        font: 11px monospace;
+        color: #7b6cd9;
+        z-index: 2;
+      }
+    </style>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body class="theme-light">
+    <div id="leaf">
+      <div id="root"></div>
+    </div>
+    <script src="./preview.bundle.js"></script>
+  </body>
+</html>

@@ -52,21 +52,25 @@ const f6Settings = {
   },
 };
 
+const placements = {
+  do: [entry("a.md", "請求書を今日中に送る"), entry("b.md", "障害の一次対応")],
+  schedule: [entry("c.md", "四半期計画のドラフト"), entry("d.md", "資格試験の勉強")],
+  delegate: [entry("e.md", "議事録の清書を依頼")],
+  delete: [], // 空セル（象限別プレースホルダの確認）
+  unclassified: [
+    entry("x.md", "軸プロパティ未設定のノート"),
+    // 非 boolean 軸値のカード（locked）: 淡色＋🔒 でドラッグ不可の視覚状態をスクショに写す
+    // （データ破壊防止 UI の回帰を frontend-reviewer が目視検知できるようにする・レビュー指摘）。
+    entry("num.md", "数値軸のノート（移動不可）", true),
+  ],
+};
+
 const viewModel: MatrixViewModel = {
   state: "ready",
-  entries: [],
-  placements: {
-    do: [entry("a.md", "請求書を今日中に送る"), entry("b.md", "障害の一次対応")],
-    schedule: [entry("c.md", "四半期計画のドラフト"), entry("d.md", "資格試験の勉強")],
-    delegate: [entry("e.md", "議事録の清書を依頼")],
-    delete: [], // 空セル（象限別プレースホルダの確認）
-    unclassified: [
-      entry("x.md", "軸プロパティ未設定のノート"),
-      // 非 boolean 軸値のカード（locked）: 淡色＋🔒 でドラッグ不可の視覚状態をスクショに写す
-      // （データ破壊防止 UI の回帰を frontend-reviewer が目視検知できるようにする・レビュー指摘）。
-      entry("num.md", "数値軸のノート（移動不可）", true),
-    ],
-  },
+  // entries は placements 由来にする（空だと MatrixView の titleOf が overlay/SR アナウンスの
+  // タイトル逆引きに失敗して id にフォールバックするため。#43 の DragOverlay 検証で顕在化）。
+  entries: Object.values(placements).flat(),
+  placements,
   // f6 のときだけ presentation を載せる（未指定＝before＝現行のフォールバック挙動）。
   ...(useF6
     ? { presentation: resolvePresentation(f6Settings, messagesFor(lang)) }

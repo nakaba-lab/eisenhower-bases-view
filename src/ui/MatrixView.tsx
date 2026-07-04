@@ -1,4 +1,5 @@
 import { render as preactRender } from "preact";
+import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   DndContext,
@@ -380,14 +381,22 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
           />
         )}
       </section>
-      {/* 掴んでいるカードを象限の overflow:hidden にクリップされず指/カーソルへ追従描画する。 */}
-      <DragOverlay>
-        {activeId ? (
-          <div class="eisenhower-note-card eisenhower-note-card--overlay">
-            {titleOf(activeId)}
-          </div>
-        ) : null}
-      </DragOverlay>
+      {/* 掴んでいるカードを象限の overflow:hidden にクリップされず指/カーソルへ追従描画する DragOverlay。
+          position:fixed だが、Obsidian の .workspace-leaf は `contain: strict`（layout/paint 包含）で
+          **fixed の包含ブロックを新規作成**するため、この階層に置くと原点がビューポートではなくリーフ左上へ
+          ずれ、掴んだカードがカーソルからリーフの画面オフセットぶん一定量ずれる（実機バグ・contain は
+          devtools で確認済み）。contain されない document.body へ portal して原点をビューポートへ戻す。
+          createPortal は DOM 位置だけを移し、仮想ツリー上は DndContext の子のままなので context は貫通する。 */}
+      {createPortal(
+        <DragOverlay>
+          {activeId ? (
+            <div class="eisenhower-note-card eisenhower-note-card--overlay">
+              {titleOf(activeId)}
+            </div>
+          ) : null}
+        </DragOverlay>,
+        document.body,
+      )}
     </DndContext>
   );
 }

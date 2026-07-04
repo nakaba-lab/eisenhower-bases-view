@@ -69,3 +69,36 @@ export class StringValue {
     return this.value.length > 0;
   }
 }
+
+/**
+ * `Notice` スタブ（実機 `new Notice(message)` 相当）。実機はトーストを表示するが単体では
+ * 描画できないため、生成メッセージを静的配列に記録して検証に使う（`runUndo` 等の Notice 経路を
+ * アサートする）。テストは各ケース前に {@link Notice.reset} で初期化する。実機の `Notice` 型は
+ * これらの静的メンバを持たないため、テストは本スタブを直接 import して静的アクセスする
+ *（vitest は本番コードの `import { Notice } from "obsidian"` を同じ本クラスへ解決する）。
+ */
+export class Notice {
+  static messages: string[] = [];
+  static reset(): void {
+    Notice.messages = [];
+  }
+  constructor(message: string) {
+    Notice.messages.push(message);
+  }
+}
+
+/**
+ * `TFile` スタブ（`value instanceof TFile` 判定用の最小クラス）。実機 `TFile` は公開コンストラクタを
+ * 持たないため、テストは本スタブで実インスタンスを生成し `getAbstractFileByPath` の返り値に使う
+ *（本番コードの `import { TFile } from "obsidian"` と同一クラスへ解決されるため `instanceof` が成立する）。
+ */
+export class TFile {
+  path: string;
+  basename: string;
+  extension: string;
+  constructor(path = "", basename = "", extension = "md") {
+    this.path = path;
+    this.basename = basename;
+    this.extension = extension;
+  }
+}

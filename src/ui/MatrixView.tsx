@@ -17,6 +17,7 @@ import { messagesFor, type Messages } from "../i18n";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
 import {
   applyPendingMoves,
+  dropPending,
   isLatestGeneration,
   reconcilePendingMoves,
   rollbackFailedMove,
@@ -86,6 +87,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const nextGenerationRef = useRef(0);
   // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
   const inFlightRef = useRef<Map<string, number>>(new Map());
+  // マトリクス領域の参照。トーストのボタンをキーボードで操作するとボタンが即アンマウントされ
+  // フォーカスが body へ落ちるため、操作直後にこの安定した受け皿へフォーカスを戻す（a11y・レビュー指摘）。
+  const matrixSectionRef = useRef<HTMLElement>(null);
   // #22（F5）: クリック（開く）とドラッグを両立させるため PointerSensor に距離活性化制約を付け、
   // 5px 未満の移動は掴みにせずクリックとして成立させる。KeyboardSensor の起動/ドロップキーは
   // Space のみに remap し、Enter を「開く」（NoteCard の onKeyDown）へ解放する。
@@ -120,6 +124,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     setUndoToast({ message, entryId });
     undoToastTimerRef.current = setTimeout(() => {
       undoToastTimerRef.current = null;
+      // 自動消滅でも、フォーカスがトースト内にある（キーボードで元に戻す/×へ移して待っていた）なら
+      // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない
+      // （activeElement ガード＝ボタン操作時の戻し〔レビュー第3周〕と同じ失敗クラスの自動消滅経路を塞ぐ）。
+      const toast = matrixSectionRef.current?.querySelector(".eisenhower-undo-toast");
+      if (toast?.contains(document.activeElement)) {
+        matrixSectionRef.current?.focus();
+      }
       setUndoToast(null);
     }, UNDO_TOAST_TIMEOUT_MS);
   };
@@ -285,7 +296,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         screenReaderInstructions: { draggable: messages.screenReaderDraggable },
       }}
     >
-      <section class="eisenhower-matrix" role="group" aria-label={messages.matrixLabel}>
+      <section
+        ref={matrixSectionRef}
+        class="eisenhower-matrix"
+        role="group"
+        aria-label={messages.matrixLabel}
+        tabIndex={-1}
+      >
         {/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ通知する視覚的非表示のライブ領域。
             文言は nextAnnouncement で差分化済み（同一文言でも再読み上げされる）。 */}
         <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
@@ -309,9 +326,15 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             />
           ))}
         </div>
-        {/* showUnclassified=false かつ全カードが未分類（例: 両軸が非 note.* 解決）の構成では、
-            未分類ゾーン非表示で「ready なのに何も出ない」無言の空表示になりうる（レビュー指摘 #9）。
-            非 note.* 軸の警告・件数ヒントは F4（#21）/F6（#23・切替 UI 導入時）で本格対応する。 */}
+        {/* 未分類ゾーン非表示 × 全象限が空 × 未分類にカードあり＝「ready なのに何も見えない」無言の
+            空表示を避けるヒント（レビュー指摘）。未分類が表示設定なら下の未分類ゾーンが出るため不要。 */}
+        {!showUnclassified &&
+          placements.unclassified.length > 0 &&
+          QUADRANT_KEYS.every((key) => placements[key].length === 0) && (
+            <p class="eisenhower-matrix__unclassified-hint" role="note">
+              {messages.unclassifiedHidden(placements.unclassified.length)}
+            </p>
+          )}
         {showUnclassified && (
           <QuadrantCell
             quadrant="unclassified"
@@ -339,11 +362,21 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             undoLabel={messages.undoMove}
             dismissLabel={messages.undoDismiss}
             onUndo={() => {
+              // undo は frontmatter を移動前へ戻すので、残っている楽観オーバーレイを先に落として
+              // サーバ値の表示へ戻す（さもないと reconcile が「サーバ≠保留・非 in-flight」で保留を
+              // 落とせずカードが移動先象限に貼り付く＝レビュー指摘。コマンド経由の undo（main.ts）は
+              // このハンドラを通らないため次のドラッグ/再マウントまで残りうる既知の軽微な残存）。
+              setPending((prev) => dropPending(prev, undoToast.entryId));
               // 名指しノートの entryId を渡す（記録が別移動へ置き換わっていたら戻さないガード）。
               callbacks.onUndoMove?.(undoToast.entryId);
               dismissUndoToast();
+              // 操作したボタンが消えるので、フォーカスをマトリクス領域へ戻す（body へ落とさない）。
+              matrixSectionRef.current?.focus();
             }}
-            onDismiss={dismissUndoToast}
+            onDismiss={() => {
+              dismissUndoToast();
+              matrixSectionRef.current?.focus();
+            }}
           />
         )}
       </section>

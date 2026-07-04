@@ -67,6 +67,11 @@ export interface Messages {
   undoFailed(title: string): string;
   /** 象限の件数バッジのアクセシブル名（例: "5 items" / "5 件"）。 */
   itemCount(count: number): string;
+  /**
+   * 全カードが未分類だが未分類ゾーンを非表示にしている（ready なのに何も見えない）ときのヒント。
+   * 無言の空表示を避ける（レビュー指摘）。
+   */
+  unclassifiedHidden(count: number): string;
   /** 「ラベル（軸ラベル）」の言語別ジョイナ（英=半角括弧・日=全角括弧）。象限領域名・設定行名で共有。 */
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
@@ -81,6 +86,8 @@ export interface Messages {
   writeBackFailed: string;
   /** アダプタ層 Notice: ノートを開けなかった。 */
   openFailed: string;
+  /** アダプタ層 Notice: Bases が無効でカスタムビューを登録できなかった（登録失敗フォールバック）。 */
+  basesUnavailable: string;
   /** 設定タブ（#23 F6）の各文言（見出し・名前・説明・ツールチップ）。 */
   settings: SettingsMessages;
   /** Bases Configure view の軸プロパティセレクタ displayName（viewOptions）。 */
@@ -103,6 +110,8 @@ export interface SettingsMessages {
   languageHeading: string;
   languageName: string;
   languageDesc: string;
+  /** 言語ドロップダウンの "Auto"（自動）選択肢ラベル。en/日 の endonym（English/日本語）は翻訳しない。 */
+  languageAuto: string;
 }
 
 const JA: Messages = {
@@ -143,13 +152,17 @@ const JA: Messages = {
   undone: (title) => `「${title}」の移動を元に戻しました。`,
   undoFailed: (title) => `「${title}」の移動を元に戻せませんでした。`,
   itemCount: (count) => `${count} 件`,
+  unclassifiedHidden: (count) =>
+    `${count} 件のノートが未分類です（未分類ゾーンは非表示設定です。設定で表示にするか、軸プロパティを確認してください）。`,
   labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
   cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
   fileNotFoundForOpen: "対象ファイルが見つからないため開けません。",
-  axisNotWritable: "書き戻せない軸プロパティ（note. 以外）のため移動できません。",
+  axisNotWritable:
+    "軸プロパティの設定が不正（note. 以外、または両軸に同じプロパティ）のため移動できません。",
   writeBackFailed: "書き戻しに失敗しました。元に戻します。",
   openFailed: "ノートを開けませんでした。",
+  basesUnavailable: "Bases が無効なためビューを登録できませんでした。",
   settings: {
     axisHeading: "軸（デフォルト）",
     urgencyName: "緊急度プロパティ",
@@ -164,7 +177,8 @@ const JA: Messages = {
     resetTooltip: "既定に戻す（ラベル・色）",
     languageHeading: "言語",
     languageName: "表示言語",
-    languageDesc: "Auto は Obsidian の表示言語に追従します。",
+    languageDesc: "「自動」は Obsidian の表示言語に追従します。",
+    languageAuto: "自動",
   },
   axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
 };
@@ -206,14 +220,18 @@ const EN: Messages = {
   noUndo: "No move to undo.",
   undone: (title) => `Reverted the move of "${title}".`,
   undoFailed: (title) => `Failed to revert the move of "${title}".`,
-  itemCount: (count) => `${count} items`,
+  itemCount: (count) => `${count} ${count === 1 ? "item" : "items"}`,
+  unclassifiedHidden: (count) =>
+    `${count} ${count === 1 ? "note is" : "notes are"} unclassified (the unclassified zone is hidden). Enable it in settings, or check the axis properties.`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
   fileNotFoundForMove: "Target file not found; cannot move.",
   fileNotFoundForOpen: "Target file not found; cannot open.",
-  axisNotWritable: "Axis property is not writable (not note.*); cannot move.",
+  axisNotWritable:
+    "Invalid axis configuration (not note.*, or both axes use the same property); cannot move.",
   writeBackFailed: "Failed to write back. Reverting.",
   openFailed: "Failed to open the note.",
+  basesUnavailable: "Bases is disabled, so the view could not be registered.",
   settings: {
     axisHeading: "Axes (defaults)",
     urgencyName: "Urgency property",
@@ -229,7 +247,8 @@ const EN: Messages = {
     resetTooltip: "Reset to defaults (label & color)",
     languageHeading: "Language",
     languageName: "Display language",
-    languageDesc: "Auto follows Obsidian's display language.",
+    languageDesc: "\"Auto\" follows Obsidian's display language.",
+    languageAuto: "Auto",
   },
   axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
 };

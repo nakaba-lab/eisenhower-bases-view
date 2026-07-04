@@ -14,6 +14,19 @@
   color: var(--text-normal);
   background-color: var(--background-primary);
   box-sizing: border-box;
+  /* グリッドの単列化をビューポート幅ではなく**このビューのペイン幅**に追従させる（レビュー指摘）。
+   * inline 軸のみの containment なので高さ追従（min-height:100% + flex 列）は壊さない。
+   * Obsidian（Electron/Chromium）はコンテナクエリを完全サポート。 */
+  container-type: inline-size;
+}
+
+/* 未分類ゾーン非表示 × 全象限空 のときの「無言の空表示」を避けるヒント（レビュー指摘）。 */
+.eisenhower-matrix__unclassified-hint {
+  margin: var(--size-4-2, 8px) 0 0;
+  padding: var(--size-4-2, 8px);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small, 0.8em);
+  text-align: center;
 }
 
 .eisenhower-matrix--loading,
@@ -39,8 +52,10 @@
   min-height: 0;
 }
 
-/* 狭幅（モバイル・狭ペイン）では 1 列に積む（崩れ防止＝レスポンシブ）。 */
-@media (max-width: 600px) {
+/* 狭幅（モバイル・狭ペイン）では 1 列に積む（崩れ防止＝レスポンシブ）。
+ * コンテナクエリでペイン幅に追従する（狭ペインに置いた Bases ビューでも単列化する。
+ * ビューポート幅依存の @media では広ウィンドウ内の狭ペインに反応しなかった＝レビュー指摘）。 */
+@container (max-width: 600px) {
   .eisenhower-matrix__grid {
     grid-template-columns: 1fr;
   }

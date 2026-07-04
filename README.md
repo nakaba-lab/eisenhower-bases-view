@@ -6,7 +6,7 @@ Obsidian の Bases（コアのデータベース機能）の**カスタムビュ
 - 書き戻しは標準の `app.fileManager.processFrontMatter` を用い、完全ローカル動作（ネットワーク通信・テレメトリなし）。
 - 直前の移動を取り消せる: カードを分類し直した直後に出る「元に戻す」トースト、またはコマンド **「Eisenhower Matrix: 直前の移動を元に戻す」**（設定 → ホットキーで任意のキーを割り当て可能）で 1 手戻せる。**これは Obsidian 標準の取り消し（Ctrl+Z）とは統合していない独立した専用コマンド**で、保持するのは直前の 1 手のみ。元が未分類だったカードは軸プロパティを削除して未分類へ戻す。
 
-> プラグイン id: `eisenhower-bases-view` ／ name: `Eisenhower Matrix` ／ `minAppVersion` 1.12.0（暫定）／ `isDesktopOnly: true`（タッチ DnD は将来）。
+> プラグイン id: `eisenhower-bases-view` ／ name: `Eisenhower Matrix` ／ `minAppVersion` 1.12.0（スパイク #16 の実機検証〔1.12.7〕で確定）／ `isDesktopOnly: true`（タッチ DnD は将来）。
 
 ## セットアップ
 

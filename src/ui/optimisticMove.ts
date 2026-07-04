@@ -142,6 +142,25 @@ export function rollbackFailedMove(
   return { pending: next, rolledBack: true };
 }
 
+/**
+ * 指定 entry の保留を落とした**新しい** {@link PendingMoves} を返す（純関数・入力は破壊しない）。
+ *
+ * undo（トースト/コマンド）が frontmatter を移動前へ復元したのに楽観オーバーレイ（`pending`）が
+ * 残ると、`reconcilePendingMoves` はサーバ値（復元後）が保留値（移動先）と一致せず（かつ in-flight でも
+ * ないため）保留を落とせず、`applyPendingMoves` がカードを移動先象限へ描き続ける（ファイルは正しいのに
+ * 表示が食い違う）。undo 起動時にこの純関数で該当保留を明示的に落とし、サーバ値の表示へ戻す（レビュー指摘）。
+ * 該当 entry の保留が無ければ同じ Map を返す（不要な再描画を避ける）。
+ */
+export function dropPending(
+  pending: PendingMoves,
+  entryId: string,
+): PendingMoves {
+  if (!pending.has(entryId)) return pending;
+  const next = new Map(pending);
+  next.delete(entryId);
+  return next;
+}
+
 /** settle 時にスクリーンリーダーへ何を通知するか。 */
 export type SettleAnnouncement = "success" | "failure" | "silent";
 

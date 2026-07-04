@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MatrixEntry, QuadrantPlacements } from "../bases/types";
 import {
   applyPendingMoves,
+  dropPending,
   isLatestGeneration,
   reconcilePendingMoves,
   rollbackFailedMove,
@@ -189,6 +190,42 @@ describe("reconcilePendingMoves — 確定/保留の判定（AC2）", () => {
     const result = reconcilePendingMoves(pending, entries, new Set());
     // then
     expect(result.has("a.md")).toBe(false);
+  });
+});
+
+describe("dropPending — undo 時に楽観オーバーレイを落とす（レビュー指摘: undo 後の貼り付き修正）", () => {
+  it("dropPending — 指定 entry の保留を落とした新しい Map を返し、入力を破壊しない", () => {
+    // given: a と b の保留がある
+    const pending: PendingMoves = new Map([
+      ["a.md", { urgent: true, important: true }],
+      ["b.md", { urgent: false, important: false }],
+    ]);
+    // when: a を undo（保留を落とす）
+    const result = dropPending(pending, "a.md");
+    // then: a は消え b は残る・入力 Map は不変（純粋性）
+    expect(result.has("a.md")).toBe(false);
+    expect(result.has("b.md")).toBe(true);
+    expect(pending.has("a.md")).toBe(true);
+  });
+
+  it("dropPending — undo 後に applyPendingMoves がサーバ値の象限へ戻る（貼り付き解消）", () => {
+    // given: schedule のカードを do へ楽観移動した状態（pending 残存）
+    const serverPlacements = placements({ schedule: [entry("a.md", "a", false, true)] });
+    const pending: PendingMoves = new Map([["a.md", { urgent: true, important: true }]]);
+    expect(applyPendingMoves(serverPlacements, pending).do.map((e) => e.id)).toEqual(["a.md"]);
+    // when: undo で保留を落とす
+    const after = dropPending(pending, "a.md");
+    // then: オーバーレイが消え、サーバ値（schedule）の位置に戻る（do に貼り付かない）
+    const rendered = applyPendingMoves(serverPlacements, after);
+    expect(rendered.do).toEqual([]);
+    expect(rendered.schedule.map((e) => e.id)).toEqual(["a.md"]);
+  });
+
+  it("dropPending — 該当保留が無ければ同じ Map 参照を返す（不要な再描画を避ける）", () => {
+    // given
+    const pending: PendingMoves = new Map([["a.md", { urgent: true, important: true }]]);
+    // when / then: 未登録 id は同一参照
+    expect(dropPending(pending, "ghost.md")).toBe(pending);
   });
 });
 

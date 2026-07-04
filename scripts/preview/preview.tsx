@@ -22,8 +22,14 @@ import { messagesFor, type Language } from "../../src/i18n";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import type { MatrixEntry, MatrixViewModel } from "../../src/bases/types";
 
-function entry(id: string, title: string): MatrixEntry {
-  return { id, title, urgent: undefined, important: undefined };
+function entry(id: string, title: string, locked?: boolean): MatrixEntry {
+  return {
+    id,
+    title,
+    urgent: undefined,
+    important: undefined,
+    ...(locked ? { locked: true } : {}),
+  };
 }
 
 const params = new URLSearchParams(location.search);
@@ -56,7 +62,9 @@ const viewModel: MatrixViewModel = {
     delete: [], // 空セル（象限別プレースホルダの確認）
     unclassified: [
       entry("x.md", "軸プロパティ未設定のノート"),
-      entry("Eisenhower.base", "Eisenhower"),
+      // 非 boolean 軸値のカード（locked）: 淡色＋🔒 でドラッグ不可の視覚状態をスクショに写す
+      // （データ破壊防止 UI の回帰を frontend-reviewer が目視検知できるようにする・レビュー指摘）。
+      entry("num.md", "数値軸のノート（移動不可）", true),
     ],
   },
   // f6 のときだけ presentation を載せる（未指定＝before＝現行のフォールバック挙動）。

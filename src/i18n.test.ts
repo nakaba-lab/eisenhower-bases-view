@@ -138,6 +138,7 @@ describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i
       "axisNotWritable",
       "writeBackFailed",
       "openFailed",
+      "basesUnavailable",
     ] as const;
     for (const key of noticeKeys) {
       expect(messagesFor("ja")[key].length).toBeGreaterThan(0);
@@ -146,9 +147,22 @@ describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i
     }
   });
 
-  it("messagesFor — itemCount が件数を差し込み言語別（英 items / 日 件）", () => {
+  it("messagesFor — itemCount が件数を差し込み言語別（英は単複分岐・日 件）", () => {
     expect(messagesFor("en").itemCount(5)).toBe("5 items");
+    // 英語は単複を分岐する（count=1 で "1 items" にしない・nit の是正）
+    expect(messagesFor("en").itemCount(1)).toBe("1 item");
+    expect(messagesFor("en").itemCount(0)).toBe("0 items");
     expect(messagesFor("ja").itemCount(5)).toBe("5 件");
+    expect(messagesFor("ja").itemCount(1)).toBe("1 件");
+  });
+
+  it("messagesFor — unclassifiedHidden が件数を差し込み言語別（無言空表示を避けるヒント）", () => {
+    expect(messagesFor("ja").unclassifiedHidden(3)).toContain("3 件");
+    expect(messagesFor("en").unclassifiedHidden(2)).toContain("2 notes are");
+    expect(messagesFor("en").unclassifiedHidden(1)).toContain("1 note is"); // 単複分岐
+    expect(messagesFor("ja").unclassifiedHidden(1)).not.toBe(
+      messagesFor("en").unclassifiedHidden(1),
+    );
   });
 
   it("messagesFor — labelWithAxis は英で半角括弧・日で全角括弧を使う（全角括弧の英混入を断つ）", () => {

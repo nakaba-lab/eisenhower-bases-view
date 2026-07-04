@@ -92,6 +92,7 @@ export function QuadrantCell({
         <span class="eisenhower-quadrant__axis">{axisLabel}</span>
         <span
           class="eisenhower-quadrant__count"
+          role="img"
           aria-label={itemCountLabel(entries.length)}
         >
           {entries.length}

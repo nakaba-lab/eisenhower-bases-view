@@ -68,6 +68,20 @@ describe("QuadrantCell", () => {
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   });
 
+  it("QuadrantCell — 件数バッジは role=img＋aria-label で AT に件数を露出する（role なし span は読まれない懸念の是正）", () => {
+    // given / when: 既定 itemCountLabel（"N 件"）
+    render(
+      <QuadrantCell
+        quadrant="do"
+        label="Do"
+        axisLabel="重要 × 緊急"
+        entries={[entry("a.md", "a"), entry("b.md", "b")]}
+      />,
+    );
+    // then: role=img のアクセシブル名として件数ラベルが取得できる（裸の数字だけが読まれる状態を避ける）
+    expect(screen.getByRole("img", { name: "2 件" })).toBeTruthy();
+  });
+
   it("QuadrantCell — 象限名＋軸ラベルが aria-label として領域（region）に付く", () => {
     // given / when
     render(

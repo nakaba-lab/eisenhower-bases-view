@@ -167,6 +167,20 @@
   opacity: 0.5;
 }
 
+/* ドラッグ不可のロックカード（書込可能 note.* 軸に非 boolean 値を持ち、ドロップの両軸 true/false
+ * 上書きで元値が破壊されるため掴ませない・#34 補完）。grab カーソルを外し淡色＋鍵アイコンで
+ * 「移動できない」ことを視覚化する。クリックで開く導線は残すため pointer にはしない。 */
+.eisenhower-note-card--locked {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.eisenhower-note-card__lock {
+  margin-inline-end: var(--size-4-1, 4px);
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
 /* ドロップ可能な象限にカードが重なっているときのフィードバック（#20）。 */
 .eisenhower-quadrant--over {
   outline: 2px dashed var(--interactive-accent);

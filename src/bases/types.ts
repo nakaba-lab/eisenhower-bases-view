@@ -18,6 +18,12 @@ export interface MatrixEntry {
   urgent: boolean | undefined;
   /** 重要度軸の値（absent は undefined＝false と区別）。 */
   important: boolean | undefined;
+  /**
+   * ドラッグ不可（`true` のときのみ設定）。書込可能 `note.*` 軸に**非 boolean 値**（数値/文字列）を
+   * 持つカードで、ドロップの両軸 `true/false` 上書きで元値を破壊するため未分類ゾーンでも掴ませない
+   *（#34 の未分類化で塞げなかった手動ドラッグ経路の封鎖）。absent（欠損）のカードは付かない＝分類可。
+   */
+  locked?: boolean;
 }
 
 /** ビューの描画状態。 */

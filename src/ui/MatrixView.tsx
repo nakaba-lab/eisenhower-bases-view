@@ -300,6 +300,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               axisLabel={messages.axisLabels[key]}
               regionLabel={messages.labelWithAxis(quadrantLabels[key], messages.axisLabels[key])}
               itemCountLabel={messages.itemCount}
+              lockedLabel={messages.cardLockedLabel}
               accentColor={quadrantColors?.[key]}
               entries={placements[key]}
               emptyText={messages.emptyQuadrant}
@@ -321,6 +322,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               messages.unclassifiedAxisLabel,
             )}
             itemCountLabel={messages.itemCount}
+            lockedLabel={messages.cardLockedLabel}
             entries={placements.unclassified}
             emptyText={messages.emptyQuadrant}
             variant="unclassified"

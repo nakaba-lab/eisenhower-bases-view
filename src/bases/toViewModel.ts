@@ -2,7 +2,11 @@ import type { BasesEntry, BasesViewConfig } from "obsidian";
 import { DEFAULT_SETTINGS, type EisenhowerSettings } from "../settings";
 import { classifyQuadrant } from "../logic/quadrant";
 import { messagesFor, type Messages } from "../i18n";
-import { readAxisValues, resolveAxisPropertyIds } from "./readAxis";
+import {
+  hasUnsupportedAxisValue,
+  readAxisValues,
+  resolveAxisPropertyIds,
+} from "./readAxis";
 import { resolvePresentation } from "./presentation";
 import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "./types";
 
@@ -66,6 +70,9 @@ export function toViewModel(
       urgent: axis.urgent,
       important: axis.important,
     };
+    // 書込可能 note.* 軸に非 boolean 値を持つカードは、ドロップの両軸 true/false 上書きで
+    // 元値を破壊するためドラッグ不可にする（UI が印を付ける）。true のときだけ載せる（欠損カードには付けない）。
+    if (hasUnsupportedAxisValue(entry, ids)) matrixEntry.locked = true;
     placements[quadrant].push(matrixEntry);
     return matrixEntry;
   });

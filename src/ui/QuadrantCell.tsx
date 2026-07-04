@@ -43,6 +43,8 @@ export interface QuadrantCellProps {
    * `messages.itemCount` を渡す。省略時は現行の日本語「件」にフォールバック。
    */
   itemCountLabel?: (count: number) => string;
+  /** ロックカード（`entry.locked`）のアクセシブル名を組む（i18n `messages.cardLockedLabel`）。各 NoteCard へ委譲。 */
+  lockedLabel?: (title: string) => string;
 }
 
 const DEFAULT_EMPTY_TEXT = "なし";
@@ -61,6 +63,7 @@ export function QuadrantCell({
   onHoverCard,
   regionLabel,
   itemCountLabel = DEFAULT_ITEM_COUNT,
+  lockedLabel,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
   const isDropDisabled = variant === "unclassified";
@@ -104,6 +107,7 @@ export function QuadrantCell({
               entry={entry}
               onOpenCard={onOpenCard}
               onHoverCard={onHoverCard}
+              lockedLabel={lockedLabel}
             />
           ))}
         </ul>

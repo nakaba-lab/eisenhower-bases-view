@@ -56,6 +56,38 @@ describe("MatrixView render — 状態表示", () => {
   });
 });
 
+describe("MatrixView render — 未分類非表示時の無言空表示を避けるヒント（レビュー指摘）", () => {
+  it("render — 全象限空＋未分類非表示＋未分類にカードあり なら件数入りヒントを出す（無言にしない）", () => {
+    // given: showUnclassified=false で、可視カードは全て未分類（4 象限が空）
+    const container = mountContainer();
+    const viewModel: MatrixViewModel = {
+      ...readyViewModel({ unclassified: [entry("x.md", "x"), entry("y.md", "y")] }),
+      showUnclassified: false,
+      presentation: resolvePresentation(DEFAULT_SETTINGS, messagesFor("ja")),
+    };
+    // when
+    render(container, viewModel, {});
+    // then: 未分類ゾーンは非表示だが、無言にせず件数入りヒントを出す
+    expect(container.querySelector('[aria-label^="未分類"]')).toBeNull();
+    const hint = container.querySelector(".eisenhower-matrix__unclassified-hint");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain("2 件");
+  });
+
+  it("render — 象限にカードがあればヒントは出さない（無言ではないため）", () => {
+    // given: 未分類にカードがあっても、象限にカードがあれば画面は無言でない
+    const container = mountContainer();
+    const viewModel: MatrixViewModel = {
+      ...readyViewModel({ do: [entry("a.md", "a")], unclassified: [entry("x.md", "x")] }),
+      showUnclassified: false,
+    };
+    // when
+    render(container, viewModel, {});
+    // then
+    expect(container.querySelector(".eisenhower-matrix__unclassified-hint")).toBeNull();
+  });
+});
+
 describe("MatrixView render — 2×2 グリッド配置（#19）", () => {
   it("render — ready で 4 象限セル＋未分類ゾーンを描画する", () => {
     // given

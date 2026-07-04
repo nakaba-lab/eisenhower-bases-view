@@ -116,6 +116,9 @@ export function resolveWritableAxisKeys(
   const urgent = toFrontmatterKey(ids.urgent);
   const important = toFrontmatterKey(ids.important);
   if (urgent === null || important === null) return null;
+  // 両軸が同一 frontmatter キーだと、書き戻しが同じキーを 2 度書いて後勝ちで潰れ（両軸が同値になり）
+  // カードが意図しない象限へ飛ぶ。設定ミスなので書き戻し前に弾く（Notice で通知・レビュー指摘の question）。
+  if (urgent === important) return null;
   return { urgent, important };
 }
 

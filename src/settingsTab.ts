@@ -121,7 +121,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
       .setDesc(messages.settings.languageDesc)
       .addDropdown((dropdown) =>
         dropdown
-          .addOption("auto", "Auto")
+          .addOption("auto", messages.settings.languageAuto)
           .addOption("en", "English")
           .addOption("ja", "日本語")
           .setValue(settings.language)

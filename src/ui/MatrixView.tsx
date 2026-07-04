@@ -17,6 +17,7 @@ import { messagesFor, type Messages } from "../i18n";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
 import {
   applyPendingMoves,
+  dropPending,
   isLatestGeneration,
   reconcilePendingMoves,
   rollbackFailedMove,
@@ -309,9 +310,15 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             />
           ))}
         </div>
-        {/* showUnclassified=false かつ全カードが未分類（例: 両軸が非 note.* 解決）の構成では、
-            未分類ゾーン非表示で「ready なのに何も出ない」無言の空表示になりうる（レビュー指摘 #9）。
-            非 note.* 軸の警告・件数ヒントは F4（#21）/F6（#23・切替 UI 導入時）で本格対応する。 */}
+        {/* 未分類ゾーン非表示 × 全象限が空 × 未分類にカードあり＝「ready なのに何も見えない」無言の
+            空表示を避けるヒント（レビュー指摘）。未分類が表示設定なら下の未分類ゾーンが出るため不要。 */}
+        {!showUnclassified &&
+          placements.unclassified.length > 0 &&
+          QUADRANT_KEYS.every((key) => placements[key].length === 0) && (
+            <p class="eisenhower-matrix__unclassified-hint" role="note">
+              {messages.unclassifiedHidden(placements.unclassified.length)}
+            </p>
+          )}
         {showUnclassified && (
           <QuadrantCell
             quadrant="unclassified"
@@ -339,6 +346,11 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             undoLabel={messages.undoMove}
             dismissLabel={messages.undoDismiss}
             onUndo={() => {
+              // undo は frontmatter を移動前へ戻すので、残っている楽観オーバーレイを先に落として
+              // サーバ値の表示へ戻す（さもないと reconcile が「サーバ≠保留・非 in-flight」で保留を
+              // 落とせずカードが移動先象限に貼り付く＝レビュー指摘。コマンド経由の undo（main.ts）は
+              // このハンドラを通らないため次のドラッグ/再マウントまで残りうる既知の軽微な残存）。
+              setPending((prev) => dropPending(prev, undoToast.entryId));
               // 名指しノートの entryId を渡す（記録が別移動へ置き換わっていたら戻さないガード）。
               callbacks.onUndoMove?.(undoToast.entryId);
               dismissUndoToast();

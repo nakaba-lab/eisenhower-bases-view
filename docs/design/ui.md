@@ -244,6 +244,8 @@ sequenceDiagram
 | ready・象限 0 件 | 該当象限セル内に控えめな空プレースホルダ（#19 で象限別に追加） |
 | 軸欠損ノートあり | 既定では未分類ゾーンに表示（ドロップ不可）。**`settings.showUnclassified=false` で未分類ゾーンを描画しない**（`toViewModel` が ViewModel に flag を載せ `MatrixView` が条件描画＝レビュー指摘で配線。切替 UI は設定タブ〔F6/#23〕の「欠損ノートを未分類に表示」トグルで提供済み） |
 | 非 boolean 軸値のノート | 未分類ゾーンに淡色＋鍵アイコン（`--locked`・`🔒`）で表示し**ドラッグ不可**（`entry.locked`）。ドロップの両軸 `true/false` 上書きで数値/文字列を破壊しないための封鎖。クリックで開いて値を直せる（リリース前の詰め・詳細は下記「主要な設計判断」／`bases.md`） |
+| 未分類非表示×全象限空 | `showUnclassified=false` で 4 象限が全て空・未分類にカードあり の構成は「ready なのに無言」になるため、件数入りヒント（`messages.unclassifiedHidden`・`.eisenhower-matrix__unclassified-hint`）を表示する（レビュー指摘・無言の空表示を避ける） |
+| 狭ペイン（サイドバー/縦分割） | 2×2 グリッドの単列化を**コンテナクエリ**（`.eisenhower-matrix { container-type: inline-size }` ＋ `@container (max-width:600px)`）でこのビューのペイン幅に追従させる。ビューポート幅依存の `@media` では広ウィンドウ内の狭ペインに反応しなかった（レビュー指摘） |
 | ドラッグ中 | ドラッグ元/ドロップ可象限を視覚フィードバック（#20）。ドロップで楽観的にカードを移動（書き込み確定前＝`applyPendingMoves`） |
 | 書き戻し成功 | `onDataUpdated` 自動再発火で再描画し `reconcilePendingMoves` が保留を解除して整合（keyed 差分でちらつき/スクロール維持＝#20） |
 | 書き戻し失敗 | 当該保留移動を破棄して再描画でロールバック＋`Notice` 表示（#20） |
@@ -297,4 +299,5 @@ Obsidian 実機ロードを前提とするビュー本体は Storybook での再
 - **軸の向き反転は F6 の対象外（v2）**: 要件「未決事項」で v1 は向き反転を持たないと確定済み。F6 はラベル・色・言語・欠損表示・既定軸のみ扱う。
 - **undo は「直前 1 手」の最小実装＋トリガー 2 系統（コマンド＋トースト）（人間承認済み）**: 要件「未決事項」の undo（Ctrl+Z 非統合）を最小実装する。redo・多段 undo は持たず、直前 1 手だけを `UndoManager` が保持する。トリガーはコマンド（ホットキー割当可・パレット表示）とビュー内トーストの**両方**（コマンドは発見性とキーボード運用、トーストは移動直後の即時性を担う）。却下「トーストのみ」: 発見性は高いがキーボード/後追い操作に弱い。却下「コマンドのみ」: 最小だが「今動かしたものを即戻す」導線が弱い。いずれも Obsidian ネイティブ Ctrl+Z とは非統合（独自コマンドとして登録し native undo をフックしない＝Obsidian のドキュメント編集 undo と競合させない。README/設定に明記）。
 - **undo は完全復元（absent は delete で戻す）（人間承認済み）**: undo は「移動前の状態をそのまま復元する」意味論を採り、元が未分類（軸 absent）だった移動は frontmatter キーを **delete して未分類へ戻す**。`delete` はこの undo 経路のみで、分類ドラッグ（#20）は引き続き両軸明示・delete しない（v1 boolean 軸限定の制約を崩さない）。却下「厳密 no-delete（absent 由来は undo 不可）」: 制約は厳守できるが「元に戻す」が実際には戻らない驚きを生む。捕捉値は boolean に限定せず verbatim（生値）で保持し、非 boolean の元値もデータ破壊を残さず復元する（`bases.md` の `UndoRecord`）。
+  - **（リリース前の詰め）undo 起動時に楽観オーバーレイ（`pending`）も落とす**: undo は frontmatter を移動前へ戻すが、楽観移動の `pending` が残ると `reconcilePendingMoves` が「サーバ値≠保留・非 in-flight」で保留を落とせず、`applyPendingMoves` がカードを移動先象限へ描き続ける（ファイルは正しいのに表示が食い違う）。トースト undo は `dropPending(pending, entryId)`（`optimisticMove.ts`・純関数）で該当保留を明示的に落としてサーバ値の表示へ戻す。**`reconcilePendingMoves` の意味論は変えない**（`!confirmed && !in-flight` を残す既存挙動＝settle→confirm 間に無関係な再描画が来ても flicker させない、を保つ）。コマンド経由 undo（`main.ts`）はこのハンドラを通らないため次のドラッグ/再マウントまで残りうる既知の軽微な残存（データ破壊なし）。
 - **undo トーストは分離した純 UI 部品（`UndoToast`）**: `NoteCard`/`QuadrantCell` と同じく Bases・obsidian 非依存の分離コンポーネントにして単体テスト（描画・ボタン click→`onUndo`・a11y）を可能にする。`MatrixView` は移動成功時の表示状態と解除（次ドラッグ・タイムアウト・undo 実行）だけを持つ細い結線に留める（dnd-kit 実操作の往復は手動/`frontend-reviewer` で担保する既存方針と整合）。

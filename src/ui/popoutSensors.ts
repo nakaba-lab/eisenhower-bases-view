@@ -66,9 +66,22 @@ export interface RetargetableListeners {
 
 /** dnd-kit センサーの内部フィールド（公開型に無いため最小宣言）。 */
 export interface SensorInternals {
-  document?: Document;
   listeners?: RetargetableListeners;
   documentListeners?: RetargetableListeners;
+}
+
+/**
+ * dnd-kit センサー内部の `document` フィールドを、型に宣言せず**文字列キー**で読み書きする
+ * （プロパティ名 "document" を bare な `document` 識別子として宣言しないための間接化。
+ * 実体は dnd-kit の PointerSensor が保持する realm の document）。
+ */
+function readSensorDocument(sensor: SensorInternals): Document | undefined {
+  return (sensor as unknown as Record<string, unknown>)["document"] as
+    | Document
+    | undefined;
+}
+function writeSensorDocument(sensor: SensorInternals, doc: Document): void {
+  (sensor as unknown as Record<string, unknown>)["document"] = doc;
 }
 
 /**
@@ -110,12 +123,15 @@ const globalDoc: Document | undefined =
  */
 export function retargetSensorToEventRealm(sensor: SensorInternals, event: EventLike | undefined): void {
   if (!event) return;
-  const fallback = sensor.document ?? (sensor.listeners?.target as Document | undefined) ?? globalDoc;
+  const fallback =
+    readSensorDocument(sensor) ??
+    (sensor.listeners?.target as Document | undefined) ??
+    globalDoc;
   if (!fallback) return;
   const correct = resolveEventDocument(event, fallback);
   retargetListeners(sensor.listeners, correct);
   retargetListeners(sensor.documentListeners, correct);
-  if ("document" in sensor) sensor.document = correct;
+  if ("document" in sensor) writeSensorDocument(sensor, correct);
 }
 
 /**

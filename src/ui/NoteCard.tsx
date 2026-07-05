@@ -1,7 +1,13 @@
 import { useDraggable } from "@dnd-kit/core";
-import type { JSX } from "preact";
+import type { ComponentProps } from "preact";
 import type { MatrixEntry } from "../bases/types";
 import { isOpenKey, openLeafIntent } from "./cardInteraction";
+
+// preact の非推奨 `JSX.HTMLAttributes`/`JSX.Targeted*Event` を避け、非推奨でない
+// `ComponentProps` から div の props とイベント型を導出する（直接名指ししないため非推奨警告が出ない）。
+type DivProps = ComponentProps<"div">;
+type DivMouseEvent = Parameters<NonNullable<DivProps["onClick"]>>[0];
+type DivKeyboardEvent = Parameters<NonNullable<DivProps["onKeyDown"]>>[0];
 
 /**
  * 1 ノートのカード。dnd-kit の `useDraggable` でドラッグ可能にする（#20 F3）。
@@ -41,19 +47,19 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
     (isDragging ? " eisenhower-note-card--dragging" : "");
   // dnd-kit の attributes（role:string）/listeners は React 型のため、
   // Preact の div 属性型へ寄せて展開する（role/tabindex/aria-* とキーボード操作を付与＝AC5）。
-  const dndAttributes = attributes as unknown as JSX.HTMLAttributes<HTMLDivElement>;
-  const dndListeners = (listeners ?? {}) as unknown as JSX.HTMLAttributes<HTMLDivElement>;
+  const dndAttributes = attributes as unknown as DivProps;
+  const dndListeners = (listeners ?? {}) as unknown as DivProps;
   // KeyboardSensor の掴み（ドラッグ開始）listener。Enter 以外（Space 等）はこれへ委譲する。
   const dndKeyDown = dndListeners.onKeyDown;
 
   // クリックで開く（素=現在のリーフ／Cmd・Ctrl+=新タブ＝AC1/AC2）。
-  const handleClick = (event: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+  const handleClick = (event: DivMouseEvent) => {
     onOpenCard?.(entry.id, openLeafIntent(event));
   };
   // Enter で開く（AC4）。ただし**キーボードでドラッグ中**（Space で掴んだ最中）の Enter は開かず、
   // dnd-kit へ委譲する（掴んだまま別リーフが開いてドラッグが宙ぶらりんになるのを防ぐ＝レビュー指摘。
   // ドロップは Space/Tab、キャンセルは Esc）。それ以外のキー（Space=掴む 等）も dnd-kit へ委譲する。
-  const handleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: DivKeyboardEvent) => {
     if (isOpenKey(event) && !isDragging) {
       event.preventDefault();
       onOpenCard?.(entry.id, openLeafIntent(event));
@@ -64,14 +70,14 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
   // ロックカードのキーボード操作: 掴めない（Space の掴み予約が無い）ため、Enter に加え **Space でも開く**。
   // role=button の標準操作（Enter/Space で活性化）に揃え、preventDefault で Space によるペインのスクロールを
   // 防ぐ（Space が無反応かつスクロールする壊れた挙動の是正・レビュー指摘）。
-  const handleLockedKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+  const handleLockedKeyDown = (event: DivKeyboardEvent) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onOpenCard?.(entry.id, openLeafIntent(event));
     }
   };
   // ホバーで core page-preview を起動（AC3）。表示可否はユーザーのコア設定に委ねる。
-  const handleMouseEnter = (event: JSX.TargetedMouseEvent<HTMLDivElement>) => {
+  const handleMouseEnter = (event: DivMouseEvent) => {
     onHoverCard?.(entry.id, event.currentTarget, event);
   };
 

@@ -27,7 +27,14 @@ export class EisenhowerSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  // Obsidian が設定タブを開く際に呼ぶ。実描画は render() に委譲する（minAppVersion 1.12.0 では
+  // display() が正規のフォールバック API。1.13.0 の getSettingDefinitions は使わない）。
   display(): void {
+    this.render();
+  }
+
+  // 設定タブの実描画。リセット・言語変更後の再描画にも使う（this.display() を直接呼ばない）。
+  private render(): void {
     const { containerEl } = this;
     containerEl.empty();
     const settings = this.plugin.settings;
@@ -109,7 +116,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
               settings.quadrantLabels[key] = "";
               settings.quadrantColors[key] = "";
               await this.plugin.saveSettings();
-              this.display(); // フィールド表示を既定へ戻すため再描画する。
+              this.render(); // フィールド表示を既定へ戻すため再描画する。
             }),
         );
     }
@@ -128,7 +135,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             settings.language = value as LanguageSetting;
             await this.plugin.saveSettings();
-            this.display(); // 既定ラベル placeholder を新言語で出し直すため再描画する。
+            this.render(); // 既定ラベル placeholder を新言語で出し直すため再描画する。
           }),
       );
   }

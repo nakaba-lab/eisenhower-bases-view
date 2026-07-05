@@ -1,0 +1,194 @@
+{
+  "checks": [
+    {
+      "name": "plugin enabled (eisenhower-bases-view)",
+      "pass": true,
+      "detail": [
+        "eisenhower-bases-view"
+      ]
+    },
+    {
+      "name": "bases core plugin loaded",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "plugin loaded（onload/registerBasesView 実行）",
+      "pass": true,
+      "detail": [
+        "eisenhower-bases-view"
+      ]
+    },
+    {
+      "name": "matrix view rendered (registerBasesView 往復)",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Do 象限 = [do, infolder]（フォルダ配下ノートも正配置）",
+      "pass": true,
+      "detail": [
+        "do",
+        "infolder"
+      ]
+    },
+    {
+      "name": "Schedule 象限 = [schedule]",
+      "pass": true,
+      "detail": [
+        "schedule"
+      ]
+    },
+    {
+      "name": "Delegate 象限 = [delegate]",
+      "pass": true,
+      "detail": [
+        "delegate"
+      ]
+    },
+    {
+      "name": "Delete 象限 = [delete]",
+      "pass": true,
+      "detail": [
+        "delete"
+      ]
+    },
+    {
+      "name": "未分類に absent/partial/numeric（軸欠損・非 boolean）",
+      "pass": true,
+      "detail": [
+        "absent",
+        "numeric",
+        "partial"
+      ]
+    },
+    {
+      "name": "非 boolean 軸カード numeric は locked（ドラッグ不可）",
+      "pass": true,
+      "detail": {
+        "title": "numeric",
+        "locked": true,
+        "draggable": false
+      }
+    },
+    {
+      "name": "軸欠損カード absent は draggable（locked でない）",
+      "pass": true,
+      "detail": {
+        "title": "absent",
+        "locked": false,
+        "draggable": true
+      }
+    },
+    {
+      "name": "ドラッグ書き戻し: schedule.md が urgent:true/important:true になった（processFrontMatter）",
+      "pass": true,
+      "detail": "urgent: true | important: true"
+    },
+    {
+      "name": "onDataUpdated が書き戻し後に自動再発火した（手動再描画なし）",
+      "pass": true,
+      "detail": 1
+    },
+    {
+      "name": "再描画後、schedule カードが Do 象限に配置される",
+      "pass": true,
+      "detail": [
+        "do",
+        "infolder",
+        "schedule"
+      ]
+    },
+    {
+      "name": "undo コマンドで schedule.md が元（urgent:false/important:true）へ復元",
+      "pass": true,
+      "detail": "urgent: false | important: true"
+    }
+  ],
+  "dom": [
+    {
+      "title": "Do",
+      "count": "2",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "do",
+          "locked": false,
+          "draggable": true
+        },
+        {
+          "title": "infolder",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Schedule",
+      "count": "1",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "schedule",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Delegate",
+      "count": "1",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "delegate",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Delete",
+      "count": "1",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "delete",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Unclassified",
+      "count": "3",
+      "unclassified": true,
+      "cards": [
+        {
+          "title": "absent",
+          "locked": false,
+          "draggable": true
+        },
+        {
+          "title": "numeric",
+          "locked": true,
+          "draggable": false
+        },
+        {
+          "title": "partial",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    }
+  ],
+  "writeBack": {
+    "before": "urgent: false | important: true",
+    "after": "urgent: true | important: true",
+    "onDataUpdatedCount": 1
+  },
+  "undo": {
+    "before": "urgent: true | important: true",
+    "after": "urgent: false | important: true"
+  }
+}

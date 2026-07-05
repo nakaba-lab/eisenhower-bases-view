@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 OBS_VERSION="${OBS_VERSION:-1.12.7}"
 PLUGIN_MAIN="${PLUGIN_MAIN:-$REPO_ROOT/main.js}"
-VIEW_TYPE="${VIEW_TYPE:-eisenhower-spike}"
+VIEW_TYPE="${VIEW_TYPE:-eisenhower-matrix}"
 CDP_PORT="${CDP_PORT:-9222}"
 WORK="${WORK:-$(mktemp -d -t obs-e2e-XXXXXX)}"
 
@@ -31,19 +31,22 @@ if [ ! -x "$OBS_BIN" ]; then
 fi
 echo "[e2e] obsidian binary: $OBS_BIN"
 
-# 2) テスト Vault（absent/false/true を網羅）
+# 2) テスト Vault（absent/false/true/非 boolean/フォルダを網羅）
+mkdir -p "$VAULT/Project"
 printf -- '---\nurgent: true\nimportant: true\n---\n# Do\n'       > "$VAULT/do.md"
 printf -- '---\nurgent: false\nimportant: true\n---\n# Schedule\n' > "$VAULT/schedule.md"
 printf -- '---\nurgent: true\nimportant: false\n---\n# Delegate\n' > "$VAULT/delegate.md"
 printf -- '---\nurgent: false\nimportant: false\n---\n# Delete\n'  > "$VAULT/delete.md"
 printf -- '---\ntag: misc\n---\n# Absent\n'                        > "$VAULT/absent.md"
 printf -- '---\nurgent: true\n---\n# Partial\n'                    > "$VAULT/partial.md"
+printf -- '---\nurgent: 3\nimportant: true\n---\n# Numeric\n'      > "$VAULT/numeric.md"
+printf -- '---\nurgent: true\nimportant: true\n---\n# In folder\n' > "$VAULT/Project/infolder.md"
 cat > "$VAULT/Eisenhower.base" <<YAML
 views:
   - type: $VIEW_TYPE
-    name: Spike
-    urgencyProperty: note.urgent
-    importanceProperty: note.important
+    name: Eisenhower
+    urgentProperty: note.urgent
+    importantProperty: note.important
 YAML
 cp "$PLUGIN_DIR_SRC/main.js" "$PLUGIN_DIR_SRC/manifest.json" "$PLUGIN_DIR_SRC/styles.css" "$PLUGDIR/" 2>/dev/null || \
   cp "$PLUGIN_MAIN" "$PLUGDIR/main.js"

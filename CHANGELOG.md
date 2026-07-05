@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-05
+
 ### Changed
 
 - プラグインの表示名を「Eisenhower Matrix」から「**Eisenhower Matrix for Bases**」へ変更（コミュニティプラグイン申請にあたり、既存の同名プラグインとの重複を回避するため。id `eisenhower-bases-view` は不変）。

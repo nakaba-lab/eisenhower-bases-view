@@ -245,6 +245,23 @@ describe("toViewModel — 非 boolean 軸カードのロック（ドラッグ不
     // when / then
     expect(toViewModel(entries, null, DEFAULT_SETTINGS).placements.do[0].locked).toBeUndefined();
   });
+
+  it("toViewModel — 両軸が同一キー設定のとき、象限配置された boolean カードも locked=true（掴めるのに必ず失敗する状態の封鎖・レビュー指摘）", () => {
+    // given: 緊急・重要の両方に同じ note.urgent を割り当てた設定ミス。両軸が同値になり do に載って掴めるが、
+    //        書き戻しは resolveWritableAxisKeys の urgent===important ガードで毎回失敗する。
+    const sameKeyConfig = {
+      getAsPropertyId: (key: string): BasesPropertyId | null =>
+        key === "urgentProperty" || key === "importantProperty"
+          ? ("note.urgent" as BasesPropertyId)
+          : null,
+    };
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { placements } = toViewModel(entries, sameKeyConfig, DEFAULT_SETTINGS);
+    // then: do 象限に載るが locked=true（UI がドラッグ不可にして無駄な失敗ループを防ぐ）
+    const card = placements.do.find((e) => e.id === "a.md");
+    expect(card?.locked).toBe(true);
+  });
 });
 
 describe("toViewModel — 数百件スケール（純パイプラインの回帰ガード）", () => {

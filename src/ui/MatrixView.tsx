@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import {
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
   useSensor,
   useSensors,
   type DragCancelEvent,
@@ -13,6 +11,9 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+// #44: ポップアウト別ウィンドウでカードを掴めるよう、realm 堅牢な派生 sensor を使う
+//（dnd-kit の生 sensor は cross-realm ノードで move リスナーをメイン document に張り掴めない）。
+import { PopoutKeyboardSensor, PopoutPointerSensor } from "./popoutSensors";
 import { QUADRANT_KEYS, axisValuesForQuadrant, type Quadrant } from "../logic/quadrant";
 import { messagesFor, type Messages } from "../i18n";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
@@ -95,8 +96,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 5px 未満の移動は掴みにせずクリックとして成立させる。KeyboardSensor の起動/ドロップキーは
   // Space のみに remap し、Enter を「開く」（NoteCard の onKeyDown）へ解放する。
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
+    useSensor(PopoutPointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PopoutKeyboardSensor, {
       // start は Space のみ（Enter は「開く」に解放）。end は Space に加え **Tab も残す**＝
       // ドラッグ中に Tab でフォーカスを移すと dnd-kit がドロップ確定する既定挙動を保つ（Enter だけ外す。レビュー指摘）。
       keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Tab"] },
@@ -128,9 +129,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       // 自動消滅でも、フォーカスがトースト内にある（キーボードで元に戻す/×へ移して待っていた）なら
       // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない
       // （activeElement ガード＝ボタン操作時の戻し〔レビュー第3周〕と同じ失敗クラスの自動消滅経路を塞ぐ）。
-      const toast = matrixSectionRef.current?.querySelector(".eisenhower-undo-toast");
-      if (toast?.contains(document.activeElement)) {
-        matrixSectionRef.current?.focus();
+      // フォーカス判定はビューが属する document の activeElement を見る（グローバル `document.activeElement`
+      // はポップアウト別ウィンドウではメイン window を指し、#44 と同じ document 取り違えになるため）。
+      const section = matrixSectionRef.current;
+      const toast = section?.querySelector(".eisenhower-undo-toast");
+      if (toast?.contains(section?.ownerDocument.activeElement ?? null)) {
+        section?.focus();
       }
       setUndoToast(null);
     }, UNDO_TOAST_TIMEOUT_MS);
@@ -391,8 +395,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
           別ウィンドウでもそのビュー自身の window に描く（`document.body` グローバル固定だと popout 時に
           overlay がメイン window へ出て消える）。matrixSectionRef はドラッグ中（activeId 非 null）は必ず
           mount 済みで埋まっており、`?? document.body` は activeId=null の描画前だけ通る（そのとき overlay は
-          空で実害なし）。「ポップアウトでカードを掴めない」件（センサーの別 document 解決）は本 portal とは
-          別問題＝#44 で追跡。 */}
+          空で実害なし）。「ポップアウトでカードを掴めない」件（#44）は本 portal とは別問題。原因調査で
+          起票時の見立て（センサーの別 document 解決）は反証済み＝dnd-kit 6.3.1 の掴み経路は
+          `getOwnerDocument(event.target)`/`getWindow(event.target)`（`ownerDocument.defaultView`）で popout を
+          正しく解決し realm 安全。真因は活性化/イベント配線側が最有力で実機プローブ待ち（v1 対応・要件 §9）。 */}
       {createPortal(
         <DragOverlay>
           {activeId ? (

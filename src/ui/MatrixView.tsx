@@ -101,7 +101,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     { message: string; entryId: string } | null
   >(null);
   // トーストの自動消滅タイマー（次のドラッグ開始・undo 実行・アンマウントでもクリアする）。
-  const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToastTimerRef = useRef<number | null>(null);
   // トースト内にポインタ/フォーカスがあるか（自動消滅の一時停止判定・WCAG 2.2.1）。
   // 両方が外に出たときだけタイマーを再開する（focus 片側だけで判定する非対称を避ける・round2 指摘）。
   const pointerInsideToastRef = useRef(false);
@@ -132,7 +132,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 自動消滅タイマーを止める（show/dismiss/アンマウントで共有）。
   const clearUndoToastTimer = () => {
     if (undoToastTimerRef.current !== null) {
-      clearTimeout(undoToastTimerRef.current);
+      window.clearTimeout(undoToastTimerRef.current);
       undoToastTimerRef.current = null;
     }
   };
@@ -152,7 +152,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 自動消滅タイマーを（再）予約する。予約済みなら張り替える。
   const scheduleUndoToastAutoDismiss = () => {
     clearUndoToastTimer();
-    undoToastTimerRef.current = setTimeout(() => {
+    undoToastTimerRef.current = window.setTimeout(() => {
       undoToastTimerRef.current = null;
       // 自動消滅でも、フォーカスがトースト内にある（キーボードで元に戻す/×へ移して待っていた）なら
       // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない。
@@ -452,7 +452,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             </div>
           ) : null}
         </DragOverlay>,
-        matrixSectionRef.current?.ownerDocument.body ?? document.body,
+        matrixSectionRef.current?.ownerDocument.body ?? activeDocument.body,
       )}
     </DndContext>
   );

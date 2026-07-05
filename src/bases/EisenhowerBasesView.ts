@@ -12,7 +12,12 @@ import { resolvePresentation } from "./presentation";
 import { resolveWritableAxisKeys } from "./readAxis";
 import { runUndo } from "./undoWriteBack";
 import { VIEW_ID } from "./registerView";
-import { capturePreviousAxes, type UndoManager, type UndoRecord } from "../logic/undo";
+import {
+  capturePreviousAxes,
+  type FrontmatterLike,
+  type UndoManager,
+  type UndoRecord,
+} from "../logic/undo";
 import type { AxisWriteValues, MatrixCallbacks } from "./types";
 import type { EisenhowerSettings } from "../settings";
 import type { Messages } from "../i18n";
@@ -151,7 +156,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     // 書き込み成功後に UndoManager へ「直前 1 手」として保存する（undo・最小実装）。
     let undoRecord: UndoRecord | null = null;
     try {
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
         undoRecord = {
           entryId,
           title: file.basename,

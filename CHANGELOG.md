@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-06
+
+### Changed
+
+- Obsidian コミュニティ申請の自動レビュー指摘に対応した（挙動は不変・256 PASS）。アプリ表示言語の取得を公式 API `getLanguage()` に置換。ポップアウト別ウィンドウ互換のため、タイマーを `window.setTimeout`/`window.clearTimeout` に、フォールバックのドキュメント参照を `activeDocument` に統一。frontmatter・UI コールバック・メッセージの型安全性を強化（`FrontmatterLike` 明示・プロパティ構文化・不要なアサーション除去）。ビルドの `builtin-modules` を Node 標準の `node:module` に置換。
+- リリース資産（`main.js`/`manifest.json`/`styles.css`）に GitHub Artifact Attestations（provenance）を付与し、`gh attestation verify` でビルド由来を検証できるようにした。
+
 ## [0.1.2] - 2026-07-06
 
 ### Added

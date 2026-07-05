@@ -4,8 +4,8 @@
       "name": "接続先が想定テスト Vault（別/実 Obsidian への誤接続防止）",
       "pass": true,
       "detail": {
-        "connected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e3/vault",
-        "expected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e3/vault"
+        "connected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e4/vault",
+        "expected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e4/vault"
       }
     },
     {

@@ -111,9 +111,13 @@ const reopenBaseAndReadDo = async () => {
   // 接続先が**想定のテスト Vault**であることを確認する。ポート衝突等で別/ユーザーの実 Obsidian に
   // 誤接続していた場合、以降のドラッグ書き戻し・undo が無関係な（最悪ユーザーの実）Vault を破壊しうるため、
   // 不一致なら何も操作せず即中止する（起動前ポートチェックの TOCTOU をここで確定的に塞ぐ・PR#48 r2 指摘）。
+  // VAULT は readFm でも必須。未設定だと誤接続ガードが無力化する（別 Vault を操作しうる）ため fail-closed にする。
+  if (!VAULT) { check("VAULT env が設定されている（誤接続ガードの前提）", false, "VAULT unset"); dump(); await browser.close(); process.exit(4); }
   const vaultPath = await page.evaluate(() => window.app?.vault?.adapter?.basePath ?? null);
-  const expectVault = VAULT ? require("path").resolve(VAULT) : null;
-  const okVault = !expectVault || (vaultPath && require("path").resolve(vaultPath) === expectVault);
+  // symlink 差異（macOS /var→/private/var・symlinked TMPDIR 等）で正当な Vault を誤って弾かないよう realpath 正規化する。
+  const canon = (p) => { try { return fs.realpathSync(p); } catch (_) { return path.resolve(p); } };
+  const expectVault = canon(VAULT);
+  const okVault = vaultPath != null && canon(vaultPath) === expectVault;
   check("接続先が想定テスト Vault（別/実 Obsidian への誤接続防止）", okVault, { connected: vaultPath, expected: expectVault });
   if (!okVault) { rec("FATAL", "connected to unexpected vault; aborting to avoid mutating a foreign vault"); dump(); await browser.close(); process.exit(4); }
 

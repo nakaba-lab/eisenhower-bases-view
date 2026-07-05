@@ -62,6 +62,17 @@ Obsidian の Bases（コアのデータベース機能）の**カスタムビュ
 
 ---
 
+## Support / 支援
+
+This plugin is free and open source (MIT). If it helps you, you can support its development:
+
+- **GitHub Sponsors** (recurring): https://github.com/sponsors/nakata5577
+- **Ko-fi** (one-time tip): https://ko-fi.com/nakata5577
+
+本プラグインは無料・オープンソース（MIT）です。役立ったら開発の支援をいただけると励みになります（GitHub Sponsors：継続／Ko-fi：単発）。Obsidian のプラグイン詳細ページの「Donate」からも同じ導線にアクセスできます。
+
+---
+
 ## 開発 / Development
 
 | 目的 / Purpose | コマンド / Command |

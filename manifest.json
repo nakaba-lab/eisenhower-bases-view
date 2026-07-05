@@ -1,9 +1,13 @@
 {
   "id": "eisenhower-bases-view",
   "name": "Eisenhower Matrix for Bases",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAppVersion": "1.12.0",
   "description": "Display notes from a Base as an Eisenhower matrix and drag cards to update their properties.",
   "author": "Takahiro.N",
+  "fundingUrl": {
+    "GitHub Sponsors": "https://github.com/sponsors/nakata5577",
+    "Ko-fi": "https://ko-fi.com/nakata5577"
+  },
   "isDesktopOnly": true
 }

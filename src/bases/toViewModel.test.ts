@@ -262,6 +262,22 @@ describe("toViewModel — 非 boolean 軸カードのロック（ドラッグ不
     const card = placements.do.find((e) => e.id === "a.md");
     expect(card?.locked).toBe(true);
   });
+
+  it("toViewModel — 両軸同一キーのとき未分類カードにも locked=true が一貫して付く（象限に関わらず全カードをロック）", () => {
+    // given: 両軸に同じ note.urgent を割り当て、その軸が absent のカード（両軸 absent → 未分類）
+    const sameKeyConfig = {
+      getAsPropertyId: (key: string): BasesPropertyId | null =>
+        key === "urgentProperty" || key === "importantProperty"
+          ? ("note.urgent" as BasesPropertyId)
+          : null,
+    };
+    const entries = [mockEntry("u.md", "u", ABSENT, ABSENT)];
+    // when
+    const { placements } = toViewModel(entries, sameKeyConfig, DEFAULT_SETTINGS);
+    // then: 未分類ゾーンのカードにも locked が付く（同一キーは象限に関わらず全カード一律ロック）
+    const card = placements.unclassified.find((e) => e.id === "u.md");
+    expect(card?.locked).toBe(true);
+  });
 });
 
 describe("toViewModel — 数百件スケール（純パイプラインの回帰ガード）", () => {

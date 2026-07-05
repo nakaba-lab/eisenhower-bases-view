@@ -1,3 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument --
+   このファイルは Astro の仮想モジュール（astro:content）と Loader API（astro/loaders）に依存する
+   ドキュメントサイト設定。Astro が生成する型（.astro/types.d.ts）を持たない lint 環境ではこれらが
+   any に解決され no-unsafe-* が大量に出るが、docs-site は非プラグイン（プラグインバンドル main.js に
+   含まれない）ため、この設定ファイルに限り型安全ルールを緩める。実際の型検証は docs-site の
+   `astro check`（Pages ビルドの成功条件）が担う。 */
 import { defineCollection, z } from 'astro:content';
 import { docsSchema } from '@astrojs/starlight/schema';
 import { glob } from 'astro/loaders';

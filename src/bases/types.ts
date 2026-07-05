@@ -93,7 +93,7 @@ export interface MatrixCallbacks {
    * UI は修飾キーから `newLeaf`（新タブ可否）を算出して渡すだけで、`file.path`（=entryId）からの
    * `TFile` 解決と `workspace.getLeaf(...).openFile(...)` はアダプタが担う（UI は `obsidian` 型に触れない＝AC5）。
    */
-  onOpenCard?(entryId: string, opts: { newLeaf: boolean }): void;
+  onOpenCard?: (entryId: string, opts: { newLeaf: boolean }) => void;
   /**
    * カードのホバーでページプレビューを起動する（#22 F5・AC3）。
    *
@@ -101,7 +101,7 @@ export interface MatrixCallbacks {
    *（実際に表示するかはユーザーのコア「ページプレビュー」設定に委ねる）。
    * `targetEl` はプレビュー位置決めに使うカード要素、`event` は発火元のマウスイベント。
    */
-  onHoverCard?(entryId: string, targetEl: HTMLElement, event: MouseEvent): void;
+  onHoverCard?: (entryId: string, targetEl: HTMLElement, event: MouseEvent) => void;
   /**
    * 直前 1 手の移動を元に戻す（undo・最小実装）。
    *

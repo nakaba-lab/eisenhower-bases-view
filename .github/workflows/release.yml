@@ -16,6 +16,8 @@ on:
 # リリースを作る本ジョブに限定して write を与える（他ワークフローには波及しない）。
 permissions:
   contents: write
+  id-token: write # artifact attestation の provenance 署名（OIDC）
+  attestations: write # attestation の書き込み
 
 jobs:
   release:
@@ -41,6 +43,16 @@ jobs:
           fi
       - name: Build plugin bundle
         run: npm run build
+      # リリース資産の provenance（このリポジトリのこのワークフローでビルドされた証明）を
+      # GitHub Artifact Attestations で生成する。利用者は `gh attestation verify <file> --repo <repo>`
+      # で検証できる（Obsidian レビューの Releases 推奨事項）。
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
       # main.js は gitignore（リリースにのみ添付）。3 ファイルを添付した Release を作成する。
       - name: Create GitHub Release with plugin assets
         env:

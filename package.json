@@ -1,6 +1,6 @@
 {
   "name": "eisenhower-bases-view",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Display notes from a Base as an Eisenhower matrix and drag cards to update their properties.",
   "main": "main.js",
   "scripts": {
@@ -29,7 +29,6 @@
   "devDependencies": {
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^22.7.0",
-    "builtin-modules": "^4.0.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.6.0",
     "eslint-plugin-jsx-a11y": "^6.10.0",

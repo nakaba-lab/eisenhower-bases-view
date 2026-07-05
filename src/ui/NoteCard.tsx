@@ -44,9 +44,7 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
   const dndAttributes = attributes as unknown as JSX.HTMLAttributes<HTMLDivElement>;
   const dndListeners = (listeners ?? {}) as unknown as JSX.HTMLAttributes<HTMLDivElement>;
   // KeyboardSensor の掴み（ドラッグ開始）listener。Enter 以外（Space 等）はこれへ委譲する。
-  const dndKeyDown = dndListeners.onKeyDown as
-    | ((event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => void)
-    | undefined;
+  const dndKeyDown = dndListeners.onKeyDown;
 
   // クリックで開く（素=現在のリーフ／Cmd・Ctrl+=新タブ＝AC1/AC2）。
   const handleClick = (event: JSX.TargetedMouseEvent<HTMLDivElement>) => {

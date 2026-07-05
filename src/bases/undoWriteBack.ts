@@ -1,5 +1,10 @@
 import { Notice, TFile, type App } from "obsidian";
-import { applyUndo, isUndoApplicable, type UndoManager } from "../logic/undo";
+import {
+  applyUndo,
+  type FrontmatterLike,
+  isUndoApplicable,
+  type UndoManager,
+} from "../logic/undo";
 import type { Messages } from "../i18n";
 
 /**
@@ -42,7 +47,7 @@ export async function runUndo(
     // 軸値が外部で書き換えられていた場合は、無関係なノートの frontmatter を上書き/delete しない
     // （undo は唯一の delete 経路のため、適用前に同一性を照合する＝レビュー指摘）。
     let applied = false;
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
       if (!isUndoApplicable(frontmatter, record)) return;
       applyUndo(frontmatter, record);
       applied = true;

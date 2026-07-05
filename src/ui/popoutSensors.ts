@@ -100,9 +100,9 @@ export function retargetListeners(
   }
 }
 
-/** 掴み用グローバル document（バンドルが読み込まれたメイン window の document）。 */
+/** 掴み用フォールバック document（現在アクティブな realm の document＝popout 対応）。 */
 const globalDoc: Document | undefined =
-  typeof document !== "undefined" ? document : undefined;
+  typeof activeDocument !== "undefined" ? activeDocument : undefined;
 
 /**
  * dnd-kit センサーの move/up/keydown リスナーを、活性化イベントの realm から解決した

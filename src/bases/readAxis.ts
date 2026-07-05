@@ -123,6 +123,20 @@ export function resolveWritableAxisKeys(
 }
 
 /**
+ * 両軸が**同一の書き戻し可能 `note.*` キー**を指すか（設定ミス）を判定する。
+ *
+ * 同一キーだと両軸値が常に同値になり、カードは do/delete の実象限に載って掴めるのに、書き戻しは
+ * `resolveWritableAxisKeys` の `urgent === important` ガードで毎回 `null`→Notice→ロールバックになる
+ *（「掴めるのに必ず失敗する」壊れた UI 状態）。UI 側で当該ビューの全カードをドラッグ不可（`locked`）に
+ * するために、`toViewModel` がこの述語で検出する（書き込み前ガードと対称の読み取り側ガード・レビュー指摘）。
+ */
+export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  return urgent !== null && urgent === important;
+}
+
+/**
  * 1 軸の Value を boolean | undefined に正規化する（v1 は boolean 軸限定・#34）。
  * `getValue` 自体の null と、値の型が `BooleanValue` でないもの（absent＝`NullValue`・
  * 非 boolean＝`NumberValue`／`StringValue` 等）を `undefined`（未分類）へ退避し、

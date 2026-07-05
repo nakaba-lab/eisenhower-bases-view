@@ -63,6 +63,15 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
     }
     dndKeyDown?.(event);
   };
+  // ロックカードのキーボード操作: 掴めない（Space の掴み予約が無い）ため、Enter に加え **Space でも開く**。
+  // role=button の標準操作（Enter/Space で活性化）に揃え、preventDefault で Space によるペインのスクロールを
+  // 防ぐ（Space が無反応かつスクロールする壊れた挙動の是正・レビュー指摘）。
+  const handleLockedKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpenCard?.(entry.id, openLeafIntent(event));
+    }
+  };
   // ホバーで core page-preview を起動（AC3）。表示可否はユーザーのコア設定に委ねる。
   const handleMouseEnter = (event: JSX.TargetedMouseEvent<HTMLDivElement>) => {
     onHoverCard?.(entry.id, event.currentTarget, event);
@@ -80,7 +89,7 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
           tabIndex={0}
           aria-label={lockedLabel ? lockedLabel(entry.title) : entry.title}
           onClick={handleClick}
-          onKeyDown={handleKeyDown}
+          onKeyDown={handleLockedKeyDown}
           onMouseEnter={handleMouseEnter}
         >
           <span class="eisenhower-note-card__lock" aria-hidden="true">

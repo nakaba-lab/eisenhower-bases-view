@@ -1,5 +1,5 @@
 import { Notice, TFile, type App } from "obsidian";
-import { applyUndo, type UndoManager } from "../logic/undo";
+import { applyUndo, isUndoApplicable, type UndoManager } from "../logic/undo";
 import type { Messages } from "../i18n";
 
 /**
@@ -38,13 +38,22 @@ export async function runUndo(
   }
 
   try {
+    // 記録した書き込み値が現状と一致する場合のみ復元する。移動後にパスが別ノートで再利用されたり、
+    // 軸値が外部で書き換えられていた場合は、無関係なノートの frontmatter を上書き/delete しない
+    // （undo は唯一の delete 経路のため、適用前に同一性を照合する＝レビュー指摘）。
+    let applied = false;
     await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      if (!isUndoApplicable(frontmatter, record)) return;
       applyUndo(frontmatter, record);
+      applied = true;
     });
+    // 成否に関わらず記録は消費する（陳腐化した記録を残して繰り返し誤適用しない）。
     undoManager.clear();
-    new Notice(`Eisenhower Matrix: ${messages.undone(record.title)}`);
+    new Notice(
+      `Eisenhower Matrix: ${applied ? messages.undone(record.title) : messages.noUndo}`,
+    );
   } catch (error) {
-    console.error("[Eisenhower Matrix] undo の復元に失敗しました", error);
+    console.error("[Eisenhower Matrix] failed to restore frontmatter for undo", error);
     new Notice(`Eisenhower Matrix: ${messages.undoFailed(record.title)}`);
   }
 }

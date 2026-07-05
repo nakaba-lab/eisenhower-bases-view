@@ -245,6 +245,39 @@ describe("toViewModel — 非 boolean 軸カードのロック（ドラッグ不
     // when / then
     expect(toViewModel(entries, null, DEFAULT_SETTINGS).placements.do[0].locked).toBeUndefined();
   });
+
+  it("toViewModel — 両軸が同一キー設定のとき、象限配置された boolean カードも locked=true（掴めるのに必ず失敗する状態の封鎖・レビュー指摘）", () => {
+    // given: 緊急・重要の両方に同じ note.urgent を割り当てた設定ミス。両軸が同値になり do に載って掴めるが、
+    //        書き戻しは resolveWritableAxisKeys の urgent===important ガードで毎回失敗する。
+    const sameKeyConfig = {
+      getAsPropertyId: (key: string): BasesPropertyId | null =>
+        key === "urgentProperty" || key === "importantProperty"
+          ? ("note.urgent" as BasesPropertyId)
+          : null,
+    };
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { placements } = toViewModel(entries, sameKeyConfig, DEFAULT_SETTINGS);
+    // then: do 象限に載るが locked=true（UI がドラッグ不可にして無駄な失敗ループを防ぐ）
+    const card = placements.do.find((e) => e.id === "a.md");
+    expect(card?.locked).toBe(true);
+  });
+
+  it("toViewModel — 両軸同一キーのとき未分類カードにも locked=true が一貫して付く（象限に関わらず全カードをロック）", () => {
+    // given: 両軸に同じ note.urgent を割り当て、その軸が absent のカード（両軸 absent → 未分類）
+    const sameKeyConfig = {
+      getAsPropertyId: (key: string): BasesPropertyId | null =>
+        key === "urgentProperty" || key === "importantProperty"
+          ? ("note.urgent" as BasesPropertyId)
+          : null,
+    };
+    const entries = [mockEntry("u.md", "u", ABSENT, ABSENT)];
+    // when
+    const { placements } = toViewModel(entries, sameKeyConfig, DEFAULT_SETTINGS);
+    // then: 未分類ゾーンのカードにも locked が付く（同一キーは象限に関わらず全カード一律ロック）
+    const card = placements.unclassified.find((e) => e.id === "u.md");
+    expect(card?.locked).toBe(true);
+  });
 });
 
 describe("toViewModel — 数百件スケール（純パイプラインの回帰ガード）", () => {

@@ -66,3 +66,33 @@ describe("UndoToast — 表示と配線（undo・draft）", () => {
     expect(dismiss.tagName).toBe("BUTTON");
   });
 });
+
+describe("UndoToast — 自動消滅の一時停止/再開の配線（WCAG 2.2.1・レビュー指摘）", () => {
+  it("UndoToast_ポインタの出入りを onPointerInside(true/false) で通知する（フォーカスと別系統）", () => {
+    // given
+    const onPointerInside = vi.fn();
+    const onFocusInside = vi.fn();
+    render(<UndoToast {...props({ onPointerInside, onFocusInside })} />);
+    const region = screen.getByRole("group", { name: "移動の取り消し" });
+    // when: ポインタがトーストへ入る→出る
+    fireEvent.mouseEnter(region);
+    fireEvent.mouseLeave(region);
+    // then: pointer 側だけが true→false で通知され、focus 側は動かない（別々に扱う＝非対称の是正）
+    expect(onPointerInside.mock.calls.map((c) => c[0])).toEqual([true, false]);
+    expect(onFocusInside).not.toHaveBeenCalled();
+  });
+
+  it("UndoToast_フォーカスの出入りを onFocusInside(true/false) で通知する（ポインタと別系統・キーボード/AT）", () => {
+    // given
+    const onPointerInside = vi.fn();
+    const onFocusInside = vi.fn();
+    render(<UndoToast {...props({ onPointerInside, onFocusInside })} />);
+    const undo = screen.getByRole("button", { name: "元に戻す" });
+    // when: 子ボタンの focus/blur は capture 段でトースト領域に伝わる（focus/blur はバブルしない）
+    fireEvent.focus(undo);
+    fireEvent.blur(undo);
+    // then: focus 側だけが true→false で通知され、pointer 側は動かない
+    expect(onFocusInside.mock.calls.map((c) => c[0])).toEqual([true, false]);
+    expect(onPointerInside).not.toHaveBeenCalled();
+  });
+});

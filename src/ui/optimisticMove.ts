@@ -161,6 +161,26 @@ export function dropPending(
   return next;
 }
 
+/**
+ * ドロップ先の目的両軸値が現在値と同一（＝同一象限への無駄打ち）かを判定する純関数。
+ *
+ * `handleDragEnd` の「既に同じ分類なら書き戻さない」no-op ガードを純化して単体テストで固定する
+ *（同値なら `true`＝スキップ）。`current` が未知（保留にもサーバ entries にも無い）の場合は
+ * `false`＝スキップしない（移動として扱う＝防御。存在しないカードを黙って握りつぶさない）。
+ * `current` の軸は `boolean | undefined`（absent=未分類）を取りうるが、`target` は常に boolean
+ *（4 象限の書き込み値）なので、未分類（undefined）からの移動は必ず不一致＝スキップされない。
+ */
+export function shouldSkipMove(
+  current: { urgent: boolean | undefined; important: boolean | undefined } | undefined,
+  target: { urgent: boolean; important: boolean },
+): boolean {
+  return (
+    current !== undefined &&
+    current.urgent === target.urgent &&
+    current.important === target.important
+  );
+}
+
 /** settle 時にスクリーンリーダーへ何を通知するか。 */
 export type SettleAnnouncement = "success" | "failure" | "silent";
 

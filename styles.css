@@ -183,11 +183,14 @@
 }
 
 /* ドラッグ不可のロックカード（書込可能 note.* 軸に非 boolean 値を持ち、ドロップの両軸 true/false
- * 上書きで元値が破壊されるため掴ませない・#34 補完）。grab カーソルを外し淡色＋鍵アイコンで
- * 「移動できない」ことを視覚化する。クリックで開く導線は残すため pointer にはしない。 */
+ * 上書きで元値が破壊されるため掴ませない・#34 補完）。grab カーソルを外し、鍵アイコン＋弱色で
+ * 「移動できない」ことを視覚化する。クリックで開く導線は残すため pointer にはしない。
+ * カード全体を opacity で薄くすると、まだ開ける（role=button・tabindex=0）タイトル文字まで
+ * 実効コントラストが下がり WCAG AA を割りうるため、opacity ではなく AA を満たすテーマの弱色トークン
+ *（--text-muted）で色だけ落とす（タイトルの可読性を保つ・レビュー指摘）。 */
 .eisenhower-note-card--locked {
   cursor: default;
-  opacity: 0.6;
+  color: var(--text-muted);
 }
 
 .eisenhower-note-card__lock {

@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type EisenhowerSettings } from "../settings";
 import { classifyQuadrant } from "../logic/quadrant";
 import { messagesFor, type Messages } from "../i18n";
 import {
+  axesShareWritableKey,
   hasUnsupportedAxisValue,
   readAxisValues,
   resolveAxisPropertyIds,
@@ -43,7 +44,9 @@ export function toViewModel(
   entries: readonly BasesEntry[] | undefined | null,
   config?: Pick<BasesViewConfig, "getAsPropertyId"> | null,
   settings: EisenhowerSettings = DEFAULT_SETTINGS,
-  messages: Messages = messagesFor("ja"),
+  // messages 省略時は英語へフォールバックする（resolveLanguage の最終フォールバックが en＝
+  // i18n の既定言語。実機ではアダプタが解決済みメッセージを常に渡す・レビュー指摘）。
+  messages: Messages = messagesFor("en"),
 ): MatrixViewModel {
   // ラベル/色/言語文言を解決して UI へ渡す（#23 F6）。状態に依らず常に載せる。
   const presentation = resolvePresentation(settings, messages);
@@ -62,6 +65,9 @@ export function toViewModel(
   }
 
   const ids = resolveAxisPropertyIds(config, settings);
+  // 両軸が同一 note.* キー（設定ミス）だと書き戻しが必ず失敗するため、当該ビューの全カードを
+  // ドラッグ不可にして「掴めるのに必ず失敗する」状態を作らない（書込前ガードと対称・レビュー指摘）。
+  const sameAxisKey = axesShareWritableKey(ids);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
     const axis = readAxisValues(entry, ids);
@@ -72,9 +78,9 @@ export function toViewModel(
       urgent: axis.urgent,
       important: axis.important,
     };
-    // 書込可能 note.* 軸に非 boolean 値を持つカードは、ドロップの両軸 true/false 上書きで
-    // 元値を破壊するためドラッグ不可にする（UI が印を付ける）。true のときだけ載せる（欠損カードには付けない）。
-    if (hasUnsupportedAxisValue(entry, ids)) matrixEntry.locked = true;
+    // 書込可能 note.* 軸に非 boolean 値を持つカード、または両軸が同一キー設定のカードは、ドロップの
+    // 両軸 true/false 上書きが破壊/必ず失敗になるためドラッグ不可にする（UI が印を付ける）。
+    if (sameAxisKey || hasUnsupportedAxisValue(entry, ids)) matrixEntry.locked = true;
     placements[quadrant].push(matrixEntry);
     return matrixEntry;
   });

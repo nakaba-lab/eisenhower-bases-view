@@ -7,6 +7,7 @@ import {
   reconcilePendingMoves,
   rollbackFailedMove,
   settleAnnouncement,
+  shouldSkipMove,
   type PendingMoves,
 } from "./optimisticMove";
 
@@ -305,5 +306,36 @@ describe("settleAnnouncement — settle 結果から SR 通知種別を決める
 
   it("settleAnnouncement — superseded な成功は silent（古い書き込みの成功で象限を読み上げない）", () => {
     expect(settleAnnouncement(false, false)).toBe("silent");
+  });
+});
+
+describe("shouldSkipMove — 同一象限への無駄打ちを弾く純関数（#9 の no-op ガード）", () => {
+  it("shouldSkipMove — 現在値と目的値が両軸一致なら true（書き戻さない）", () => {
+    // given / when / then: Do（true/true）にいるカードを Do へ落とす
+    expect(
+      shouldSkipMove({ urgent: true, important: true }, { urgent: true, important: true }),
+    ).toBe(true);
+  });
+
+  it("shouldSkipMove — どちらかの軸が異なれば false（別象限への実移動）", () => {
+    // given: Schedule（false/true）→ Do（true/true）
+    expect(
+      shouldSkipMove({ urgent: false, important: true }, { urgent: true, important: true }),
+    ).toBe(false);
+  });
+
+  it("shouldSkipMove — 未分類（軸 absent=undefined）からの移動は false（必ず実移動扱い）", () => {
+    // given: 両軸 absent のカードを Delete（false/false）へ。undefined !== false でスキップされない
+    expect(
+      shouldSkipMove(
+        { urgent: undefined, important: undefined },
+        { urgent: false, important: false },
+      ),
+    ).toBe(false);
+  });
+
+  it("shouldSkipMove — current 未知（保留にも entries にも無い）なら false（握りつぶさない）", () => {
+    // given / when / then
+    expect(shouldSkipMove(undefined, { urgent: true, important: false })).toBe(false);
   });
 });

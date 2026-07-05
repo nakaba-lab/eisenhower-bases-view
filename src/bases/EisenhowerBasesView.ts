@@ -157,12 +157,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
           title: file.basename,
           keys,
           previous: capturePreviousAxes(frontmatter, keys),
+          // 書き込んだ両軸値を保持する（undo 適用前の同一性照合＝別ノートへの誤 delete/上書き防止）。
+          wrote: { urgent: axisValues.urgent, important: axisValues.important },
         };
         frontmatter[keys.urgent] = axisValues.urgent;
         frontmatter[keys.important] = axisValues.important;
       });
     } catch (error) {
-      console.error("[Eisenhower Matrix] frontmatter 書き戻しに失敗しました", error);
+      console.error("[Eisenhower Matrix] failed to write back frontmatter", error);
       new Notice(`Eisenhower Matrix: ${messages.writeBackFailed}`);
       throw error;
     }
@@ -195,7 +197,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       .getLeaf(newLeaf ? "tab" : false)
       .openFile(file)
       .catch((error) => {
-        console.error("[Eisenhower Matrix] ノートのオープンに失敗しました", error);
+        console.error("[Eisenhower Matrix] failed to open the note", error);
         new Notice(`Eisenhower Matrix: ${this.getMessages().openFailed}`);
       });
   }

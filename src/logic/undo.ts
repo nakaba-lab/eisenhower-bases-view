@@ -38,6 +38,13 @@ export interface UndoRecord {
   keys: UndoAxisKeys;
   /** 各軸の移動前の値（absent は delete で復元）。 */
   previous: { urgent: PreviousAxisValue; important: PreviousAxisValue };
+  /**
+   * 移動時に両軸へ書き込んだ値（同一性照合用）。undo は `entryId`（file.path）でノートを再解決する
+   * ため、移動後にそのパスが**別ノートで再利用**されていたり、ユーザー/他プラグインが軸値を書き換えて
+   * いた場合、記録した `previous` を適用すると無関係な値を上書き/`delete` しうる（undo は唯一の delete
+   * 経路）。復元前に「両軸が自分の書いた値のままか」を {@link isUndoApplicable} で照合するために保持する。
+   */
+  wrote: { urgent: boolean; important: boolean };
 }
 
 /** frontmatter 風オブジェクト（obsidian の `processFrontMatter` が渡す plain object の最小型）。 */
@@ -94,6 +101,25 @@ export function applyUndo(frontmatter: FrontmatterLike, record: UndoRecord): voi
 }
 
 /**
+ * 記録した「書き込んだ値」（{@link UndoRecord.wrote}）がいまも両軸に残っているか
+ *（＝この記録が指すノートが、記録時に自分が書き込んだ状態のままか）を判定する純関数。
+ *
+ * undo は file.path でノートを再解決するため、移動後にそのパスが別ノートで再利用されていたり、
+ * ユーザー/他プラグインが軸値を書き換えていた場合、記録した `previous` を適用すると無関係な値を
+ * 上書き/`delete` しうる（undo は唯一の delete 経路のため影響が大きい）。適用前に本判定で「両軸が
+ * 自分の書いた値のままか」を照合し、不一致なら復元しない（呼び出し側は記録を破棄する）。
+ */
+export function isUndoApplicable(
+  frontmatter: FrontmatterLike,
+  record: UndoRecord,
+): boolean {
+  return (
+    frontmatter[record.keys.urgent] === record.wrote.urgent &&
+    frontmatter[record.keys.important] === record.wrote.important
+  );
+}
+
+/**
  * 「直前 1 手」だけを保持する undo の状態ホルダ（純粋・単体テスト対象）。
  *
  * 最小実装のため redo・多段 undo は持たない。新しい移動が来たら前の記録を上書きし
@@ -116,6 +142,29 @@ export class UndoManager {
   /** 記録を空にする（undo 実行後・ビュー破棄時など）。 */
   clear(): void {
     this.current = null;
+  }
+
+  /**
+   * 現在の記録が指すノート（`entryId`＝file.path）が引数の path、**またはその配下**なら記録を破棄する。
+   *
+   * 記録した path のファイルが **削除/リネーム**されると、その path は別ノートで再利用されうる。
+   * undo は path でノートを再解決するため、記録を残したままだと再利用された別ノートを誤って
+   * 上書き/`delete` しうる（`isUndoApplicable` の値照合だけでは、同一象限＝同じ boolean 値を持つ
+   * 別ノートを区別できない）。vault の delete/rename イベントで本メソッドを呼び、path が無効化された
+   * 時点で記録を捨てて「パス再利用への undo」を根本から断つ（`main.ts` が配線・レビュー指摘）。
+   *
+   * **フォルダ対応**: Obsidian はフォルダの delete/rename を**フォルダ 1 件のイベント**として発火し、
+   * 配下ファイルごとには発火しない。よって完全一致（ファイル自体）に加え、記録 path が `entryId + "/"`
+   * で始まる（＝削除/リネームされたフォルダの配下）場合も破棄し、親フォルダ操作での取り残しを防ぐ
+   *（Gemini レビュー指摘。`Folder` 削除 → `Folder/Note.md` の記録を破棄）。
+   * 破棄したら `true`、対象外（記録が無い/無関係な path）なら `false` を返す。
+   */
+  clearIfEntry(entryId: string): boolean {
+    const current = this.current?.entryId;
+    if (current === undefined) return false;
+    if (current !== entryId && !current.startsWith(`${entryId}/`)) return false;
+    this.current = null;
+    return true;
   }
 
   /** 元に戻せる移動があるか。 */

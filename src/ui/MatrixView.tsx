@@ -24,6 +24,7 @@ import {
   reconcilePendingMoves,
   rollbackFailedMove,
   settleAnnouncement,
+  shouldSkipMove,
   type PendingMoves,
 } from "./optimisticMove";
 import { nextAnnouncement } from "./liveStatus";
@@ -32,6 +33,22 @@ import { UndoToast } from "./UndoToast";
 
 /** 「元に戻す」トーストの自動消滅までの時間（ms）。次のドラッグ開始・undo 実行でも消える。 */
 const UNDO_TOAST_TIMEOUT_MS = 8000;
+
+/**
+ * 「元に戻す」トーストの自動消滅タイマーを（再）予約してよいかを判定する純関数（WCAG 2.2.1）。
+ *
+ * ポインタ（hover）とフォーカス（キーボード/AT）の**どちらかがトースト内にある間は再開しない**
+ *（＝一時停止を保つ）。両方が外に出て、かつまだタイマーが走っていないときだけ再予約する。
+ * focus 片側だけで判定すると、hover 継続中に blur → タイマー再開 → hover 中に消える非対称が起きる
+ *（round2 レビュー指摘）。両者を対称に扱うためにここで一元化して単体テストで固定する。
+ */
+export function shouldRescheduleAutoDismiss(
+  pointerInside: boolean,
+  focusInside: boolean,
+  timerActive: boolean,
+): boolean {
+  return !pointerInside && !focusInside && !timerActive;
+}
 
 /**
  * Matrix ビューの命令的な描画入口（アダプタ層が onDataUpdated 内で呼ぶ＝AC3）。
@@ -85,6 +102,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   >(null);
   // トーストの自動消滅タイマー（次のドラッグ開始・undo 実行・アンマウントでもクリアする）。
   const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // トースト内にポインタ/フォーカスがあるか（自動消滅の一時停止判定・WCAG 2.2.1）。
+  // 両方が外に出たときだけタイマーを再開する（focus 片側だけで判定する非対称を避ける・round2 指摘）。
+  const pointerInsideToastRef = useRef(false);
+  const focusInsideToastRef = useRef(false);
   // 楽観移動の世代採番（連番）。最新の書き込みだけを確定/ロールバックの対象にする。
   const nextGenerationRef = useRef(0);
   // entryId ごとの in-flight 書き込み数。reconcile の coincidental match 防止に使う。
@@ -120,24 +141,52 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     clearUndoToastTimer();
     setUndoToast(null);
   };
-  // 移動成功時にトーストを出し、一定時間後に自動で消す（古い提案を残さない）。
-  const showUndoToast = (message: string, entryId: string) => {
+  // トースト内にフォーカスがあるか（ビューが属する document の activeElement で判定）。
+  // グローバル `document.activeElement` はポップアウト別ウィンドウではメイン window を指すため、
+  // #44 と同じ document 取り違えを避けて ownerDocument を見る。
+  const isFocusInsideToast = (): boolean => {
+    const section = matrixSectionRef.current;
+    const toast = section?.querySelector(".eisenhower-undo-toast");
+    return toast?.contains(section?.ownerDocument.activeElement ?? null) ?? false;
+  };
+  // 自動消滅タイマーを（再）予約する。予約済みなら張り替える。
+  const scheduleUndoToastAutoDismiss = () => {
     clearUndoToastTimer();
-    setUndoToast({ message, entryId });
     undoToastTimerRef.current = setTimeout(() => {
       undoToastTimerRef.current = null;
       // 自動消滅でも、フォーカスがトースト内にある（キーボードで元に戻す/×へ移して待っていた）なら
-      // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない
-      // （activeElement ガード＝ボタン操作時の戻し〔レビュー第3周〕と同じ失敗クラスの自動消滅経路を塞ぐ）。
-      // フォーカス判定はビューが属する document の activeElement を見る（グローバル `document.activeElement`
-      // はポップアウト別ウィンドウではメイン window を指し、#44 と同じ document 取り違えになるため）。
-      const section = matrixSectionRef.current;
-      const toast = section?.querySelector(".eisenhower-undo-toast");
-      if (toast?.contains(section?.ownerDocument.activeElement ?? null)) {
-        section?.focus();
-      }
+      // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない。
+      if (isFocusInsideToast()) matrixSectionRef.current?.focus();
       setUndoToast(null);
     }, UNDO_TOAST_TIMEOUT_MS);
+  };
+  // 移動成功時にトーストを出し、一定時間後に自動で消す（古い提案を残さない）。
+  const showUndoToast = (message: string, entryId: string) => {
+    // 新しいトーストは相互作用フラグをリセットしてから採時する（前トーストの残留状態を持ち越さない）。
+    pointerInsideToastRef.current = false;
+    focusInsideToastRef.current = false;
+    setUndoToast({ message, entryId });
+    scheduleUndoToastAutoDismiss();
+  };
+  // WCAG 2.2.1（Timing Adjustable）: フォーカス/ポインタがトースト内にある間は自動消滅を止め、
+  // **両方が離れたら**再開する（片側だけで判定する非対称を避ける・round2 指摘）。ポインタ・フォーカスの
+  // 出入りを別々に受け、いずれかが内にある間はカウントダウンを止める。
+  const updateToastAutoDismiss = () => {
+    if (pointerInsideToastRef.current || focusInsideToastRef.current) {
+      clearUndoToastTimer();
+      return;
+    }
+    if (shouldRescheduleAutoDismiss(false, false, undoToastTimerRef.current !== null)) {
+      scheduleUndoToastAutoDismiss();
+    }
+  };
+  const setToastPointerInside = (inside: boolean) => {
+    pointerInsideToastRef.current = inside;
+    updateToastAutoDismiss();
+  };
+  const setToastFocusInside = (inside: boolean) => {
+    focusInsideToastRef.current = inside;
+    updateToastAutoDismiss();
   };
   // アンマウント時に残ったタイマーを掃除する（リーク防止）。
   useEffect(() => clearUndoToastTimer, []);
@@ -202,18 +251,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     const axis = axisValuesForQuadrant(target);
     if (!axis) return; // 未分類など書き戻し不可な対象は no-op（AC4 の二重ガード）
 
-    // 既に同じ分類なら書き戻さない（同一象限へのドロップを無駄打ちしない）。
+    // 既に同じ分類なら書き戻さない（同一象限へのドロップを無駄打ちしない・純関数 shouldSkipMove）。
     // 書き込み in-flight 中は保留値を優先する（サーバ未反映でも二重書き込みを防ぐ）。
     const currentAxis =
       pending.get(entryId) ??
       viewModel.entries.find((entry) => entry.id === entryId);
-    if (
-      currentAxis &&
-      currentAxis.urgent === axis.urgent &&
-      currentAxis.important === axis.important
-    ) {
-      return;
-    }
+    if (shouldSkipMove(currentAxis, axis)) return;
 
     // この移動の世代を採番し、in-flight 数を増やす。
     const generation = (nextGenerationRef.current += 1);
@@ -366,6 +409,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             regionLabel={messages.undoRegionLabel}
             undoLabel={messages.undoMove}
             dismissLabel={messages.undoDismiss}
+            onPointerInside={setToastPointerInside}
+            onFocusInside={setToastFocusInside}
             onUndo={() => {
               // undo は frontmatter を移動前へ戻すので、残っている楽観オーバーレイを先に落として
               // サーバ値の表示へ戻す（さもないと reconcile が「サーバ≠保留・非 in-flight」で保留を

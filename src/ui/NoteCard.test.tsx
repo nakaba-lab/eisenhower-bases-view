@@ -143,6 +143,28 @@ describe("NoteCard — 非 boolean 軸カードのロック（ドラッグ不可
     expect(onOpenCard).toHaveBeenCalledWith("num.md", { newLeaf: false });
   });
 
+  it("NoteCard_ロックカードは Enter で開く（button の標準操作）", () => {
+    // given
+    const onOpenCard = vi.fn();
+    render(<NoteCard entry={lockedEntry()} onOpenCard={onOpenCard} />);
+    // when
+    fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+    // then
+    expect(onOpenCard).toHaveBeenCalledWith("num.md", { newLeaf: false });
+  });
+
+  it("NoteCard_ロックカードは Space でも開き、既定動作を抑止する（掴めないため Space を開くに割当・スクロール防止・レビュー指摘）", () => {
+    // given: ロックカードは掴めない（Space の掴み予約が無い）ので Space も「開く」に使う
+    const onOpenCard = vi.fn();
+    render(<NoteCard entry={lockedEntry()} onOpenCard={onOpenCard} />);
+    // when: Space 押下（preventDefault を検知するため cancelable なイベントで）
+    const event = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    screen.getByRole("button").dispatchEvent(event);
+    // then: 開く導線が発火し、ペインのスクロール（既定動作）は抑止される
+    expect(onOpenCard).toHaveBeenCalledWith("num.md", { newLeaf: false });
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("NoteCard_ロックカードは lockedLabel でアクセシブル名に移動不可の理由を含める", () => {
     // given / when
     render(

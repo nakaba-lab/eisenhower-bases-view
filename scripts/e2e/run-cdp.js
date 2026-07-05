@@ -56,28 +56,39 @@ const snap = async (name) => {
   try { await page.screenshot({ path: path.join(OUT, name) }); rec("shot", name); }
   catch (e) { rec("warn", "screenshot " + name, String(e)); }
 };
-// Do 象限のカード名一覧を DOM から読む。
-const readDoCards = () =>
-  page.evaluate(() => {
-    const doCell = [...document.querySelectorAll(".eisenhower-quadrant")]
-      .find((c) => c.querySelector(".eisenhower-quadrant__title")?.textContent === "Do");
-    return [...(doCell?.querySelectorAll(".eisenhower-note-card") || [])]
-      .map((n) => n.textContent.replace("🔒", "").trim());
-  });
-// base を開き直して（楽観保留の無い）新規描画にし、Do 象限のカードを読む。
+// base を開き直して（楽観保留の無い）新規描画にし、**その新規リーフの container 内から** Do 象限を読む。
+// グローバル document を読むと、detach が遅れて残った旧ビューの Do セル（stuck pending で schedule を
+// Do に描いたまま）を拾い、まさに排除したい偽陽性を通しうる。よって読み取りを新規 leaf の containerEl に
+// スコープし、grid の実 mount を待ち、bases リーフが 1 つだけ（stale が残っていない）ことも返す（PR#48 r2 指摘）。
 const reopenBaseAndReadDo = async () => {
   await page.evaluate(() => {
     for (const l of window.app.workspace.getLeavesOfType?.("bases") || []) l.detach();
   });
   await sleep(300);
-  await page.evaluate(async () => {
+  return page.evaluate(async () => {
     const f = window.app.vault.getAbstractFileByPath("Eisenhower.base");
     const leaf = window.app.workspace.getLeaf(true);
     await leaf.openFile(f);
+    // この leaf 自身の container に grid が現れるまで待つ（グローバル待ちの握りつぶしをしない）。
+    const t0 = Date.now();
+    let grid = null;
+    while (Date.now() - t0 < 10000) {
+      grid = leaf.view?.containerEl?.querySelector?.(".eisenhower-matrix__grid");
+      if (grid) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    const basesCount = (window.app.workspace.getLeavesOfType?.("bases") || []).length;
+    const cont = leaf.view?.containerEl;
+    const doCell = cont
+      ? [...cont.querySelectorAll(".eisenhower-quadrant")].find(
+          (c) => c.querySelector(".eisenhower-quadrant__title")?.textContent === "Do",
+        )
+      : null;
+    const cards = doCell
+      ? [...doCell.querySelectorAll(".eisenhower-note-card")].map((n) => n.textContent.replace("🔒", "").trim())
+      : null;
+    return { gridReady: !!grid, basesCount, cards };
   });
-  await page.waitForSelector(".eisenhower-matrix__grid", { timeout: 15000 }).catch(() => {});
-  await sleep(400);
-  return readDoCards();
 };
 
 (async () => {
@@ -96,6 +107,16 @@ const reopenBaseAndReadDo = async () => {
   }
   if (!page) { check("app page found", false, "no window.app.workspace"); dump(); process.exit(3); }
   rec("harness", "vault page:", await page.title());
+
+  // 接続先が**想定のテスト Vault**であることを確認する。ポート衝突等で別/ユーザーの実 Obsidian に
+  // 誤接続していた場合、以降のドラッグ書き戻し・undo が無関係な（最悪ユーザーの実）Vault を破壊しうるため、
+  // 不一致なら何も操作せず即中止する（起動前ポートチェックの TOCTOU をここで確定的に塞ぐ・PR#48 r2 指摘）。
+  const vaultPath = await page.evaluate(() => window.app?.vault?.adapter?.basePath ?? null);
+  const expectVault = VAULT ? require("path").resolve(VAULT) : null;
+  const okVault = !expectVault || (vaultPath && require("path").resolve(vaultPath) === expectVault);
+  check("接続先が想定テスト Vault（別/実 Obsidian への誤接続防止）", okVault, { connected: vaultPath, expected: expectVault });
+  if (!okVault) { rec("FATAL", "connected to unexpected vault; aborting to avoid mutating a foreign vault"); dump(); await browser.close(); process.exit(4); }
+
   page.on("console", (m) => rec("console", m.type(), m.text()));
   page.on("pageerror", (e) => rec("pageerror", String(e)));
 
@@ -251,8 +272,10 @@ const reopenBaseAndReadDo = async () => {
   //      getValue が新しい frontmatter を読み classifyQuadrant で Do に置いた往復後半を独立に証明する（PR#48 指摘）。
   const reclass = await reopenBaseAndReadDo();
   result.reclassify = reclass;
-  rec("reclassify", "Do cards after reopen (no pending):", JSON.stringify(reclass));
-  check("書き戻し後のサーバ再分類: 再オープン（楽観保留なし）で schedule が Do 象限に配置される（getValue→再分類）", reclass.includes("schedule"), reclass);
+  rec("reclassify", "reopen result:", JSON.stringify(reclass));
+  // 新規描画が確実に立ち上がり、旧ビューが残っていない（＝stale DOM を読んでいない）ことを先に担保する。
+  check("再オープンの新規描画が単一・grid 準備完了（stale 読み取り防止）", reclass.gridReady && reclass.basesCount === 1, reclass);
+  check("書き戻し後のサーバ再分類: 新規 view（楽観保留なし）の container 内で schedule が Do 象限（getValue→再分類）", (reclass.cards || []).includes("schedule"), reclass.cards);
 
   // 7) undo（コマンド）: 前提（移動後=urgent:true）とコマンド成否をアサートしてから true→false 遷移を検証（#2/#9）
   result.undo = { before: readFm("schedule.md") };

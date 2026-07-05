@@ -1,6 +1,14 @@
 {
   "checks": [
     {
+      "name": "接続先が想定テスト Vault（別/実 Obsidian への誤接続防止）",
+      "pass": true,
+      "detail": {
+        "connected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e3/vault",
+        "expected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e3/vault"
+      }
+    },
+    {
       "name": "plugin enabled (eisenhower-bases-view)",
       "pass": true,
       "detail": [
@@ -112,7 +120,20 @@
       "detail": 1
     },
     {
-      "name": "書き戻し後のサーバ再分類: 再オープン（楽観保留なし）で schedule が Do 象限に配置される（getValue→再分類）",
+      "name": "再オープンの新規描画が単一・grid 準備完了（stale 読み取り防止）",
+      "pass": true,
+      "detail": {
+        "gridReady": true,
+        "basesCount": 1,
+        "cards": [
+          "do",
+          "infolder",
+          "schedule"
+        ]
+      }
+    },
+    {
+      "name": "書き戻し後のサーバ再分類: 新規 view（楽観保留なし）の container 内で schedule が Do 象限（getValue→再分類）",
       "pass": true,
       "detail": [
         "do",
@@ -223,11 +244,15 @@
     "after": "urgent: true | important: true",
     "onDataUpdatedCount": 1
   },
-  "reclassify": [
-    "do",
-    "infolder",
-    "schedule"
-  ],
+  "reclassify": {
+    "gridReady": true,
+    "basesCount": 1,
+    "cards": [
+      "do",
+      "infolder",
+      "schedule"
+    ]
+  },
   "undo": {
     "before": "urgent: true | important: true",
     "after": "urgent: false | important: true"

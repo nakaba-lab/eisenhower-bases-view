@@ -291,4 +291,24 @@ describe("UndoManager — 直前 1 手の保持", () => {
     const manager = new UndoManager();
     expect(manager.clearIfEntry("a.md")).toBe(false);
   });
+
+  it("clearIfEntry — 親フォルダの削除/リネームで配下ノートの記録を破棄する（フォルダは 1 件のイベント・Gemini 指摘）", () => {
+    const manager = new UndoManager();
+    manager.record(recordOf("Folder/Note.md"));
+    // when: 親フォルダ "Folder" が削除/リネーム（Obsidian はフォルダ 1 件のイベントで発火）
+    const cleared = manager.clearIfEntry("Folder");
+    // then: 配下ノートの記録も破棄（パス再利用への誤 undo を断つ）
+    expect(cleared).toBe(true);
+    expect(manager.hasRecord()).toBe(false);
+  });
+
+  it("clearIfEntry — 前方一致するだけの兄弟フォルダでは破棄しない（Folder2 は Folder 配下ではない）", () => {
+    const manager = new UndoManager();
+    manager.record(recordOf("Folder2/Note.md"));
+    // when: "Folder" の削除。"Folder2/..." は "Folder/" で始まらないため配下ではない
+    const cleared = manager.clearIfEntry("Folder");
+    // then: 誤って破棄しない（境界は "/" 区切りで判定）
+    expect(cleared).toBe(false);
+    expect(manager.peek()?.entryId).toBe("Folder2/Note.md");
+  });
 });

@@ -145,17 +145,24 @@ export class UndoManager {
   }
 
   /**
-   * 現在の記録が指すノート（`entryId`＝file.path）が引数と一致すれば記録を破棄する。
+   * 現在の記録が指すノート（`entryId`＝file.path）が引数の path、**またはその配下**なら記録を破棄する。
    *
    * 記録した path のファイルが **削除/リネーム**されると、その path は別ノートで再利用されうる。
    * undo は path でノートを再解決するため、記録を残したままだと再利用された別ノートを誤って
    * 上書き/`delete` しうる（`isUndoApplicable` の値照合だけでは、同一象限＝同じ boolean 値を持つ
    * 別ノートを区別できない）。vault の delete/rename イベントで本メソッドを呼び、path が無効化された
    * 時点で記録を捨てて「パス再利用への undo」を根本から断つ（`main.ts` が配線・レビュー指摘）。
-   * 破棄したら `true`、対象外（記録が無い/別ノート）なら `false` を返す。
+   *
+   * **フォルダ対応**: Obsidian はフォルダの delete/rename を**フォルダ 1 件のイベント**として発火し、
+   * 配下ファイルごとには発火しない。よって完全一致（ファイル自体）に加え、記録 path が `entryId + "/"`
+   * で始まる（＝削除/リネームされたフォルダの配下）場合も破棄し、親フォルダ操作での取り残しを防ぐ
+   *（Gemini レビュー指摘。`Folder` 削除 → `Folder/Note.md` の記録を破棄）。
+   * 破棄したら `true`、対象外（記録が無い/無関係な path）なら `false` を返す。
    */
   clearIfEntry(entryId: string): boolean {
-    if (this.current?.entryId !== entryId) return false;
+    const current = this.current?.entryId;
+    if (current === undefined) return false;
+    if (current !== entryId && !current.startsWith(`${entryId}/`)) return false;
     this.current = null;
     return true;
   }

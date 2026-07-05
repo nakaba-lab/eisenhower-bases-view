@@ -7,6 +7,9 @@ import {
   type SensorInternals,
 } from "./popoutSensors";
 
+// dnd-kit 内部の隠し document フィールドを含むモック用型（本番は readSensorDocument で間接化）。
+type MockSensor = SensorInternals & { document?: Document };
+
 /** dnd-kit `Listeners` を模したフェイク（`add`/`removeAll`/`listeners` 配列）。 */
 function fakeListeners(
   target: EventTarget | null,
@@ -144,7 +147,7 @@ describe("retargetSensorToEventRealm — sensor の document/リスナーを eve
     const key: EventListener = () => {};
     const listeners = fakeListeners(document, [["pointermove", move, { passive: false }]]);
     const documentListeners = fakeListeners(document, [["keydown", key, undefined]]);
-    const sensor: SensorInternals = { document, listeners, documentListeners };
+    const sensor: MockSensor = { document, listeners, documentListeners };
     // when
     retargetSensorToEventRealm(sensor, { target: card });
     // then: 3 つとも popout を指す
@@ -161,7 +164,7 @@ describe("retargetSensorToEventRealm — sensor の document/リスナーを eve
     document.body.appendChild(card);
     const listeners = fakeListeners(document, [["pointermove", () => {}, undefined]]);
     const documentListeners = fakeListeners(document, [["keydown", () => {}, undefined]]);
-    const sensor: SensorInternals = { document, listeners, documentListeners };
+    const sensor: MockSensor = { document, listeners, documentListeners };
     // when
     retargetSensorToEventRealm(sensor, { target: card });
     // then: 触らない（張り替え無し）
@@ -173,7 +176,7 @@ describe("retargetSensorToEventRealm — sensor の document/リスナーを eve
 
   it("event が undefined なら no-op（throw しない）", () => {
     const listeners = fakeListeners(document);
-    const sensor: SensorInternals = { document, listeners };
+    const sensor: MockSensor = { document, listeners };
     expect(() => retargetSensorToEventRealm(sensor, undefined)).not.toThrow();
     expect(listeners.removedCount).toBe(0);
   });

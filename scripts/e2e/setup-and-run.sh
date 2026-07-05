@@ -17,6 +17,22 @@ PLUGDIR="$VAULT/.obsidian/plugins/eisenhower-bases-view"
 mkdir -p "$OUT" "$OBSDIR" "$PLUGDIR" "$HOMEDIR/.config/obsidian"
 
 echo "[e2e] WORK=$WORK  OBS=$OBS_VERSION  VIEW_TYPE=$VIEW_TYPE"
+echo "[e2e] NOTE: 作業ディレクトリ $WORK は自動削除しません（Obsidian 展開+Vault で数百MB規模）。不要になったら手動で削除してください。"
+
+# GUI ディスプレイの事前確認（ヘッドレスでは CDP タイムアウトとして不透明に沈黙破綻するため明示 fail）。
+if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+  echo "[e2e] ERROR: GUI ディスプレイがありません（DISPLAY / WAYLAND_DISPLAY 未設定）。WSLg / X サーバ / Xvfb が必要です（例: xvfb-run -a scripts/e2e/setup-and-run.sh）。"
+  exit 1
+fi
+
+# CDP ポート衝突の事前確認（既存/残存の別 Obsidian が $CDP_PORT を掴んでいると、readiness ループが
+# その"古い"インスタンスに即応答して成立し、run-cdp.js が**誤って別 Vault のインスタンスへ接続・操作**しうる。
+# 最悪ユーザーの実 Obsidian を操作するため、占有時は接続せず中止する・PR#48 レビュー指摘）。
+if curl -s --max-time 2 "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; then
+  echo "[e2e] ERROR: CDP ポート $CDP_PORT は既に使用中です（別/残存の Obsidian の可能性）。誤って別インスタンスへ接続しないため中止します。"
+  echo "[e2e]        当該プロセスを停止するか、別ポートを指定して再実行してください（例: CDP_PORT=9333 scripts/e2e/setup-and-run.sh）。"
+  exit 1
+fi
 
 [ -f "$PLUGIN_MAIN" ] || { echo "[e2e] ERROR: $PLUGIN_MAIN がありません。先に 'npm run build' を実行してください。"; exit 1; }
 PLUGIN_DIR_SRC="$(dirname "$PLUGIN_MAIN")"
@@ -85,7 +101,11 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-VAULT="$VAULT" OUT="$OUT" CDP="http://127.0.0.1:$CDP_PORT" node "$HERE/run-cdp.js"
-RC=$?
+# set -e 下では node が非0で即 exit し RC 捕捉・案内 echo に到達しない（死コード）ため、明示的に成否を捕まえる。
+if VAULT="$VAULT" OUT="$OUT" CDP="http://127.0.0.1:$CDP_PORT" node "$HERE/run-cdp.js"; then
+  RC=0
+else
+  RC=$?
+fi
 echo "[e2e] done rc=$RC  outputs in: $OUT"
 exit $RC

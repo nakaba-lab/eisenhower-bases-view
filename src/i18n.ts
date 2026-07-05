@@ -66,7 +66,7 @@ export interface Messages {
   /** undo 失敗の Notice（undo）。 */
   undoFailed(title: string): string;
   /** 象限の件数バッジのアクセシブル名（例: "5 items" / "5 件"）。 */
-  itemCount(count: number): string;
+  itemCount: (count: number) => string;
   /**
    * 全カードが未分類だが未分類ゾーンを非表示にしている（ready なのに何も見えない）ときのヒント。
    * 無言の空表示を避ける（レビュー指摘）。
@@ -75,7 +75,7 @@ export interface Messages {
   /** 「ラベル（軸ラベル）」の言語別ジョイナ（英=半角括弧・日=全角括弧）。象限領域名・設定行名で共有。 */
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
-  cardLockedLabel(title: string): string;
+  cardLockedLabel: (title: string) => string;
   /** アダプタ層 Notice: 対象ファイルが見つからず移動できない。 */
   fileNotFoundForMove: string;
   /** アダプタ層 Notice: 対象ファイルが見つからず開けない。 */

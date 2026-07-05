@@ -14,6 +14,11 @@
  * 「スタブ＝実機」の同値性自体は単体では検証できない（#16 と同型の乖離退行を単体では捕捉不可）。
  * Obsidian の Value 表現が変わりうるバージョン更新時は `scripts/e2e` のプローブで実機表現を再確認すること。
  */
+/** `getLanguage()` スタブ（実機はアプリ表示言語コードを返す。単体では既定 `"en"`）。 */
+export function getLanguage(): string {
+  return "en";
+}
+
 export class NullValue {
   toString(): string {
     return "null";

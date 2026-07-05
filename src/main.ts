@@ -1,4 +1,4 @@
-import { Notice, Plugin, TAbstractFile } from "obsidian";
+import { getLanguage, Notice, Plugin, TAbstractFile } from "obsidian";
 import { DEFAULT_SETTINGS, mergeSettings, type EisenhowerSettings } from "./settings";
 import { EisenhowerBasesView } from "./bases/EisenhowerBasesView";
 import {
@@ -101,13 +101,9 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
     );
   }
 
-  /** Obsidian のアプリ表示言語（`localStorage['language']`。未設定は null＝既定 en）。 */
-  getObsidianLanguage(): string | null {
-    try {
-      return window.localStorage.getItem("language");
-    } catch {
-      return null;
-    }
+  /** Obsidian のアプリ表示言語コード（公式 API `getLanguage()`。未設定相当は `"en"`）。 */
+  getObsidianLanguage(): string {
+    return getLanguage();
   }
 
   /** 設定変更を開いている全ビューへ即時反映する（#23 F6・AC1/AC2）。 */

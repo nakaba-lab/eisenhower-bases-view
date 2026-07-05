@@ -128,9 +128,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       // 自動消滅でも、フォーカスがトースト内にある（キーボードで元に戻す/×へ移して待っていた）なら
       // マトリクスへ戻して body への脱落を防ぐ。トースト外（カード等）にフォーカスがあれば横取りしない
       // （activeElement ガード＝ボタン操作時の戻し〔レビュー第3周〕と同じ失敗クラスの自動消滅経路を塞ぐ）。
-      const toast = matrixSectionRef.current?.querySelector(".eisenhower-undo-toast");
-      if (toast?.contains(document.activeElement)) {
-        matrixSectionRef.current?.focus();
+      // フォーカス判定はビューが属する document の activeElement を見る（グローバル `document.activeElement`
+      // はポップアウト別ウィンドウではメイン window を指し、#44 と同じ document 取り違えになるため）。
+      const section = matrixSectionRef.current;
+      const toast = section?.querySelector(".eisenhower-undo-toast");
+      if (toast?.contains(section?.ownerDocument.activeElement ?? null)) {
+        section?.focus();
       }
       setUndoToast(null);
     }, UNDO_TOAST_TIMEOUT_MS);
@@ -391,8 +394,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
           別ウィンドウでもそのビュー自身の window に描く（`document.body` グローバル固定だと popout 時に
           overlay がメイン window へ出て消える）。matrixSectionRef はドラッグ中（activeId 非 null）は必ず
           mount 済みで埋まっており、`?? document.body` は activeId=null の描画前だけ通る（そのとき overlay は
-          空で実害なし）。「ポップアウトでカードを掴めない」件（センサーの別 document 解決）は本 portal とは
-          別問題＝#44 で追跡。 */}
+          空で実害なし）。「ポップアウトでカードを掴めない」件（#44）は本 portal とは別問題。原因調査で
+          起票時の見立て（センサーの別 document 解決）は反証済み＝dnd-kit 6.3.1 の掴み経路は
+          `getOwnerDocument(event.target)`/`getWindow(event.target)`（`ownerDocument.defaultView`）で popout を
+          正しく解決し realm 安全。真因は活性化/イベント配線側が最有力で実機プローブ待ち（v1 対応・要件 §9）。 */}
       {createPortal(
         <DragOverlay>
           {activeId ? (

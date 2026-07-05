@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- プラグインの表示名を「Eisenhower Matrix」から「**Eisenhower Matrix for Bases**」へ変更（コミュニティプラグイン申請にあたり、既存の同名プラグインとの重複を回避するため。id `eisenhower-bases-view` は不変）。
+- README にエンドユーザー向けの「使い方」節（Base へのビュー追加 → 軸プロパティ設定 → カードのドラッグ分類 → 元に戻す）とインストール手順を追加した（コミュニティプラグイン申請要件: README が purpose と how-to-use を記述すること）。
+
 ## [0.1.0] - 2026-07-05
 
 ### Added

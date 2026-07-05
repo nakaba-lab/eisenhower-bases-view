@@ -64,4 +64,4 @@ export const collections = {
     }),
   }),
 };
-/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
+/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- ファイル冒頭で緩めた型安全ルールをここで閉じる（緩和理由＝Astro 仮想モジュール由来の any 化は冒頭 disable のコメント参照） */

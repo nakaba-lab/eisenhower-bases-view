@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-06
+
+### Changed
+
+- Obsidian 自動レビューの再チェック指摘に対応した（挙動は不変・256 PASS）。docs-site の file-level `eslint-disable` を対の `eslint-enable` と対にして `disable-enable-pair` エラーを解消。テスト用グローバル shim を `globalThis`/`document` ではなく `window`/`window.document` ベースへ変更。dnd-kit センサー内部の document フィールド参照を型宣言せず文字列キー経由に、設定タブの再描画を `display()` の直接呼び出しから専用の `render()` へ抽出（`display()` は 1.12.0 フォールバックとして維持）、`NoteCard` の非推奨 Preact 型を `ComponentProps` 由来の型に置換。いずれも非推奨 API・ポップアウト非互換パターンを除去。
+
 ## [0.1.3] - 2026-07-06
 
 ### Changed

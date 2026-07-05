@@ -26,6 +26,8 @@ function makeRecord(entryId = "a.md"): UndoRecord {
     keys: { urgent: "urgent", important: "important" },
     // 移動前: urgent は absent（復元で delete）・important は true（復元で代入）
     previous: { urgent: { present: false }, important: { present: true, value: true } },
+    // 移動で書き込んだ両軸値（同一性照合用）。復元前に現 frontmatter がこれと一致する場合のみ戻す。
+    wrote: { urgent: true, important: false },
   };
 }
 
@@ -93,16 +95,34 @@ describe("runUndo — 陳腐化トーストガード（expectedEntryId）", () =
     expect(Notice.messages.some((m) => m.includes(messages.undone("タスクA")))).toBe(true);
   });
 
-  it("runUndo — expectedEntryId 省略（コマンド起動）は無条件に直前 1 手を戻す", async () => {
-    // given
+  it("runUndo — expectedEntryId 省略（コマンド起動）は直前 1 手を戻す（現状が書き込み値のまま）", async () => {
+    // given: 現 frontmatter は移動で書き込んだ値のまま（wrote と一致＝正常な undo 対象）
     const undo = new UndoManager();
     undo.record(makeRecord("a.md"));
-    const { app, processFrontMatter } = makeApp({ file: new TFile("a.md"), frontmatter: {} });
+    const frontmatter: Record<string, unknown> = { urgent: true, important: false };
+    const { app, processFrontMatter } = makeApp({ file: new TFile("a.md"), frontmatter });
     // when: expectedEntryId なし
     await runUndo(app, undo, messages);
-    // then
+    // then: 復元され記録を消す
     expect(processFrontMatter).toHaveBeenCalledTimes(1);
+    expect("urgent" in frontmatter).toBe(false);
+    expect(frontmatter.important).toBe(true);
     expect(undo.hasRecord()).toBe(false);
+  });
+
+  it("runUndo — 記録の書き込み値と現 frontmatter が不一致なら復元せず記録を消す（パス再利用/外部改変ガード・#1）", async () => {
+    // given: 移動後に a.md が別ノートで作り直され、非 boolean の実データを持つ（wrote={urgent:true,important:false} と不一致）
+    const undo = new UndoManager();
+    undo.record(makeRecord("a.md"));
+    const frontmatter: Record<string, unknown> = { urgent: 5, important: "high" };
+    const { app, processFrontMatter } = makeApp({ file: new TFile("a.md"), frontmatter });
+    // when
+    await runUndo(app, undo, messages);
+    // then: 無関係な値を上書き/delete せず（唯一の delete 経路を塞ぐ）、記録は消費して繰り返さない・noUndo 通知
+    expect(processFrontMatter).toHaveBeenCalledTimes(1); // 開いたが適用はしない
+    expect(frontmatter).toEqual({ urgent: 5, important: "high" }); // 破壊しない
+    expect(undo.hasRecord()).toBe(false);
+    expect(Notice.messages.some((m) => m.includes(messages.noUndo))).toBe(true);
   });
 });
 

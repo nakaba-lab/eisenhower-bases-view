@@ -43,7 +43,9 @@ export function toViewModel(
   entries: readonly BasesEntry[] | undefined | null,
   config?: Pick<BasesViewConfig, "getAsPropertyId"> | null,
   settings: EisenhowerSettings = DEFAULT_SETTINGS,
-  messages: Messages = messagesFor("ja"),
+  // messages 省略時は英語へフォールバックする（resolveLanguage の最終フォールバックが en＝
+  // i18n の既定言語。実機ではアダプタが解決済みメッセージを常に渡す・レビュー指摘）。
+  messages: Messages = messagesFor("en"),
 ): MatrixViewModel {
   // ラベル/色/言語文言を解決して UI へ渡す（#23 F6）。状態に依らず常に載せる。
   const presentation = resolvePresentation(settings, messages);

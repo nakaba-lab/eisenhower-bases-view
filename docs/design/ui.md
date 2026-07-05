@@ -213,7 +213,7 @@ sequenceDiagram
 ドラッグ書き戻し（#20）は両軸を `true/false` で上書きする破壊的操作のため、**直前 1 手だけ**を元に戻す最小の undo を足す。UI 側の責務は **(a) 移動成功直後にトーストを出す・(b) トーストの「元に戻す」ボタン／コマンドから `MatrixCallbacks.onUndoMove()` を呼ぶ**の 2 点で、実際の frontmatter 復元（値の代入／absent の delete）と「直前 1 手」の保持はアダプタ層（`bases.md` の `UndoManager`／`runUndo`）に隔離する（`onMoveCard` と同じ疎結合＝AC5 維持。UI は `obsidian` 型に触れない）。
 
 - **境界契約の追加（`src/bases/types.ts`）**: `onUndoMove?(expectedEntryId?: string): void` — トースト／コマンドが起動する。アダプタが保持する「直前 1 手」の記録を復元し、無ければ `Notice`（「元に戻せる移動がありません」）を出す。**トースト起動時は名指しノートの `expectedEntryId` を渡す**（記録が別ビューの移動へ置き換わっていたら戻さないガード＝code-reviewer 指摘）。コマンド起動は省略し無条件に直前 1 手を戻す。復元の実体はアダプタ責務。
-- **トースト（分離コンポーネント `src/ui/UndoToast.tsx`）**: `NoteCard`/`QuadrantCell` と同じく**分離した純 UI 部品**にして単体テスト可能にする（`MatrixView` は移動成功時に表示状態＝`{ message, entryId }` を持ち条件描画する。`entryId` は `onUndoMove` のガードに渡す）。props は `{ message; regionLabel; undoLabel; dismissLabel; onUndo; onDismiss }`。`message` は移動成功文言（`messages.moveSucceeded` を流用）、`undoLabel` は `messages.undoMove`（「元に戻す」）。トーストは非モーダル。**表示の解除**は ① 「元に戻す」クリック（→`onUndoMove(entryId)` 後に消える）／② 次のドラッグ開始（`onDragStart` で消す・古い提案を残さない）／③ タイムアウト（数秒）／④ アンマウント。ビュー内下部に重ねて出し、`DragOverlay` と競合しない z 順にする。
+- **トースト（分離コンポーネント `src/ui/UndoToast.tsx`）**: `NoteCard`/`QuadrantCell` と同じく**分離した純 UI 部品**にして単体テスト可能にする（`MatrixView` は移動成功時に表示状態＝`{ message, entryId }` を持ち条件描画する。`entryId` は `onUndoMove` のガードに渡す）。props は `{ message; regionLabel; undoLabel; dismissLabel; onUndo; onDismiss }`。`message` は移動成功文言（`messages.moveSucceeded` を流用）、`undoLabel` は `messages.undoMove`（「元に戻す」）。トーストは非モーダル。**表示の解除**は ① 「元に戻す」クリック（→`onUndoMove(entryId)` 後に消える）／② 次のドラッグ開始（`onDragStart` で消す・古い提案を残さない）／③ タイムアウト（8 秒）／④ アンマウント。**タイムアウトはトースト内にフォーカス/ポインタがある間は一時停止し、離れたら再開する（WCAG 2.2.1 Timing Adjustable・レビュー指摘）**＝`onInteractStart`/`onInteractEnd`（`onMouseEnter/Leave`＋`onFocusCapture/BlurCapture`）で `MatrixView` がカウントダウンを止め/再予約し、キーボード/AT 利用者が「元に戻す」ボタンへ到達する前に消えないようにする（コマンドパレット undo も恒久導線として併存）。ビュー内下部に重ねて出し、`DragOverlay` と競合しない z 順にする。
 - **コマンド（`main.ts`・`bases.md` が正）**: `addCommand({ id: "undo-last-move", name: messages.undoCommandName })` を登録し、コマンドパレット／ユーザー割当ホットキー（Ctrl+Z 以外）から `onUndoMove` 相当（`UndoManager` の記録復元）を呼ぶ。
 
 ```
@@ -243,7 +243,7 @@ sequenceDiagram
 | 空（entries 0 件） | シェル全体に 1 文プレースホルダ（「表示するノートがありません」） |
 | ready・象限 0 件 | 該当象限セル内に控えめな空プレースホルダ（#19 で象限別に追加） |
 | 軸欠損ノートあり | 既定では未分類ゾーンに表示（ドロップ不可）。**`settings.showUnclassified=false` で未分類ゾーンを描画しない**（`toViewModel` が ViewModel に flag を載せ `MatrixView` が条件描画＝レビュー指摘で配線。切替 UI は設定タブ〔F6/#23〕の「欠損ノートを未分類に表示」トグルで提供済み） |
-| 非 boolean 軸値のノート | 未分類ゾーンに淡色＋鍵アイコン（`--locked`・`🔒`）で表示し**ドラッグ不可**（`entry.locked`）。ドロップの両軸 `true/false` 上書きで数値/文字列を破壊しないための封鎖。クリックで開いて値を直せる（リリース前の詰め・詳細は下記「主要な設計判断」／`bases.md`） |
+| 非 boolean 軸値のノート | 未分類ゾーンに弱色（`--text-muted`）＋鍵アイコン（`--locked`・`🔒`）で表示し**ドラッグ不可**（`entry.locked`）。ドロップの両軸 `true/false` 上書きで数値/文字列を破壊しないための封鎖。クリックで開いて値を直せる（**カード全体を `opacity` で薄くすると、まだ開けるタイトル文字の実効コントラストが AA を割るため、opacity ではなく AA を満たすテーマ弱色トークンで色だけ落とす**・レビュー指摘／詳細は下記「主要な設計判断」／`bases.md`） |
 | 未分類非表示×全象限空 | `showUnclassified=false` で 4 象限が全て空・未分類にカードあり の構成は「ready なのに無言」になるため、件数入りヒント（`messages.unclassifiedHidden`・`.eisenhower-matrix__unclassified-hint`）を表示する（レビュー指摘・無言の空表示を避ける） |
 | 狭ペイン（サイドバー/縦分割） | 2×2 グリッドの単列化を**コンテナクエリ**（`.eisenhower-matrix { container-type: inline-size }` ＋ `@container (max-width:600px)`）でこのビューのペイン幅に追従させる。ビューポート幅依存の `@media` では広ウィンドウ内の狭ペインに反応しなかった（レビュー指摘） |
 | ドラッグ中 | ドラッグ元/ドロップ可象限を視覚フィードバック（#20）。ドロップで楽観的にカードを移動（書き込み確定前＝`applyPendingMoves`） |

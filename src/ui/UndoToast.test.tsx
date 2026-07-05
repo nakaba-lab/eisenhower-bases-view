@@ -66,3 +66,33 @@ describe("UndoToast — 表示と配線（undo・draft）", () => {
     expect(dismiss.tagName).toBe("BUTTON");
   });
 });
+
+describe("UndoToast — 自動消滅の一時停止/再開の配線（WCAG 2.2.1・レビュー指摘）", () => {
+  it("UndoToast_ポインタが入ると onInteractStart・出ると onInteractEnd を呼ぶ（タイマー停止/再開）", () => {
+    // given
+    const onInteractStart = vi.fn();
+    const onInteractEnd = vi.fn();
+    render(<UndoToast {...props({ onInteractStart, onInteractEnd })} />);
+    const region = screen.getByRole("group", { name: "移動の取り消し" });
+    // when: ポインタがトーストへ入る→出る
+    fireEvent.mouseEnter(region);
+    fireEvent.mouseLeave(region);
+    // then: 停止→再開が 1 回ずつ配線される
+    expect(onInteractStart).toHaveBeenCalledTimes(1);
+    expect(onInteractEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("UndoToast_ボタンにフォーカスが入ると onInteractStart・外れると onInteractEnd を呼ぶ（キーボード/AT でも止める）", () => {
+    // given
+    const onInteractStart = vi.fn();
+    const onInteractEnd = vi.fn();
+    render(<UndoToast {...props({ onInteractStart, onInteractEnd })} />);
+    const undo = screen.getByRole("button", { name: "元に戻す" });
+    // when: 子ボタンの focus/blur は capture 段でトースト領域に伝わる（focus/blur はバブルしない）
+    fireEvent.focus(undo);
+    fireEvent.blur(undo);
+    // then
+    expect(onInteractStart).toHaveBeenCalledTimes(1);
+    expect(onInteractEnd).toHaveBeenCalledTimes(1);
+  });
+});

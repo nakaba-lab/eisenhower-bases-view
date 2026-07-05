@@ -64,7 +64,7 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
         }),
       () => {
         console.warn(
-          "[Eisenhower Matrix] Bases が無効なためカスタムビューを登録できませんでした。",
+          "[Eisenhower Matrix] Bases is disabled; could not register the custom view.",
         );
         // 登録失敗時の唯一のユーザー向けフィードバックのため、他 Notice と同じく言語追従させる
         // （Bases ビューなのでこの状態では他に何も表示されない・#i18n レビュー指摘）。

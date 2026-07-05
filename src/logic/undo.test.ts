@@ -4,6 +4,7 @@ import {
   applyUndo,
   capturePreviousAxes,
   capturePreviousValue,
+  isUndoApplicable,
   type FrontmatterLike,
   type UndoRecord,
 } from "./undo";
@@ -91,6 +92,7 @@ describe("applyUndo — 移動前の状態へ復元（mutate）", () => {
         urgent: { present: true, value: false },
         important: { present: true, value: true },
       },
+      wrote: { urgent: true, important: true },
     };
     const frontmatter: FrontmatterLike = { urgent: true, important: true };
     // when
@@ -109,6 +111,7 @@ describe("applyUndo — 移動前の状態へ復元（mutate）", () => {
         urgent: { present: false },
         important: { present: false },
       },
+      wrote: { urgent: true, important: true },
     };
     const frontmatter: FrontmatterLike = {
       urgent: true,
@@ -133,6 +136,7 @@ describe("applyUndo — 移動前の状態へ復元（mutate）", () => {
         urgent: { present: true, value: false },
         important: { present: false },
       },
+      wrote: { urgent: true, important: true },
     };
     const frontmatter: FrontmatterLike = { urgent: true, important: true };
     // when
@@ -151,6 +155,7 @@ describe("applyUndo — 移動前の状態へ復元（mutate）", () => {
         urgent: { present: true, value: 5 },
         important: { present: false },
       },
+      wrote: { urgent: true, important: true },
     };
     const frontmatter: FrontmatterLike = { urgent: true, important: true };
     // when
@@ -170,9 +175,56 @@ describe("applyUndo — 移動前の状態へ復元（mutate）", () => {
       title: "r",
       keys: KEYS,
       previous,
+      wrote: { urgent: true, important: true },
     });
     // then: 移動前と一致（urgent は absent へ戻り important は false へ）
     expect(after).toEqual(before);
+  });
+});
+
+describe("isUndoApplicable — 復元前の同一性照合（別ノートへの誤 delete/上書き防止）", () => {
+  const recordFor = (wrote: { urgent: boolean; important: boolean }): UndoRecord => ({
+    entryId: "a.md",
+    title: "a",
+    keys: KEYS,
+    previous: { urgent: { present: false }, important: { present: false } },
+    wrote,
+  });
+
+  it("isUndoApplicable — 両軸が書き込んだ値のままなら true（正常な undo 対象）", () => {
+    // given: 移動で両軸に true/true を書き込み、現状もそのまま
+    const frontmatter: FrontmatterLike = { urgent: true, important: true };
+    // when / then
+    expect(isUndoApplicable(frontmatter, recordFor({ urgent: true, important: true }))).toBe(
+      true,
+    );
+  });
+
+  it("isUndoApplicable — パス再利用で別ノートの非 boolean データが載っていたら false（誤適用しない）", () => {
+    // given: 移動後に a.md が別ノートで作り直され、実データ（数値/文字列）を持つ
+    const frontmatter: FrontmatterLike = { urgent: 5, important: "high" };
+    // when / then: 書き込んだ true/true と一致しないため復元対象にしない（delete で数値/文字列を消さない）
+    expect(isUndoApplicable(frontmatter, recordFor({ urgent: true, important: true }))).toBe(
+      false,
+    );
+  });
+
+  it("isUndoApplicable — 片軸だけ外部で書き換えられていても false（部分不一致も弾く）", () => {
+    // given: urgent は書いた値のままだが important がユーザーにより false へ変更されている
+    const frontmatter: FrontmatterLike = { urgent: true, important: false };
+    // when / then
+    expect(isUndoApplicable(frontmatter, recordFor({ urgent: true, important: true }))).toBe(
+      false,
+    );
+  });
+
+  it("isUndoApplicable — キーが消えている（軸が削除された）と false", () => {
+    // given: 両軸キーが frontmatter から失われている
+    const frontmatter: FrontmatterLike = {};
+    // when / then
+    expect(isUndoApplicable(frontmatter, recordFor({ urgent: false, important: false }))).toBe(
+      false,
+    );
   });
 });
 
@@ -182,6 +234,7 @@ describe("UndoManager — 直前 1 手の保持", () => {
     title: entryId,
     keys: KEYS,
     previous: { urgent: { present: false }, important: { present: false } },
+    wrote: { urgent: true, important: true },
   });
 
   it("初期状態は記録なし", () => {

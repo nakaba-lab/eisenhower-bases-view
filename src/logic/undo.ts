@@ -38,6 +38,13 @@ export interface UndoRecord {
   keys: UndoAxisKeys;
   /** 各軸の移動前の値（absent は delete で復元）。 */
   previous: { urgent: PreviousAxisValue; important: PreviousAxisValue };
+  /**
+   * 移動時に両軸へ書き込んだ値（同一性照合用）。undo は `entryId`（file.path）でノートを再解決する
+   * ため、移動後にそのパスが**別ノートで再利用**されていたり、ユーザー/他プラグインが軸値を書き換えて
+   * いた場合、記録した `previous` を適用すると無関係な値を上書き/`delete` しうる（undo は唯一の delete
+   * 経路）。復元前に「両軸が自分の書いた値のままか」を {@link isUndoApplicable} で照合するために保持する。
+   */
+  wrote: { urgent: boolean; important: boolean };
 }
 
 /** frontmatter 風オブジェクト（obsidian の `processFrontMatter` が渡す plain object の最小型）。 */
@@ -91,6 +98,25 @@ function restoreKey(
 export function applyUndo(frontmatter: FrontmatterLike, record: UndoRecord): void {
   restoreKey(frontmatter, record.keys.urgent, record.previous.urgent);
   restoreKey(frontmatter, record.keys.important, record.previous.important);
+}
+
+/**
+ * 記録した「書き込んだ値」（{@link UndoRecord.wrote}）がいまも両軸に残っているか
+ *（＝この記録が指すノートが、記録時に自分が書き込んだ状態のままか）を判定する純関数。
+ *
+ * undo は file.path でノートを再解決するため、移動後にそのパスが別ノートで再利用されていたり、
+ * ユーザー/他プラグインが軸値を書き換えていた場合、記録した `previous` を適用すると無関係な値を
+ * 上書き/`delete` しうる（undo は唯一の delete 経路のため影響が大きい）。適用前に本判定で「両軸が
+ * 自分の書いた値のままか」を照合し、不一致なら復元しない（呼び出し側は記録を破棄する）。
+ */
+export function isUndoApplicable(
+  frontmatter: FrontmatterLike,
+  record: UndoRecord,
+): boolean {
+  return (
+    frontmatter[record.keys.urgent] === record.wrote.urgent &&
+    frontmatter[record.keys.important] === record.wrote.important
+  );
 }
 
 /**

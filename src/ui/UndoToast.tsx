@@ -23,6 +23,13 @@ export interface UndoToastProps {
   onUndo: () => void;
   /** 「閉じる」押下・トーストを消す。 */
   onDismiss: () => void;
+  /**
+   * ポインタ/フォーカスがトースト内に入った（自動消滅タイマーの一時停止に使う・WCAG 2.2.1）。
+   * キーボード/AT 利用者がボタンへ到達する前に消えないよう、呼び出し側がカウントダウンを止める。
+   */
+  onInteractStart?: () => void;
+  /** ポインタ/フォーカスがトーストから出た（自動消滅タイマーの再開に使う）。 */
+  onInteractEnd?: () => void;
 }
 
 export function UndoToast({
@@ -32,9 +39,22 @@ export function UndoToast({
   dismissLabel,
   onUndo,
   onDismiss,
+  onInteractStart,
+  onInteractEnd,
 }: UndoToastProps) {
   return (
-    <div class="eisenhower-undo-toast" role="group" aria-label={regionLabel}>
+    <div
+      class="eisenhower-undo-toast"
+      role="group"
+      aria-label={regionLabel}
+      // ポインタ（hover）とフォーカス（キーボード/AT）の両方で自動消滅を一時停止/再開する。
+      // focus/blur はターゲットへ届く前の capture 段で親に伝わるため *Capture で子ボタンの
+      // フォーカス出入りも捉える（focus/blur はバブルしない）。
+      onMouseEnter={onInteractStart}
+      onMouseLeave={onInteractEnd}
+      onFocusCapture={onInteractStart}
+      onBlurCapture={onInteractEnd}
+    >
       <span class="eisenhower-undo-toast__message">{message}</span>
       <button
         type="button"

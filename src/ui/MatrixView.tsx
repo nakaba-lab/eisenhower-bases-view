@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import {
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
   useSensor,
   useSensors,
   type DragCancelEvent,
@@ -13,6 +11,9 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+// #44: ポップアウト別ウィンドウでカードを掴めるよう、realm 堅牢な派生 sensor を使う
+//（dnd-kit の生 sensor は cross-realm ノードで move リスナーをメイン document に張り掴めない）。
+import { PopoutKeyboardSensor, PopoutPointerSensor } from "./popoutSensors";
 import { QUADRANT_KEYS, axisValuesForQuadrant, type Quadrant } from "../logic/quadrant";
 import { messagesFor, type Messages } from "../i18n";
 import type { MatrixCallbacks, MatrixViewModel } from "../bases/types";
@@ -95,8 +96,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 5px 未満の移動は掴みにせずクリックとして成立させる。KeyboardSensor の起動/ドロップキーは
   // Space のみに remap し、Enter を「開く」（NoteCard の onKeyDown）へ解放する。
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
+    useSensor(PopoutPointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PopoutKeyboardSensor, {
       // start は Space のみ（Enter は「開く」に解放）。end は Space に加え **Tab も残す**＝
       // ドラッグ中に Tab でフォーカスを移すと dnd-kit がドロップ確定する既定挙動を保つ（Enter だけ外す。レビュー指摘）。
       keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Tab"] },

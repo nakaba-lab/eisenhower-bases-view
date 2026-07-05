@@ -7,9 +7,14 @@
 # （.gitlab/ci/app-test.yml のコメント参照）。
 version: 2
 updates:
+  # target-branch: develop — GitHub のデフォルトブランチは main（Obsidian のプラグイン
+  # ディレクトリがデフォルトブランチ HEAD の manifest.json を「最新版」として読むため、
+  # リリース済みバージョンしか載らない main を default にしている）。一方 Git Flow では
+  # 依存更新は develop へ入れたいので、各エントリで target-branch を develop に固定する。
   # プラグイン本体（ルート package.json）の依存更新。/project-setup がスタック確定時に有効化。
   - package-ecosystem: npm
     directory: /
+    target-branch: "develop"
     schedule:
       interval: weekly
 
@@ -17,6 +22,7 @@ updates:
   # プロジェクトはこのエントリも削除する。
   - package-ecosystem: npm
     directory: /docs-site
+    target-branch: "develop"
     schedule:
       interval: weekly
     # astro 本体と @astrojs/*・astro-* は peer 依存で密結合のため 1 PR にまとめる
@@ -31,6 +37,7 @@ updates:
   # 切り替えてよい（Dependabot が SHA も追従更新する）。
   - package-ecosystem: github-actions
     directory: /
+    target-branch: "develop"
     schedule:
       interval: weekly
 

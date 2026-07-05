@@ -26,8 +26,14 @@ scripts/e2e/setup-and-run.sh
 
 出力（既定 `$WORK/out`、`WORK` 環境変数で変更可）:
 
-- `console.log` — レンダラの console（各 entry の Value 表現・`onDataUpdated` 再発火回数 等）
-- `spike.png` — 検証時点のスクリーンショット
+- `console.log` — レンダラの console＋各チェックの PASS/FAIL ログ
+- `result.json` — 構造化結果（`checks[]`／`dom`／`writeBack`／`reclassify`／`undo`）
+- `01-initial.png` — 初期描画（4 象限＋未分類・ロックカード）
+- `02-after-writeback.png` — ドラッグ書き戻し後（移動＋Undo トースト）
+- `03-after-undo.png` — undo 後
+- `matrix.png` — ビュー未描画で失敗したときのスクショ／`99-fatal.png` — 例外（FATAL）時のスクショ
+
+> `$WORK`（既定は `mktemp` の一時ディレクトリ）は Obsidian 展開＋Vault で数百MB規模になるが**自動削除しない**。不要になったら手動で削除する。
 
 ## 環境変数
 
@@ -39,14 +45,18 @@ scripts/e2e/setup-and-run.sh
 | `WORK` | 一時ディレクトリ | 作業（Obsidian 展開・Vault・出力）の置き場 |
 | `CDP_PORT` | `9222` | Obsidian のリモートデバッグポート |
 
-## 本実装（F1〜F6）への移行メモ
+## 本実装（F1〜F6）への移行（完了済み）
 
-スパイク時点では `run-cdp.js` がスパイク専用ビュー（`.eisenhower-spike` セレクタ・`eisenhower-spike`
-ビュー型・移動ボタン）を前提にしている。本実装のビュー（dnd-kit のドラッグ・別ビュー型 ID）に合わせて、
-次の 2 箇所を更新する:
+スパイク版（`.eisenhower-spike` セレクタ・`eisenhower-spike` ビュー型・移動ボタン）から本実装へ**移行済み**。
+現行ハーネスは次を検証する（`run-cdp.js`）:
 
-1. `setup-and-run.sh` のテスト Vault `.base` の `type:`（= `VIEW_TYPE`）
-2. `run-cdp.js` の DOM セレクタ（`.eisenhower-spike*`）と操作（ボタン click → dnd-kit のドラッグ操作）
+1. `setup-and-run.sh` のテスト Vault `.base` は `type: eisenhower-matrix`（既定 `VIEW_TYPE`）。フィクスチャは
+   4 象限＋未分類（absent/partial）＋非 boolean（numeric＝locked）＋フォルダ配下（Project/infolder）を網羅。
+2. `run-cdp.js` は本実装セレクタ（`.eisenhower-matrix` / `.eisenhower-quadrant` / `.eisenhower-note-card`）で
+   配置・ロックを確認し、**dnd-kit の実ポインタドラッグ**で書き戻し → `processFrontMatter`（ファイル反映）→
+   `onDataUpdated` 自動再発火（`plugin.liveViews` のインスタンス計測）→ **base を開き直した楽観保留なしの
+   新規描画でサーバ再分類**（往復後半）→ **undo コマンド**（前提と成否をアサートしてから遷移復元）を検証する。
+   初回オープンの信頼ダイアログ（restricted mode）は `plugins.setEnable(true)`＋`enablePlugin` で解除する。
 
 ## スパイクで確定した API（参考）
 

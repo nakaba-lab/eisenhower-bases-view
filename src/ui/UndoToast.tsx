@@ -24,12 +24,13 @@ export interface UndoToastProps {
   /** 「閉じる」押下・トーストを消す。 */
   onDismiss: () => void;
   /**
-   * ポインタ/フォーカスがトースト内に入った（自動消滅タイマーの一時停止に使う・WCAG 2.2.1）。
-   * キーボード/AT 利用者がボタンへ到達する前に消えないよう、呼び出し側がカウントダウンを止める。
+   * ポインタ（hover）がトースト内に入った（`true`）／出た（`false`）。自動消滅タイマーの一時停止/
+   * 再開に使う（WCAG 2.2.1）。フォーカスと**別々に**通知し、呼び出し側は両方が外に出たときだけ再開する
+   *（片側だけで判定する非対称を避ける・round2 指摘）。
    */
-  onInteractStart?: () => void;
-  /** ポインタ/フォーカスがトーストから出た（自動消滅タイマーの再開に使う）。 */
-  onInteractEnd?: () => void;
+  onPointerInside?: (inside: boolean) => void;
+  /** フォーカス（キーボード/AT）がトースト内に入った（`true`）／出た（`false`）。用途は {@link onPointerInside} と対。 */
+  onFocusInside?: (inside: boolean) => void;
 }
 
 export function UndoToast({
@@ -39,21 +40,20 @@ export function UndoToast({
   dismissLabel,
   onUndo,
   onDismiss,
-  onInteractStart,
-  onInteractEnd,
+  onPointerInside,
+  onFocusInside,
 }: UndoToastProps) {
   return (
     <div
       class="eisenhower-undo-toast"
       role="group"
       aria-label={regionLabel}
-      // ポインタ（hover）とフォーカス（キーボード/AT）の両方で自動消滅を一時停止/再開する。
-      // focus/blur はターゲットへ届く前の capture 段で親に伝わるため *Capture で子ボタンの
-      // フォーカス出入りも捉える（focus/blur はバブルしない）。
-      onMouseEnter={onInteractStart}
-      onMouseLeave={onInteractEnd}
-      onFocusCapture={onInteractStart}
-      onBlurCapture={onInteractEnd}
+      // ポインタ（hover）とフォーカス（キーボード/AT）を別々に通知し、呼び出し側が両者の論理和で
+      // 自動消滅を一時停止する。focus/blur はバブルしないため *Capture で子ボタンの出入りも親で捉える。
+      onMouseEnter={() => onPointerInside?.(true)}
+      onMouseLeave={() => onPointerInside?.(false)}
+      onFocusCapture={() => onFocusInside?.(true)}
+      onBlurCapture={() => onFocusInside?.(false)}
     >
       <span class="eisenhower-undo-toast__message">{message}</span>
       <button

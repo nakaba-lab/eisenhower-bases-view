@@ -144,6 +144,22 @@ export class UndoManager {
     this.current = null;
   }
 
+  /**
+   * 現在の記録が指すノート（`entryId`＝file.path）が引数と一致すれば記録を破棄する。
+   *
+   * 記録した path のファイルが **削除/リネーム**されると、その path は別ノートで再利用されうる。
+   * undo は path でノートを再解決するため、記録を残したままだと再利用された別ノートを誤って
+   * 上書き/`delete` しうる（`isUndoApplicable` の値照合だけでは、同一象限＝同じ boolean 値を持つ
+   * 別ノートを区別できない）。vault の delete/rename イベントで本メソッドを呼び、path が無効化された
+   * 時点で記録を捨てて「パス再利用への undo」を根本から断つ（`main.ts` が配線・レビュー指摘）。
+   * 破棄したら `true`、対象外（記録が無い/別ノート）なら `false` を返す。
+   */
+  clearIfEntry(entryId: string): boolean {
+    if (this.current?.entryId !== entryId) return false;
+    this.current = null;
+    return true;
+  }
+
   /** 元に戻せる移動があるか。 */
   hasRecord(): boolean {
     return this.current !== null;

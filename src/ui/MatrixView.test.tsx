@@ -4,7 +4,7 @@ import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../bases/
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor, type Language } from "../i18n";
 import { resolvePresentation } from "../bases/presentation";
-import { render, unmount } from "./MatrixView";
+import { render, unmount, shouldRescheduleAutoDismiss } from "./MatrixView";
 
 /**
  * MatrixView — アダプタ層が onDataUpdated 内で呼ぶ命令的な描画入口（AC3）。
@@ -40,6 +40,25 @@ afterEach(() => {
     new KeyboardEvent("keydown", { code: "Escape", key: "Escape", bubbles: true, cancelable: true }),
   );
   document.body.innerHTML = "";
+});
+
+describe("shouldRescheduleAutoDismiss — undo トースト自動消滅の再開判定（WCAG 2.2.1・round2 指摘の回帰ガード）", () => {
+  it("ポインタもフォーカスも外・タイマー停止中なら再開する（両方外に出た＝カウントダウン再開）", () => {
+    expect(shouldRescheduleAutoDismiss(false, false, false)).toBe(true);
+  });
+
+  it("ポインタが内にある間は再開しない（hover 継続中は一時停止を保つ＝非対称の是正）", () => {
+    // round2 で見つかった欠陥の回帰ガード: focus が外れても pointer が hover 中なら再開しない
+    expect(shouldRescheduleAutoDismiss(true, false, false)).toBe(false);
+  });
+
+  it("フォーカスが内にある間は再開しない（キーボード/AT がボタン上にいる間は保持）", () => {
+    expect(shouldRescheduleAutoDismiss(false, true, false)).toBe(false);
+  });
+
+  it("既にタイマーが走っていれば再開しない（二重予約を避ける）", () => {
+    expect(shouldRescheduleAutoDismiss(false, false, true)).toBe(false);
+  });
 });
 
 describe("MatrixView render — 状態表示", () => {

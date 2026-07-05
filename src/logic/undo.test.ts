@@ -266,4 +266,29 @@ describe("UndoManager — 直前 1 手の保持", () => {
     expect(manager.hasRecord()).toBe(false);
     expect(manager.peek()).toBeNull();
   });
+
+  it("clearIfEntry — 記録が指す path と一致すれば破棄して true（削除/リネームでのパス無効化）", () => {
+    const manager = new UndoManager();
+    manager.record(recordOf("a.md"));
+    // when: a.md が削除された想定
+    const cleared = manager.clearIfEntry("a.md");
+    // then: 記録を破棄（パス再利用への誤 undo を断つ）
+    expect(cleared).toBe(true);
+    expect(manager.hasRecord()).toBe(false);
+  });
+
+  it("clearIfEntry — 別 path なら何もせず false（無関係なファイル操作で記録を消さない）", () => {
+    const manager = new UndoManager();
+    manager.record(recordOf("a.md"));
+    // when: 別ノート b.md の削除/リネーム
+    const cleared = manager.clearIfEntry("b.md");
+    // then: 記録は保持
+    expect(cleared).toBe(false);
+    expect(manager.peek()?.entryId).toBe("a.md");
+  });
+
+  it("clearIfEntry — 記録が無ければ false", () => {
+    const manager = new UndoManager();
+    expect(manager.clearIfEntry("a.md")).toBe(false);
+  });
 });

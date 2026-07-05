@@ -1,4 +1,4 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, TAbstractFile } from "obsidian";
 import { DEFAULT_SETTINGS, mergeSettings, type EisenhowerSettings } from "./settings";
 import { EisenhowerBasesView } from "./bases/EisenhowerBasesView";
 import {
@@ -42,6 +42,21 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
         void runUndo(this.app, this.undoManager, this.resolveMessages());
       },
     });
+
+    // 記録した path のファイルが削除/リネームされたら undo 記録を破棄する（パス再利用への誤 undo 防止）。
+    // undo は path でノートを再解決するため、記録を残すと再利用された別ノートを上書き/delete しうる
+    // （値照合 isUndoApplicable では同一象限の別ノートを区別できない＝レビュー指摘）。path 無効化の時点で断つ。
+    // registerEvent で Plugin ライフサイクルに紐づけ、onunload で自動解除する。
+    this.registerEvent(
+      this.app.vault.on("delete", (file: TAbstractFile) => {
+        this.undoManager.clearIfEntry(file.path);
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (_file: TAbstractFile, oldPath: string) => {
+        this.undoManager.clearIfEntry(oldPath);
+      }),
+    );
 
     safeRegisterBasesView(
       () =>

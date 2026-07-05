@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 寄付（任意の開発支援）の導線を追加した。`manifest.json` の `fundingUrl`（GitHub Sponsors・Ko-fi）で Obsidian のプラグイン詳細ページに「Donate」ボタンが出るようにし、`.github/FUNDING.yml` で GitHub リポジトリに Sponsor ボタンを、README に「Support / 支援」節を追加した。アプリ内に寄付を促すポップアップ等は入れない（Obsidian developer policies 準拠）。
+
 ### Changed
 
 - README を英日併記に再構成し、英語の purpose・使い方・インストール手順とマトリクスのスクリーンショットを追加した（コミュニティプラグイン申請の英語話者レビュアー向けに可読性を確保）。

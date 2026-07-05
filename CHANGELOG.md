@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-06
+
 ### Changed
 
 - Obsidian 自動レビューの指摘に対応した（プラグイン挙動は不変）。docs-site の `content.config.ts` の `eslint-enable` ディレクティブコメントに説明（`--`）を付与し、bot の `eslint-comments/require-description` エラーを解消した。プラグインバンドル（`main.js`）に変更はない。

@@ -1,0 +1,220 @@
+/**
+ * 軸プロパティの解決と、1 軸値の absent/非 boolean/true/false 正規化
+ * （#19 F2・#33 で absent 判定を是正・#34 で boolean 軸限定の型ガードに狭める）。
+ *
+ * Bases API 接触（`config.getAsPropertyId`／`entry.getValue`）をアダプタ層に閉じ込める。
+ * v1 は **boolean 軸限定**のため、`normalizeAxis` は **値の型が `BooleanValue` の軸だけ**を
+ * `isTruthy()` で boolean 化し、それ以外（absent＝`NullValue`・非 boolean＝`NumberValue`／
+ * `StringValue` 等）は `undefined`（未分類）へ退避する（正の許可リスト `instanceof BooleanValue`・#34）。
+ * これにより非 boolean の `note.*` 軸が 4 象限に並んでドラッグ→両軸 `true/false` 上書きで
+ * 元の数値/文字列を破壊する事故（データ損失）を防ぐ。absent（`NullValue`）も非 `BooleanValue` として
+ * 自然に未分類へ落ちるため、#33 の absent 区別（欠損を最低象限 Delete に誤分類しない）を包含する。
+ *
+ * 型同一性（instanceof）で判定するのは #33 の知見による: 旧実装の `toString()===null` は実機の
+ * `NullValue.toString()` が文字列 "null" を返す（型契約どおり string）ため機能せず、`constructor.name`
+ * も実機は minify 済み（`"t"`）で壊れる。instanceof は prototype チェーンで成立し文字列表現・minify に依存しない。
+ *
+ * `BooleanValue`（値）は obsidian から import する（実機は外部提供・esbuild external）。型は `import type`、
+ * 単体テストは vitest が obsidian の値 import を `src/test-support/obsidianStub.ts`（`BooleanValue`／
+ * `NullValue`／`NumberValue`／`StringValue` を提供）へ解決する。⚠️ スタブ＝実機の同値性は単体では
+ * 検証不能（`instanceof BooleanValue` の実機成立は `scripts/e2e` の placements 検証で担保）。
+ */
+import { BooleanValue, NullValue } from "obsidian";
+import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
+import type { EisenhowerSettings } from "../settings";
+import type { AxisValues } from "../logic/quadrant";
+
+/**
+ * Bases ビュー options のキー。F4（#21）の軸プロパティ設定 UI がこのキーに書き込み、
+ * 本層は `config.getAsPropertyId(key)` で解決する。
+ */
+export const URGENT_OPTION_KEY = "urgentProperty";
+export const IMPORTANT_OPTION_KEY = "importantProperty";
+
+/** 解決済みの両軸 propertyId。 */
+export interface AxisPropertyIds {
+  urgent: BasesPropertyId;
+  important: BasesPropertyId;
+}
+
+/** 設定のプロパティ名（例: "urgent"）を note プロパティ ID（`note.urgent`）にする。 */
+function toNotePropertyId(name: string): BasesPropertyId {
+  return `note.${name}` as BasesPropertyId;
+}
+
+/** `note.` 接頭辞。書き戻し可能なのはこの名前空間（frontmatter）のプロパティのみ。 */
+const NOTE_PROPERTY_PREFIX = "note.";
+
+/**
+ * 「書き戻せる `note.*` 軸か」を判定する単一述語（軸許容ルールの真実源・#21 F4）。
+ *
+ * `note.<key>`（非空キー）のみ true を返し、`formula.*`／`file.*`／空キー（bare `note.`）を弾く。
+ * options の `filter`（選択時に弾く＝`viewOptions.buildAxisViewOptions`）・読み取り（{@link readSingleAxis}）・
+ * 書き戻し（{@link toFrontmatterKey}／`EisenhowerBasesView.writeBackAxes`）の 3 面がこの述語を共有し、
+ * 「選べるのに壊れる／読めるのに書けない」非対称を防ぐ。
+ */
+export function isWritableAxisProperty(propertyId: BasesPropertyId): boolean {
+  const raw = propertyId as unknown as string;
+  // Bases API / config から予期しない値（null/undefined/非文字列）が渡っても
+  // startsWith で throw せず false を返す（Bases 境界の防御。churn 耐性）。
+  return (
+    typeof raw === "string" &&
+    raw.startsWith(NOTE_PROPERTY_PREFIX) &&
+    raw.length > NOTE_PROPERTY_PREFIX.length
+  );
+}
+
+/**
+ * 軸 propertyId から frontmatter の書き戻しキーを取り出す（#20 F3 のドラッグ書き戻し用）。
+ * 書き戻し可能な `note.<key>`（{@link isWritableAxisProperty}）のみ `<key>` を返す。
+ * `formula.*`／`file.*`／空キーは frontmatter へ書き戻せないため `null` を返す（呼び出し側は Notice 等で弾く）。
+ */
+export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
+  if (!isWritableAxisProperty(propertyId)) return null;
+  return (propertyId as unknown as string).slice(NOTE_PROPERTY_PREFIX.length);
+}
+
+/**
+ * 軸 propertyId を解決する。ビュー options（`config.getAsPropertyId`）を主とし、
+ * 未設定（null）なら設定タブのデフォルト（`note.<name>`）にフォールバックする（要件 F4）。
+ */
+export function resolveAxisPropertyIds(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+): AxisPropertyIds {
+  const urgent =
+    config?.getAsPropertyId(URGENT_OPTION_KEY) ??
+    toNotePropertyId(settings.defaultUrgencyProperty);
+  const important =
+    config?.getAsPropertyId(IMPORTANT_OPTION_KEY) ??
+    toNotePropertyId(settings.defaultImportanceProperty);
+  return { urgent, important };
+}
+
+/** ドラッグ書き戻し先の frontmatter キー（両軸とも書き戻し可能な `note.*` のとき）。 */
+export interface WritableAxisKeys {
+  urgent: string;
+  important: string;
+}
+
+/**
+ * 書き戻し先の frontmatter キーを解決する（#20 F3 ドラッグ書き戻し・#21 F4 実行時ガード）。
+ *
+ * 軸 propertyId を解決（ビュー options 主・設定デフォルト）し、両軸とも書き戻し可能な `note.<key>`
+ * なら `{ urgent, important }`（frontmatter キー）を返す。**片方でも非 `note.*`（`formula.*`／`file.*`／
+ * 空キー）なら `null`** を返し、呼び出し側（`EisenhowerBasesView.writeBackAxes`）は frontmatter に
+ * 触れる前に Notice で弾く（AC3＝書込不可軸のとき frontmatter を壊さない）。
+ *
+ * `writeBackAxes` は `extends BasesView` で単体対象外のため、ガード判定（どの軸が書けるか）の純度を
+ * 本関数へ切り出して単体テストで固定する（`safeRegisterBasesView` と同じ流儀）。
+ */
+export function resolveWritableAxisKeys(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+): WritableAxisKeys | null {
+  const ids = resolveAxisPropertyIds(config, settings);
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  if (urgent === null || important === null) return null;
+  // 両軸が同一 frontmatter キーだと、書き戻しが同じキーを 2 度書いて後勝ちで潰れ（両軸が同値になり）
+  // カードが意図しない象限へ飛ぶ。設定ミスなので書き戻し前に弾く（Notice で通知・レビュー指摘の question）。
+  if (urgent === important) return null;
+  return { urgent, important };
+}
+
+/**
+ * 両軸が**同一の書き戻し可能 `note.*` キー**を指すか（設定ミス）を判定する。
+ *
+ * 同一キーだと両軸値が常に同値になり、カードは do/delete の実象限に載って掴めるのに、書き戻しは
+ * `resolveWritableAxisKeys` の `urgent === important` ガードで毎回 `null`→Notice→ロールバックになる
+ *（「掴めるのに必ず失敗する」壊れた UI 状態）。UI 側で当該ビューの全カードをドラッグ不可（`locked`）に
+ * するために、`toViewModel` がこの述語で検出する（書き込み前ガードと対称の読み取り側ガード・レビュー指摘）。
+ */
+export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  return urgent !== null && urgent === important;
+}
+
+/**
+ * 1 軸の Value を boolean | undefined に正規化する（v1 は boolean 軸限定・#34）。
+ * `getValue` 自体の null と、値の型が `BooleanValue` でないもの（absent＝`NullValue`・
+ * 非 boolean＝`NumberValue`／`StringValue` 等）を `undefined`（未分類）へ退避し、
+ * `BooleanValue` の値だけ `isTruthy()` で boolean 化する（正の許可リスト＝型同一性 `instanceof`）。
+ * 非 boolean は `isTruthy()` の真偽ではなく**型**で退避する（falsy な数値 0・空文字を `false`＝Delete 象限に
+ * 落とさない）。未知/新規の Value 型も既定で未分類になり（安全側）、v2 は許可リストに型別ブランチを足す。
+ * 本関数は**値の型だけ**を見る（propertyId の `note.*` 判定は呼び出し側 {@link readSingleAxis} が担う）。
+ */
+function normalizeAxis(value: Value | null): boolean | undefined {
+  if (value == null) return undefined; // getValue 自体の null（防御）
+  // BooleanValue 以外（NullValue=absent・NumberValue・StringValue 等）は未分類へ退避し、
+  // 非 boolean をドラッグ→両軸 true/false 上書き（データ破壊）させない（#34）。
+  if (!(value instanceof BooleanValue)) return undefined;
+  return value.isTruthy();
+}
+
+/**
+ * 1 軸を読む。書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は **absent 扱い（undefined）**にして
+ * 4 象限へ配置しない（未分類・ドロップ不可）。読み取り側を書き戻し側（{@link toFrontmatterKey}）と
+ * 対称にし、「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない（レビュー指摘）。
+ * 非 `note.*` 軸が設定されたときの本格的な UX（ドラッグ無効化・ビュー全体の警告）は F4（#21）で扱う。
+ */
+function readSingleAxis(
+  entry: BasesEntry,
+  id: BasesPropertyId,
+): boolean | undefined {
+  if (toFrontmatterKey(id) === null) return undefined;
+  return normalizeAxis(entry.getValue(id));
+}
+
+/** 1 エントリの両軸値を読み、absent を区別した {@link AxisValues} を返す。 */
+export function readAxisValues(
+  entry: BasesEntry,
+  ids: AxisPropertyIds,
+): AxisValues {
+  return {
+    urgent: readSingleAxis(entry, ids.urgent),
+    important: readSingleAxis(entry, ids.important),
+  };
+}
+
+/**
+ * 値が「present だが boolean でない」（数値/文字列等）＝ドロップの両軸 `true/false` 上書きで
+ * **破壊される**値かを判定する。`null`・absent（`NullValue`）は `false`（欠損は上書きで破壊せず、
+ * 分類として新規に書けるため）。`BooleanValue` も `false`（boolean→boolean は再分類で破壊でない）。
+ * `normalizeAxis`（値を undefined へ潰す）と違い、**absent と「非 boolean が入っている」を区別する**
+ * ための述語（前者はドラッグ可・後者はドラッグ不可にする）。
+ */
+export function isUnsupportedAxisValue(value: Value | null): boolean {
+  if (value == null) return false;
+  if (value instanceof NullValue) return false; // absent（欠損）は破壊しない
+  return !(value instanceof BooleanValue);
+}
+
+/** 書込可能な `note.*` 軸に限り、その軸値が非 boolean（破壊対象）かを見る。 */
+function isUnsupportedOnWritableAxis(
+  entry: BasesEntry,
+  id: BasesPropertyId,
+): boolean {
+  // 非 note.*（formula/file）軸は書き戻し自体が `resolveWritableAxisKeys` で弾かれ破壊経路が無いため対象外。
+  if (!isWritableAxisProperty(id)) return false;
+  return isUnsupportedAxisValue(entry.getValue(id));
+}
+
+/**
+ * エントリのどちらかの軸が「書込可能 `note.*` 上の非 boolean 値」を持つか（#34 で未分類化した
+ * カードのうち、ドロップで両軸を `true/false` 上書きすると元の数値/文字列を破壊するもの）。
+ *
+ * `true` のカードは UI（`NoteCard`）で**未分類ゾーンでもドラッグ不可**にして誤ドロップによる
+ * データ破壊を防ぐ（#34 が読み取り側で塞げなかった「未分類からの手動ドラッグ」経路の封鎖）。
+ * 真に absent なカード（欠損）は `false`＝ドラッグして分類できる（破壊しない）ため区別する。
+ */
+export function hasUnsupportedAxisValue(
+  entry: BasesEntry,
+  ids: AxisPropertyIds,
+): boolean {
+  return (
+    isUnsupportedOnWritableAxis(entry, ids.urgent) ||
+    isUnsupportedOnWritableAxis(entry, ids.important)
+  );
+}

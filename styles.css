@@ -2,5 +2,289 @@
  * Eisenhower Matrix (Bases view) — スタイル
  * Obsidian テーマ変数（--background-*, --text-*, --interactive-* 等）に追従し、
  * ライト/ダーク両テーマで馴染ませる方針（docs/要件定義書.md「UI/UX 方針」）。
- * 実スタイルは UI 実装時に追加する。
+ * 配色はハードコードしない（テーマ変数のみ）。
  */
+
+/* F1（#18）: シェル＋状態表示。2×2 グリッドとカードは #19 で追加する。 */
+.eisenhower-matrix {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: var(--size-4-3, 12px);
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+  box-sizing: border-box;
+  /* グリッドの単列化をビューポート幅ではなく**このビューのペイン幅**に追従させる（レビュー指摘）。
+   * inline 軸のみの containment なので高さ追従（min-height:100% + flex 列）は壊さない。
+   * Obsidian（Electron/Chromium）はコンテナクエリを完全サポート。 */
+  container-type: inline-size;
+}
+
+/* 未分類ゾーン非表示 × 全象限空 のときの「無言の空表示」を避けるヒント（レビュー指摘）。 */
+.eisenhower-matrix__unclassified-hint {
+  margin: var(--size-4-2, 8px) 0 0;
+  padding: var(--size-4-2, 8px);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small, 0.8em);
+  text-align: center;
+}
+
+.eisenhower-matrix--loading,
+.eisenhower-matrix--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.eisenhower-matrix__placeholder {
+  /* 色は親 .eisenhower-matrix--empty（--text-muted）から継承する。 */
+  margin: 0;
+  text-align: center;
+}
+
+/* #19（F2）: 2×2 グリッド（Do/Schedule / Delegate/Delete）。 */
+.eisenhower-matrix__grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: var(--size-4-2, 8px);
+  min-height: 0;
+}
+
+/* 狭幅（モバイル・狭ペイン）では 1 列に積む（崩れ防止＝レスポンシブ）。
+ * コンテナクエリでペイン幅に追従する（狭ペインに置いた Bases ビューでも単列化する。
+ * ビューポート幅依存の @media では広ウィンドウ内の狭ペインに反応しなかった＝レビュー指摘）。 */
+@container (max-width: 600px) {
+  .eisenhower-matrix__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 象限セル（カードのドロップ先になる領域＝DnD は #20）。 */
+.eisenhower-quadrant {
+  display: flex;
+  flex-direction: column;
+  min-height: 96px;
+  /* grid/flex の min-width:auto トラップを断つ（nowrap カードがトラックを
+   * intrinsic 幅まで広げて狭幅で横はみ出しするのを防ぐ＝レスポンシブ）。 */
+  min-width: 0;
+  padding: var(--size-4-2, 8px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  background-color: var(--background-secondary);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 4 象限を控えめなアクセント色で区別する。既定はテーマ変数（ライト/ダーク追従）、
+ * 設定タブ（F6/#23）で象限ごとに色を指定するとインライン変数
+ * --eisenhower-quadrant-accent が上書きする（空/未設定はテーマ既定にフォールバック）。 */
+.eisenhower-quadrant--quadrant {
+  border-inline-start: 3px solid
+    var(--eisenhower-quadrant-accent, var(--interactive-accent));
+}
+
+/* 未分類ゾーンは下部にフル幅で常時表示（軸欠損・ドロップ不可）。 */
+.eisenhower-quadrant--unclassified {
+  margin-top: var(--size-4-2, 8px);
+  border-style: dashed;
+  border-inline-start-width: 1px;
+  background-color: var(--background-primary-alt);
+}
+
+.eisenhower-quadrant__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-4-2, 8px);
+  margin-bottom: var(--size-4-1, 4px);
+}
+
+.eisenhower-quadrant__title {
+  margin: 0;
+  font-size: var(--font-ui-small, 0.8em);
+  font-weight: var(--font-semibold, 600);
+  color: var(--text-normal);
+}
+
+.eisenhower-quadrant__axis {
+  font-size: var(--font-ui-smaller, 0.75em);
+  color: var(--text-muted);
+}
+
+.eisenhower-quadrant__count {
+  margin-inline-start: auto;
+  font-size: var(--font-ui-smaller, 0.75em);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.eisenhower-quadrant__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1, 4px);
+  overflow-y: auto;
+  min-height: 0;
+  /* カードの nowrap が幅を押し広げないよう収縮可能にする（ellipsis を効かせる）。 */
+  min-width: 0;
+}
+
+.eisenhower-quadrant__empty {
+  /* 「該当 0 件」は意味のある状態メッセージのため、装飾用の --text-faint ではなく
+   * AA を満たしやすい --text-muted を使う（Issue #19 の WCAG AA 視覚 AC）。 */
+  margin: auto 0;
+  text-align: center;
+  font-size: var(--font-ui-smaller, 0.75em);
+  color: var(--text-muted);
+}
+
+/* カードのラッパ <li>（listitem 意味論を保つ＝#9）。ドラッグ可能要素は内側の card。
+ * flex 列の項目として全幅に伸び、nowrap カードで広がらないよう収縮可能にする（ellipsis 維持）。 */
+.eisenhower-note-card-item {
+  min-width: 0;
+}
+
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。 */
+.eisenhower-note-card {
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  border-radius: var(--radius-s, 4px);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small, 0.8em);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* ドラッグ可能であることを示す（#20）。開く導線（#22）は role=button で伝わる。 */
+  cursor: grab;
+  touch-action: none;
+}
+
+/* クリックで開けることを示すホバー（#22 F5）。ドラッグ affordance（grab）は保ちつつ、
+ * 背景をテーマのホバー色にして操作可能性を示す（ハードコードせずテーマ変数に追従）。 */
+.eisenhower-note-card:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* キーボード操作時のフォーカス可視（dnd-kit が role=button・tabindex を付与＝AC5）。
+ * 親セル/リストが overflow:hidden/auto のため、外側リングは端で切れる。インセット
+ * （負オフセット）にしてカード内に描き、端のカードでも全周が見えるようにする。 */
+.eisenhower-note-card:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+
+/* ドラッグ中のカード（つかんでいる視覚フィードバック）。 */
+.eisenhower-note-card--dragging {
+  cursor: grabbing;
+  opacity: 0.5;
+}
+
+/* ドラッグ不可のロックカード（書込可能 note.* 軸に非 boolean 値を持ち、ドロップの両軸 true/false
+ * 上書きで元値が破壊されるため掴ませない・#34 補完）。grab カーソルを外し、鍵アイコン＋弱色で
+ * 「移動できない」ことを視覚化する。クリックで開く導線は残すため pointer にはしない。
+ * カード全体を opacity で薄くすると、まだ開ける（role=button・tabindex=0）タイトル文字まで
+ * 実効コントラストが下がり WCAG AA を割りうるため、opacity ではなく AA を満たすテーマの弱色トークン
+ *（--text-muted）で色だけ落とす（タイトルの可読性を保つ・レビュー指摘）。 */
+.eisenhower-note-card--locked {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.eisenhower-note-card__lock {
+  margin-inline-end: var(--size-4-1, 4px);
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+/* ドロップ可能な象限にカードが重なっているときのフィードバック（#20）。 */
+.eisenhower-quadrant--over {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -2px;
+  background-color: var(--background-modifier-hover);
+}
+
+/* 掴んでいる間カーソル/指へ追従する浮遊カード（DragOverlay）。象限の overflow:hidden に
+ * クリップされずグリッド外レイヤに描かれ、掴んでいる対象と移動先を視覚的に追える（#20・レビュー指摘）。 */
+.eisenhower-note-card--overlay {
+  cursor: grabbing;
+  box-shadow: var(--shadow-l, 0 4px 12px rgba(0, 0, 0, 0.3));
+  opacity: 0.95;
+}
+
+/* 移動結果（成功/失敗ロールバック）をスクリーンリーダーへ伝える視覚的非表示のライブ領域。
+ * 見た目には出さず a11y ツリーにのみ存在させる（レビュー指摘）。 */
+.eisenhower-matrix__sr-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 移動成功直後の「元に戻す」トースト（undo・最小実装）。ビュー下部に控えめに出し、
+ * テーマ変数に追従する（配色をハードコードしない）。次のドラッグ開始・タイムアウト・
+ * undo 実行で消える（表示制御は MatrixView）。sticky でスクロールしても下部に留まる。 */
+.eisenhower-undo-toast {
+  position: sticky;
+  bottom: var(--size-4-2, 8px);
+  align-self: center;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2, 8px);
+  max-width: 100%;
+  margin-top: var(--size-4-2, 8px);
+  padding: var(--size-4-2, 8px) var(--size-4-3, 12px);
+  color: var(--text-normal);
+  background-color: var(--background-secondary-alt, var(--background-secondary));
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  box-shadow: var(--shadow-l, 0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+/* 長いノート名は 1 行省略にしてボタンを押し出さない。 */
+.eisenhower-undo-toast__message {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「元に戻す」はアクセントボタンとして馴染ませる（Obsidian の第一級アクション色）。 */
+.eisenhower-undo-toast__undo {
+  flex: 0 0 auto;
+  color: var(--text-on-accent);
+  background-color: var(--interactive-accent);
+}
+
+.eisenhower-undo-toast__undo:hover {
+  background-color: var(--interactive-accent-hover, var(--interactive-accent));
+}
+
+/* 「閉じる」は控えめなアイコンボタン（× 記号）。縦にもパディングを持たせクリック標的を確保する。 */
+.eisenhower-undo-toast__dismiss {
+  flex: 0 0 auto;
+  padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
+  color: var(--text-muted);
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.eisenhower-undo-toast__dismiss:hover {
+  color: var(--text-normal);
+}
+
+/* フォーカスリングは Obsidian 既定に頼らず明示する（NoteCard と同じ方針・box-shadow 依存で薄くなる懸念を排す）。 */
+.eisenhower-undo-toast__undo:focus-visible,
+.eisenhower-undo-toast__dismiss:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}

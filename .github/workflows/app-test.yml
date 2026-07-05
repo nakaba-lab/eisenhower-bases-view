@@ -26,12 +26,14 @@ jobs:
   app-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      # --- 言語セットアップ（コメント雛形。/project-setup が有効化時にスタックへ合わせて整える）---
-      # - uses: actions/setup-node@v5
-      #   with:
-      #     node-version: 24
-      #     cache: npm
+      - uses: actions/checkout@v7
+      # --- 言語セットアップ（/project-setup が有効化: Node スタック。他言語は雛形のまま残す）---
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       # - uses: actions/setup-python@v6
       #   with:
       #     python-version: "3.12"
@@ -82,7 +84,7 @@ jobs:
       # 「テストらしきパス」の判定正規表現（プロジェクトのテスト配置の流儀に合わせて調整可）
       TEST_PATH_REGEX: 'test|spec'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Require test changes

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eisenhower Matrix — #19 プレビュー</title>
+    <!--
+      Obsidian テーマ変数の近似（ライト/ダーク）。本番は実テーマが供給する。
+      ?theme=dark で .theme-dark を適用してダーク配色を確認できる。
+    -->
+    <style>
+      :root,
+      .theme-light {
+        --background-primary: #ffffff;
+        --background-primary-alt: #f5f6f8;
+        --background-secondary: #f2f3f5;
+        --background-modifier-border: #d4d6da;
+        --text-normal: #1f2328;
+        --text-muted: #5c6066;
+        --text-faint: #8a8f98;
+        --interactive-accent: #7b6cd9;
+        --size-4-1: 4px;
+        --size-4-2: 8px;
+        --size-4-3: 12px;
+        --radius-s: 4px;
+        --radius-m: 8px;
+        --font-ui-small: 13px;
+        --font-ui-smaller: 12px;
+        --font-semibold: 600;
+      }
+      .theme-dark {
+        --background-primary: #1e1e1e;
+        --background-primary-alt: #161616;
+        --background-secondary: #262626;
+        --background-modifier-border: #3a3a3a;
+        --text-normal: #dadada;
+        --text-muted: #9a9a9a;
+        --text-faint: #6b6b6b;
+        --interactive-accent: #8b7ff0;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--background-primary);
+      }
+      /* Bases ビューペインを模した高さのあるコンテナ。 */
+      #root {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+    </style>
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // ?theme=dark でダークテーマを適用。
+      const params = new URLSearchParams(location.search);
+      document.body.classList.add(
+        params.get("theme") === "dark" ? "theme-dark" : "theme-light",
+      );
+    </script>
+    <script src="./preview.bundle.js"></script>
+  </body>
+</html>

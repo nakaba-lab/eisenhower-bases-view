@@ -1,0 +1,260 @@
+{
+  "checks": [
+    {
+      "name": "接続先が想定テスト Vault（別/実 Obsidian への誤接続防止）",
+      "pass": true,
+      "detail": {
+        "connected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e4/vault",
+        "expected": "/tmp/claude-1000/-home-user-work-obsidian-eisenhower-matrix/4e95f100-9161-4544-97de-d75b102dcb50/scratchpad/e2e4/vault"
+      }
+    },
+    {
+      "name": "plugin enabled (eisenhower-bases-view)",
+      "pass": true,
+      "detail": [
+        "eisenhower-bases-view"
+      ]
+    },
+    {
+      "name": "bases core plugin loaded",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "plugin loaded（onload/registerBasesView 実行）",
+      "pass": true,
+      "detail": [
+        "eisenhower-bases-view"
+      ]
+    },
+    {
+      "name": "matrix view rendered (registerBasesView 往復)",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Do 象限 = [do, infolder]（フォルダ配下ノートも正配置）",
+      "pass": true,
+      "detail": [
+        "do",
+        "infolder"
+      ]
+    },
+    {
+      "name": "Schedule 象限 = [schedule]",
+      "pass": true,
+      "detail": [
+        "schedule"
+      ]
+    },
+    {
+      "name": "Delegate 象限 = [delegate]",
+      "pass": true,
+      "detail": [
+        "delegate"
+      ]
+    },
+    {
+      "name": "Delete 象限 = [delete]",
+      "pass": true,
+      "detail": [
+        "delete"
+      ]
+    },
+    {
+      "name": "未分類に absent/partial/numeric（軸欠損・非 boolean）",
+      "pass": true,
+      "detail": [
+        "absent",
+        "numeric",
+        "partial"
+      ]
+    },
+    {
+      "name": "非 boolean 軸カード numeric は locked（ドラッグ不可）",
+      "pass": true,
+      "detail": {
+        "title": "numeric",
+        "locked": true,
+        "draggable": false
+      }
+    },
+    {
+      "name": "軸欠損カード absent は draggable（locked でない）",
+      "pass": true,
+      "detail": {
+        "title": "absent",
+        "locked": false,
+        "draggable": true
+      }
+    },
+    {
+      "name": "`.base` 自己エントリ（Eisenhower）がカード化されない（非 md 除外）",
+      "pass": true,
+      "detail": [
+        "do",
+        "infolder",
+        "schedule",
+        "delegate",
+        "delete",
+        "absent",
+        "numeric",
+        "partial"
+      ]
+    },
+    {
+      "name": "onDataUpdated 計測対象ビューが存在（liveViews 非空＝計測有効）",
+      "pass": true,
+      "detail": {
+        "wrappedViews": 1
+      }
+    },
+    {
+      "name": "ドラッグ書き戻し: schedule.md が urgent:true/important:true（processFrontMatter）",
+      "pass": true,
+      "detail": "urgent: true | important: true"
+    },
+    {
+      "name": "onDataUpdated が書き戻し後に自動再発火（手動再描画なし）",
+      "pass": true,
+      "detail": 1
+    },
+    {
+      "name": "再オープンの新規描画が単一・grid 準備完了（stale 読み取り防止）",
+      "pass": true,
+      "detail": {
+        "gridReady": true,
+        "basesCount": 1,
+        "cards": [
+          "do",
+          "infolder",
+          "schedule"
+        ]
+      }
+    },
+    {
+      "name": "書き戻し後のサーバ再分類: 新規 view（楽観保留なし）の container 内で schedule が Do 象限（getValue→再分類）",
+      "pass": true,
+      "detail": [
+        "do",
+        "infolder",
+        "schedule"
+      ]
+    },
+    {
+      "name": "undo 前提: 書き戻しで schedule.md が urgent:true（移動後状態）",
+      "pass": true,
+      "detail": "urgent: true | important: true"
+    },
+    {
+      "name": "undo コマンドが存在し実行された",
+      "pass": true,
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "name": "undo コマンドで schedule.md が urgent:true→false へ遷移復元",
+      "pass": true,
+      "detail": {
+        "before": "urgent: true | important: true",
+        "after": "urgent: false | important: true"
+      }
+    }
+  ],
+  "dom": [
+    {
+      "title": "Do",
+      "count": "2",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "do",
+          "locked": false,
+          "draggable": true
+        },
+        {
+          "title": "infolder",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Schedule",
+      "count": "1",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "schedule",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Delegate",
+      "count": "1",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "delegate",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Delete",
+      "count": "1",
+      "unclassified": false,
+      "cards": [
+        {
+          "title": "delete",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    },
+    {
+      "title": "Unclassified",
+      "count": "3",
+      "unclassified": true,
+      "cards": [
+        {
+          "title": "absent",
+          "locked": false,
+          "draggable": true
+        },
+        {
+          "title": "numeric",
+          "locked": true,
+          "draggable": false
+        },
+        {
+          "title": "partial",
+          "locked": false,
+          "draggable": true
+        }
+      ]
+    }
+  ],
+  "writeBack": {
+    "before": "urgent: false | important: true",
+    "after": "urgent: true | important: true",
+    "onDataUpdatedCount": 1
+  },
+  "reclassify": {
+    "gridReady": true,
+    "basesCount": 1,
+    "cards": [
+      "do",
+      "infolder",
+      "schedule"
+    ]
+  },
+  "undo": {
+    "before": "urgent: true | important: true",
+    "after": "urgent: false | important: true"
+  }
+}

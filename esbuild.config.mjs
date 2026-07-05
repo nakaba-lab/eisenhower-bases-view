@@ -38,6 +38,13 @@ const context = await esbuild.context({
   outfile: "main.js",
   jsx: "automatic",
   jsxImportSource: "preact",
+  // dnd-kit（#20）は react/react-dom を import するため preact/compat へ alias する
+  // （vitest.config.ts の resolve.alias と対応させる）。
+  alias: {
+    react: "preact/compat",
+    "react-dom": "preact/compat",
+    "react/jsx-runtime": "preact/jsx-runtime",
+  },
   minify: prod,
 });
 

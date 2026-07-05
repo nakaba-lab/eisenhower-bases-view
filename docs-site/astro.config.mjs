@@ -39,12 +39,12 @@ if (existsSync(docsDir)) {
 }
 if (existsSync(`${docsDir}/design`)) {
   // サイドバーのグループ記法は Starlight の 0.x マイナー（pre-1.0 では実質メジャー＝破壊的変更を運ぶ）に結合している:
-  //   0.36–0.38: { label, autogenerate: {...} }（現行・autogenerate は label の兄弟）
-  //   0.39+:     { label, items: [{ autogenerate: {...} }] }（items でラップ必須）
-  // 出荷は ^0.36.0 固定なので現行記法が正（新記法は 0.36 が Invalid config で拒否する＝両対応の単一記法は無い）。
-  // Starlight を 0.39+ へ bump するときはこの行を items 形へ切り替える（PR 時の docs-site-schema-check
-  // ＝astro check がこの非互換を検出して赤くするので、bump PR で気づける）。
-  sidebar.push({ label: '設計書', autogenerate: { directory: '../docs/design' } });
+  //   0.36–0.38: { label, autogenerate: {...} }（autogenerate は label の兄弟・廃止済み）
+  //   0.39+:     { label, items: [{ autogenerate: {...} }] }（items でラップ必須・現行）
+  // 出荷は ^0.41.1 固定なので items 形が正（autogenerate 直書きは 0.39+ が Invalid config で拒否する＝両対応の単一記法は無い）。
+  // Starlight をさらに上げるときも、PR 時の docs-site-schema-check（＝astro check）が記法の非互換を
+  // 検出して赤くするので bump PR で気づける。
+  sidebar.push({ label: '設計書', items: [{ autogenerate: { directory: '../docs/design' } }] });
 }
 
 // https://astro.build/config

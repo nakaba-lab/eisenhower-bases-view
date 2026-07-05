@@ -10,7 +10,10 @@ name: Release Deploy
 # タグ運用（SemVer・release/hotfix からのタグ付け）は .claude/rules/git-workflow.md を参照。
 on:
   push:
-    tags: ['v*']
+    # Obsidian コミュニティプラグインのリリースタグは manifest.json の version と完全一致
+    # （`v` 接頭辞なし・例 `0.1.0`）が申請要件のため、テンプレ既定の `v*` に加えて生バージョン
+    # （`[0-9]*`）でも起動する（タグ規約は .claude/rules/git-workflow.md「バージョンタグ」の Obsidian 例外）。
+    tags: ['v*', '[0-9]*']
 
 # GITHUB_TOKEN は読み取りのみ（least privilege）。デプロイ先が GitHub リソースを要する場合のみ
 # ジョブ単位で昇格する（例: OIDC クラウド認証 → id-token: write ／ GHCR へ push → packages: write。
@@ -24,7 +27,7 @@ jobs:
     # environment: production   # ← Environment secret を使う場合に有効化する（/project-setup が整える。
     #                                下の Deploy ステップの認証コメントを参照）
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Read deploy command from profile
         id: profile
         run: |

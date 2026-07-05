@@ -1,0 +1,52 @@
+name: Release Obsidian plugin
+
+# Obsidian コミュニティプラグインのリリース。
+# manifest.json の version と**完全一致**する生バージョンタグ（例 `0.1.0`・`v` 接頭辞なし＝申請要件）
+# の push で、ビルドして GitHub Release を作成し main.js / manifest.json / styles.css を添付する。
+# タグ規約は .claude/rules/git-workflow.md「バージョンタグ」の Obsidian 例外を参照。
+# （release-deploy.yml はサーバデプロイ用の別テンプレで、このプラグインでは no-op。本ファイルが
+#  Obsidian のリリース資産生成を担う＝要件定義書 §8「リリース成果物」の実装。）
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*' # プレリリース（例 1.0.0-beta.1）
+
+# gh release create にはリリース作成権限が要る。トップレベルは read のままにせず、
+# リリースを作る本ジョブに限定して write を与える（他ワークフローには波及しない）。
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # 申請要件: リリースタグ名は manifest.json の version と完全一致していること（不一致なら中断）。
+      # ref_name は env 経由で受け（run への直接展開を避ける＝インジェクション防止）、引用して比較する。
+      - name: Verify tag matches manifest version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          MANIFEST_VERSION="$(node -p "require('./manifest.json').version")"
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Release tag '$TAG' must match manifest.json version '$MANIFEST_VERSION' (Obsidian requirement; no 'v' prefix)."
+            exit 1
+          fi
+      - name: Build plugin bundle
+        run: npm run build
+      # main.js は gitignore（リリースにのみ添付）。3 ファイルを添付した Release を作成する。
+      - name: Create GitHub Release with plugin assets
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" main.js manifest.json styles.css \
+            --title "$TAG" --generate-notes

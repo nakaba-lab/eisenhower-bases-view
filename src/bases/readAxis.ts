@@ -154,6 +154,25 @@ function normalizeAxis(value: Value | null): boolean | undefined {
 }
 
 /**
+ * `entry.getValue(id)` を **throw させない**境界防御でくるむ（churn 耐性・レビュー指摘 #3）。
+ *
+ * `getValue` は Bases API 接触点（churn 対象）で、型契約上は `Value | null` を返すが、未対応
+ * プロパティ型・内部状態不整合・API 破壊的変更で throw しうる。1 件の entry の読み取り例外が
+ * `toViewModel`→`renderCurrent`→`onDataUpdated` まで伝播すると**ビュー全体の再描画が壊れ**、
+ * 他の正常カードも巻き添えになる。ここで捕捉して `null`（= absent 相当）へ退避し、当該カードだけを
+ * 未分類扱いに落として graceful degradation させる（`isPlaceableNote`／`isWritableAxisProperty` の
+ * 「Bases 境界で throw させない」防御と同じ流儀で、同期 read の境界にも対称に敷く）。
+ */
+function safeGetValue(entry: BasesEntry, id: BasesPropertyId): Value | null {
+  try {
+    return entry.getValue(id);
+  } catch (error) {
+    console.error("[Eisenhower Matrix] entry.getValue failed; treating axis as absent", error);
+    return null;
+  }
+}
+
+/**
  * 1 軸を読む。書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は **absent 扱い（undefined）**にして
  * 4 象限へ配置しない（未分類・ドロップ不可）。読み取り側を書き戻し側（{@link toFrontmatterKey}）と
  * 対称にし、「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない（レビュー指摘）。
@@ -164,7 +183,7 @@ function readSingleAxis(
   id: BasesPropertyId,
 ): boolean | undefined {
   if (toFrontmatterKey(id) === null) return undefined;
-  return normalizeAxis(entry.getValue(id));
+  return normalizeAxis(safeGetValue(entry, id));
 }
 
 /** 1 エントリの両軸値を読み、absent を区別した {@link AxisValues} を返す。 */
@@ -198,7 +217,8 @@ function isUnsupportedOnWritableAxis(
 ): boolean {
   // 非 note.*（formula/file）軸は書き戻し自体が `resolveWritableAxisKeys` で弾かれ破壊経路が無いため対象外。
   if (!isWritableAxisProperty(id)) return false;
-  return isUnsupportedAxisValue(entry.getValue(id));
+  // getValue が throw しても null（absent 相当）へ退避＝ロック扱いにしない（破壊経路が無いため安全側）。
+  return isUnsupportedAxisValue(safeGetValue(entry, id));
 }
 
 /**

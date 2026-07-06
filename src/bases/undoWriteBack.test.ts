@@ -55,15 +55,17 @@ beforeEach(() => Notice.reset());
 afterEach(() => vi.restoreAllMocks());
 
 describe("runUndo — 陳腐化トーストガード（expectedEntryId）", () => {
-  it("runUndo — 記録が無ければ noUndo Notice で止め、書き込まない", async () => {
+  it("runUndo — 記録が無ければ noUndo Notice で止め、書き込まない（戻り値 null）", async () => {
     // given
     const undo = new UndoManager();
     const { app, processFrontMatter } = makeApp({});
     // when
-    await runUndo(app, undo, messages);
+    const undoneEntryId = await runUndo(app, undo, messages);
     // then
     expect(Notice.messages.some((m) => m.includes(messages.noUndo))).toBe(true);
     expect(processFrontMatter).not.toHaveBeenCalled();
+    // 復元していないので null（コマンド経路はこの戻り値でオーバーレイ落としを行う・#6）
+    expect(undoneEntryId).toBeNull();
   });
 
   it("runUndo — expectedEntryId が現記録と不一致なら noUndo で止め、別ノートを戻さず記録を保持する", async () => {
@@ -86,13 +88,15 @@ describe("runUndo — 陳腐化トーストガード（expectedEntryId）", () =
     const frontmatter: Record<string, unknown> = { urgent: true, important: false };
     const { app, processFrontMatter } = makeApp({ file: new TFile("a.md"), frontmatter });
     // when
-    await runUndo(app, undo, messages, "a.md");
+    const undoneEntryId = await runUndo(app, undo, messages, "a.md");
     // then: applyUndo が適用される（urgent は absent→delete、important は true→代入）
     expect(processFrontMatter).toHaveBeenCalledTimes(1);
     expect("urgent" in frontmatter).toBe(false);
     expect(frontmatter.important).toBe(true);
     expect(undo.hasRecord()).toBe(false); // 成功で clear
     expect(Notice.messages.some((m) => m.includes(messages.undone("タスクA")))).toBe(true);
+    // 実際に復元した entryId を返す（コマンド経路が各ビューの楽観オーバーレイを落とすのに使う・#6）
+    expect(undoneEntryId).toBe("a.md");
   });
 
   it("runUndo — expectedEntryId 省略（コマンド起動）は直前 1 手を戻す（現状が書き込み値のまま）", async () => {
@@ -117,12 +121,14 @@ describe("runUndo — 陳腐化トーストガード（expectedEntryId）", () =
     const frontmatter: Record<string, unknown> = { urgent: 5, important: "high" };
     const { app, processFrontMatter } = makeApp({ file: new TFile("a.md"), frontmatter });
     // when
-    await runUndo(app, undo, messages);
+    const undoneEntryId = await runUndo(app, undo, messages);
     // then: 無関係な値を上書き/delete せず（唯一の delete 経路を塞ぐ）、記録は消費して繰り返さない・noUndo 通知
     expect(processFrontMatter).toHaveBeenCalledTimes(1); // 開いたが適用はしない
     expect(frontmatter).toEqual({ urgent: 5, important: "high" }); // 破壊しない
     expect(undo.hasRecord()).toBe(false);
     expect(Notice.messages.some((m) => m.includes(messages.noUndo))).toBe(true);
+    // 復元していない（同一性照合で弾いた）ので null＝オーバーレイ落としも起きない（#6）
+    expect(undoneEntryId).toBeNull();
   });
 });
 

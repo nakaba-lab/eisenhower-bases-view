@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { waitFor } from "@testing-library/preact";
+import { act, waitFor } from "@testing-library/preact";
 import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../bases/types";
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor, type Language } from "../i18n";
@@ -246,6 +246,31 @@ describe("MatrixView — カードを開く導線の配線（#22 F5）", () => {
     // then
     expect(onHoverCard).toHaveBeenCalledTimes(1);
     expect(onHoverCard.mock.calls[0][0]).toBe("do.md");
+  });
+});
+
+describe("MatrixView — コマンド経由 undo のオーバーレイ落とし配線（#6）", () => {
+  it("render — マウントで registerPendingDropper に dropper を登録し、unmount で null 解除する", async () => {
+    // given: アダプタ（EisenhowerBasesView）が渡す登録コールバックを模す
+    const container = mountContainer();
+    const registered: (((entryId: string) => void) | null)[] = [];
+    // when: マウント（useEffect はコミット後に走るため act で flush してから見る）
+    await act(async () => {
+      render(container, readyViewModel({ do: [entry("a.md", "a")] }), {
+        registerPendingDropper: (drop) => registered.push(drop),
+      });
+    });
+    // then: マウント時に「pending を落とす関数」が登録される（コマンド undo がこれを呼ぶ）
+    expect(registered).toHaveLength(1);
+    expect(typeof registered[0]).toBe("function");
+    // 登録された dropper は呼んでも throw しない（該当 pending が無ければ no-op）
+    expect(() => registered[0]?.("a.md")).not.toThrow();
+    // when: アンマウント（cleanup effect の flush も act で確定させる）
+    await act(async () => {
+      unmount(container);
+    });
+    // then: null で解除される（アンマウント済みビューへ誤って落としに行かない）
+    expect(registered[registered.length - 1]).toBeNull();
   });
 });
 

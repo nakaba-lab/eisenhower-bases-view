@@ -56,6 +56,12 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
   private readonly undoManager: UndoManager | null;
   /** UI から委譲される操作（#20: ドラッグ書き戻し）。 */
   private readonly callbacks: MatrixCallbacks;
+  /**
+   * UI（MatrixView）が登録した「楽観オーバーレイを entryId 単位で落とす」関数（#6）。
+   * コマンド経由 undo はコンポーネントを経由しないため、これを通してビュー内 pending を落とす。
+   * UI のマウントで設定・アンマウントで null に戻る。
+   */
+  private pendingDropper: ((entryId: string) => void) | null = null;
 
   constructor(
     controller: QueryController,
@@ -79,6 +85,9 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       onHoverCard: (entryId, targetEl, event) =>
         this.previewNote(entryId, targetEl, event),
       onUndoMove: (expectedEntryId) => this.undoLastMove(expectedEntryId),
+      registerPendingDropper: (drop) => {
+        this.pendingDropper = drop;
+      },
     };
     // データ到着前は loading シェルを描画し、onDataUpdated で実データに差し替える。
     render(this.viewContainerEl, {
@@ -113,7 +122,18 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
 
   onunload(): void {
     this.registry?.delete(this);
+    this.pendingDropper = null;
     unmount(this.viewContainerEl);
+  }
+
+  /**
+   * ビュー内の楽観オーバーレイ（pending）を `entryId` 単位で落とす（#6）。
+   * コマンド経由 undo（`main.ts`）が復元後に呼び、frontmatter は戻ったのにカードが誤象限へ貼り付く
+   * 残存（トースト経路は UI 内で落とすが、コマンド経路はコンポーネントを経由しない非対称）を解消する。
+   * UI 未マウント（`pendingDropper===null`）や該当 pending 無しは no-op。
+   */
+  dropPendingOverlay(entryId: string): void {
+    this.pendingDropper?.(entryId);
   }
 
   /**

@@ -82,6 +82,21 @@ describe("messagesFor — 言語別メッセージ束（AC4）", () => {
     expect(droppedEn).toContain("Do");
     expect(messagesFor("ja").moveFailed("タスクA")).toContain("タスクA");
   });
+
+  it("messagesFor — moveSucceededUndoable は成功文言に undo 到達方法（コマンド）を添える（#1 発見可能性）", () => {
+    // given / when: undo 導線がある成功のライブ通知（SR/キーボード利用者に undo の存在と到達手段を届ける）
+    const ja = messagesFor("ja").moveSucceededUndoable("タスクA", "実行");
+    const en = messagesFor("en").moveSucceededUndoable("TaskA", "Do");
+    // then: タイトル・ラベルに加え「元に戻す」導線への言及を含む（素の moveSucceeded より情報が増える）
+    expect(ja).toContain("タスクA");
+    expect(ja).toContain("実行");
+    expect(ja).toContain("元に戻せます");
+    expect(ja).not.toBe(messagesFor("ja").moveSucceeded("タスクA", "実行"));
+    expect(en).toContain("TaskA");
+    expect(en).toContain("Do");
+    expect(en).toContain("Undo last move");
+    expect(en).not.toBe(messagesFor("en").moveSucceeded("TaskA", "Do"));
+  });
 });
 
 describe("messagesFor — undo（直前1手の元に戻す）文言（draft）", () => {

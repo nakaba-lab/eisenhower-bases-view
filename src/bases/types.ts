@@ -113,6 +113,19 @@ export interface MatrixCallbacks {
    * `expectedEntryId` を渡すと、**現在の記録がその entry の移動である場合のみ**戻す（トーストが特定
    * ノートを名指しするため、複数ビュー併用で記録が別の移動に置き換わっていたら誤って別ノートを戻さない
    * ようにするガード）。省略時（コマンド起動）は「直前 1 手」を無条件に戻す。
+   *
+   * （arrow 型プロパティで宣言する＝`onOpenCard`/`onHoverCard` と同様。存在チェックを `Boolean(...)` 等へ
+   * 渡しても unbound-method を誘発しないため。）
    */
-  onUndoMove?(expectedEntryId?: string): void;
+  onUndoMove?: (expectedEntryId?: string) => void;
+  /**
+   * ビュー内の楽観オーバーレイ（pending）を `entryId` 単位で落とす関数をアダプタへ登録する（レビュー指摘 #6）。
+   *
+   * トースト経由の undo は UI 内で直接 `dropPending` できるが、**コマンドパレット経由の undo はこの
+   * コンポーネントを経由しない**ため、書込成功直後の在庫レース窓で残った pending を落とせず、frontmatter は
+   * 戻ったのにカードが誤象限へ貼り付く（トースト経路との非対称）。UI はマウント時に「pending を落とす」関数を
+   * 登録し（アンマウント時は `null` で解除）、アダプタ（`EisenhowerBasesView`）がコマンド undo 後にこれを
+   * 呼んで表示をサーバ値へ戻す。UI は `obsidian` 型に触れず、`app`/コマンド接触はアダプタに閉じる（AC5）。
+   */
+  registerPendingDropper?: (drop: ((entryId: string) => void) | null) => void;
 }

@@ -39,7 +39,7 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
       id: "undo-last-move",
       name: this.resolveMessages().undoCommandName,
       callback: () => {
-        void runUndo(this.app, this.undoManager, this.resolveMessages());
+        void this.undoLastMoveFromCommand();
       },
     });
 
@@ -104,6 +104,21 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
   /** Obsidian のアプリ表示言語コード（公式 API `getLanguage()`。未設定相当は `"en"`）。 */
   getObsidianLanguage(): string {
     return getLanguage();
+  }
+
+  /**
+   * コマンドパレット経由の undo（#6）。frontmatter を戻したうえで、生存ビューの楽観オーバーレイを
+   * 落として「ファイルは戻ったのにカードが誤象限へ貼り付く」残存を解消する（トースト経路との対称化）。
+   * コマンド undo はビューを経由しないため、復元した entryId を各ビューへ通知して pending を落とす。
+   */
+  private async undoLastMoveFromCommand(): Promise<void> {
+    const undoneEntryId = await runUndo(
+      this.app,
+      this.undoManager,
+      this.resolveMessages(),
+    );
+    if (undoneEntryId === null) return;
+    for (const view of this.liveViews) view.dropPendingOverlay(undoneEntryId);
   }
 
   /** 設定変更を開いている全ビューへ即時反映する（#23 F6・AC1/AC2）。 */

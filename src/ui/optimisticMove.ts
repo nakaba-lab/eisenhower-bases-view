@@ -203,3 +203,48 @@ export function settleAnnouncement(
   if (!isLatest) return "silent";
   return failed ? "failure" : "success";
 }
+
+/** aria-live 通知の種別（`settleAnnouncement` の 3 種＋成功で undo 導線がある場合の派生）。 */
+export type SettleAnnounceKind = "success" | "successUndoable" | "failure" | "silent";
+
+/**
+ * 書き込み settle 時に MatrixView が実行すべき副作用を 1 つの純関数へまとめた「実行計画」。
+ *
+ * `handleDragEnd` 内の settle は `callbacks.onMoveCard(...).then(()=>settle(false), ()=>settle(true))`
+ * で成否から駆動されるが、その先の分岐（ロールバック要否・成功後の再突合・aria-live の文言種別・undo
+ * トースト表示要否）は dnd-kit のドロップ確定が要り jsdom で駆動できず結線テストが困難だった（レビュー指摘 #2）。
+ * そこで判断を本純関数へ切り出し（`settleAnnouncement` と同じ「決定を純化して細い実行に留める」流儀）、
+ * 全分岐を単体で固定する。コンポーネント側の settle は本計画を機械的に実行するだけの薄い殻になる。
+ */
+export interface SettlePlan {
+  /** 最新世代の失敗を巻き戻すか（古い世代の失敗では後続移動を巻き戻さない）。 */
+  rollback: boolean;
+  /** 成功後に保留を再突合するか（in-flight 中に先着した viewModel の確定漏れ解消・#4）。 */
+  reconcile: boolean;
+  /** aria-live へ読み上げる文言の種別（成功かつ undo 導線ありは successUndoable＝発見可能性を担保・#1）。 */
+  announce: SettleAnnounceKind;
+  /** 移動成功直後の「元に戻す」トーストを出すか（最新世代の成功かつ undo 配線時のみ）。 */
+  showToast: boolean;
+}
+
+/**
+ * settle の成否・最新世代か・undo 導線の有無から、MatrixView が実行する副作用計画を決める純関数。
+ * - `rollback`: 最新世代の失敗のみ（`rollbackFailedMove` が実際に巻き戻すケースと一致）。
+ * - `reconcile`: 成功時のみ（失敗はサーバ値≠保留で reconcile が落とさないため不要）。
+ * - `announce`: `settleAnnouncement` を基に、成功かつ undo 導線ありは `successUndoable` へ格上げ。
+ * - `showToast`: 最新世代の成功かつ undo 配線時のみ（superseded な古い成功ではトーストを出さない）。
+ */
+export function planSettle(
+  failed: boolean,
+  isLatest: boolean,
+  hasUndo: boolean,
+): SettlePlan {
+  const base = settleAnnouncement(failed, isLatest);
+  const succeeded = base === "success";
+  return {
+    rollback: failed && isLatest,
+    reconcile: !failed,
+    announce: succeeded ? (hasUndo ? "successUndoable" : "success") : base,
+    showToast: succeeded && hasUndo,
+  };
+}

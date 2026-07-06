@@ -20,18 +20,22 @@ import type { Messages } from "../i18n";
  * `expectedEntryId` を渡すと、**現在の記録がその entry の移動である場合のみ**戻す（トーストが特定ノートを
  * 名指しするため、複数ビュー併用で記録が別の移動に置き換わっていた場合に別ノートを誤って戻さないガード）。
  * 一致しなければ何もせず `Notice`（`noUndo`）を出す。省略時（コマンド起動）は「直前 1 手」を無条件に戻す。
+ *
+ * **戻り値**: 実際に frontmatter を復元した場合はその entryId（file.path）、復元しなかった場合（記録なし・
+ * 名指し不一致・ファイル欠落・値不一致・書込失敗）は `null`。コマンド経由 undo の呼び出し側（`main.ts`）は
+ * これを使って生存ビューの楽観オーバーレイを落とす（トースト経路との挙動対称化・レビュー指摘 #6）。
  */
 export async function runUndo(
   app: App,
   undoManager: UndoManager,
   messages: Messages,
   expectedEntryId?: string,
-): Promise<void> {
+): Promise<string | null> {
   const record = undoManager.peek();
   if (!record || (expectedEntryId != null && record.entryId !== expectedEntryId)) {
     // 記録が無い、または名指しの移動が既に別の移動へ置き換わっている（陳腐化したトースト）。
     new Notice(`Eisenhower Matrix: ${messages.noUndo}`);
-    return;
+    return null;
   }
 
   const file = app.vault.getAbstractFileByPath(record.entryId);
@@ -39,7 +43,7 @@ export async function runUndo(
     // 対象が消えている等で復元できない記録は破棄し、繰り返し失敗しないようにする。
     undoManager.clear();
     new Notice(`Eisenhower Matrix: ${messages.undoFailed(record.title)}`);
-    return;
+    return null;
   }
 
   try {
@@ -57,8 +61,10 @@ export async function runUndo(
     new Notice(
       `Eisenhower Matrix: ${applied ? messages.undone(record.title) : messages.noUndo}`,
     );
+    return applied ? record.entryId : null;
   } catch (error) {
     console.error("[Eisenhower Matrix] failed to restore frontmatter for undo", error);
     new Notice(`Eisenhower Matrix: ${messages.undoFailed(record.title)}`);
+    return null;
   }
 }

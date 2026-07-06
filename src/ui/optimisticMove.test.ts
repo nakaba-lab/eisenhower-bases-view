@@ -4,6 +4,7 @@ import {
   applyPendingMoves,
   dropPending,
   isLatestGeneration,
+  planSettle,
   reconcilePendingMoves,
   rollbackFailedMove,
   settleAnnouncement,
@@ -306,6 +307,68 @@ describe("settleAnnouncement — settle 結果から SR 通知種別を決める
 
   it("settleAnnouncement — superseded な成功は silent（古い書き込みの成功で象限を読み上げない）", () => {
     expect(settleAnnouncement(false, false)).toBe("silent");
+  });
+});
+
+describe("planSettle — settle の実行計画（handleDragEnd の結線を純化・レビュー指摘 #2）", () => {
+  it("planSettle — 最新世代の成功（undo 配線あり）: ロールバックせず再突合し、undoable 通知＋トースト", () => {
+    // given / when: 成功・最新・undo あり（アダプタは常に onUndoMove を渡す本番相当）
+    const plan = planSettle(false, true, true);
+    // then: 成功後は保留を再突合（#4）、SR には到達方法付き文言（#1）、視覚にはトースト
+    expect(plan).toEqual({
+      rollback: false,
+      reconcile: true,
+      announce: "successUndoable",
+      showToast: true,
+    });
+  });
+
+  it("planSettle — 最新世代の成功（undo 配線なし）: 素の success 通知でトーストは出さない", () => {
+    // given / when: undo 未配線（onUndoMove 省略）では発見ヒントもトーストも無し
+    const plan = planSettle(false, true, false);
+    // then
+    expect(plan).toEqual({
+      rollback: false,
+      reconcile: true,
+      announce: "success",
+      showToast: false,
+    });
+  });
+
+  it("planSettle — 最新世代の失敗: ロールバックし failure 通知、再突合もトーストもしない", () => {
+    // given / when: 失敗・最新（undo 配線の有無で結果は変わらない＝失敗はトースト対象外）
+    const plan = planSettle(true, true, true);
+    // then: 実際に巻き戻すケースとだけ failure を対応させる（rollbackFailedMove と一致）
+    expect(plan).toEqual({
+      rollback: true,
+      reconcile: false,
+      announce: "failure",
+      showToast: false,
+    });
+  });
+
+  it("planSettle — superseded な失敗: 巻き戻さず silent（後続の新しい移動を壊さない・誤報しない）", () => {
+    // given / when: 失敗だが最新世代でない（後続ドラッグに上書き済み）
+    const plan = planSettle(true, false, true);
+    // then: ロールバックも通知もしない（reconcile は失敗なので false）
+    expect(plan).toEqual({
+      rollback: false,
+      reconcile: false,
+      announce: "silent",
+      showToast: false,
+    });
+  });
+
+  it("planSettle — superseded な成功: トースト/通知は出さないが再突合はする（確定済み保留の解消）", () => {
+    // given / when: 成功だが最新世代でない
+    const plan = planSettle(false, false, true);
+    // then: 古い成功は読み上げ/トーストしない（silent）が、成功なので再突合は行う
+    expect(plan).toEqual({
+      rollback: false,
+      reconcile: true,
+      announce: "silent",
+      showToast: false,
+    });
   });
 });
 

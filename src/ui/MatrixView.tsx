@@ -21,9 +21,9 @@ import {
   applyPendingMoves,
   dropPending,
   isLatestGeneration,
+  planSettle,
   reconcilePendingMoves,
   rollbackFailedMove,
-  settleAnnouncement,
   shouldSkipMove,
   type PendingMoves,
 } from "./optimisticMove";
@@ -116,6 +116,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 最新の保留を非同期 settle から参照するためのミラー（毎レンダリングで同期）。
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
+  // 最新の viewModel を非同期 settle から参照するミラー（毎レンダリングで同期）。in-flight 中に
+  // 先着した viewModel を、書き込み settle 後の再突合（reconcileNow）で使う（成功先着レース解消・#4）。
+  const viewModelRef = useRef(viewModel);
+  viewModelRef.current = viewModel;
+  // アンマウント済みかを追う（in-flight 書き込みの settle がアンマウント後に発火して、掃除対象外の
+  // タイマー予約＋アンマウント後 setState を起こすのを防ぐガード・レビュー指摘 #5）。
+  const mountedRef = useRef(true);
   // ドラッグ中のカード（DragOverlay で指/カーソルへ追従描画する）。
   const [activeId, setActiveId] = useState<string | null>(null);
   // 移動結果（成功/失敗）をスクリーンリーダーへ伝える aria-live 文言（再読み上げ用に差分化済み）。
@@ -221,10 +228,29 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   };
   // アンマウント時に残ったタイマーを掃除する（リーク防止）。
   useEffect(() => clearUndoToastTimer, []);
-
-  // 新しい viewModel（onDataUpdated 由来）が来たら、サーバ値が追いついた保留を解除する。
-  // in-flight 中の entry は値一致でも確定しない（coincidental match 防止）。
+  // マウント/アンマウントを追う（settle のアンマウント後発火ガード用・#5）。
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // 楽観オーバーレイを entryId 単位で落とす関数をアダプタへ登録する（コマンド経由 undo 後の貼り付き解消・#6）。
+  // コマンド undo はこのコンポーネントを経由しないため、アダプタから pending を落とせるよう手を渡す。
+  // アンマウント時は null で解除する（アンマウント後に setState されないため #5 のガードと二重に安全）。
+  useEffect(() => {
+    callbacks.registerPendingDropper?.((entryId) =>
+      setPending((prev) => dropPending(prev, entryId)),
+    );
+    return () => callbacks.registerPendingDropper?.(null);
+  }, [callbacks]);
+
+  // 最新の viewModel（viewModelRef）と in-flight 状態で保留を再突合し、サーバ値が追いついた保留を落とす純関数の適用。
+  // in-flight 中の entry は値一致でも確定しない（coincidental match 防止）。onDataUpdated 由来の再描画（下の
+  // useEffect）と、書き込み settle 後の in-flight 解消時（handleDragEnd の settle・#4）が共有する。
+  // reconcile は server==pending のときだけ落とすため、サーバ未追従なら保留は残り、フリッカーは起きない。
+  const reconcileNow = () => {
     setPending((prev) => {
       if (prev.size === 0) return prev;
       const inFlightIds = new Set(
@@ -234,11 +260,16 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       );
       const reconciled = reconcilePendingMoves(
         prev,
-        viewModel.entries,
+        viewModelRef.current.entries,
         inFlightIds,
       );
       return reconciled.size === prev.size ? prev : reconciled;
     });
+  };
+
+  // 新しい viewModel（onDataUpdated 由来）が来たら、サーバ値が追いついた保留を解除する。
+  useEffect(() => {
+    reconcileNow();
   }, [viewModel]);
 
   const titleOf = (id: string): string =>
@@ -330,29 +361,51 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     // いないか）でロールバックと通知を決める。最新の保留は非同期実行時点の pendingRef で見る。
     // ロールバック判定（rollbackFailedMove）も通知判定（settleAnnouncement）も純関数＝単体テスト済み。
     const settle = (failed: boolean) => {
+      // ビューが既にアンマウント済み（ドラッグ中にリーフを閉じた/切替）なら状態更新もタイマー予約もしない。
+      // さもないと showUndoToast が掃除対象外の 8 秒タイマーを張り、アンマウント済みで setState する（#5）。
+      if (!mountedRef.current) return;
+
       const remaining = (inFlight.get(entryId) ?? 1) - 1;
       if (remaining <= 0) inFlight.delete(entryId);
       else inFlight.set(entryId, remaining);
 
+      // 実行計画（ロールバック/再突合/通知種別/トースト要否）を純関数で決め、以下は機械的に実行する（#2）。
       const isLatest = isLatestGeneration(pendingRef.current, entryId, generation);
+      const plan = planSettle(failed, isLatest, Boolean(callbacks.onUndoMove));
+
       // 最新世代の失敗だけ巻き戻す（古い世代の失敗で新しい移動を巻き戻さない）。
-      if (failed && isLatest) {
+      if (plan.rollback) {
         setPending(
           rollbackFailedMove(pendingRef.current, entryId, generation).pending,
         );
       }
-      switch (settleAnnouncement(failed, isLatest)) {
+      // 成功 settle で in-flight が解消したので再突合する。in-flight 中に viewModel（サーバ値）が
+      // onMoveCard の解決より先着していた場合、reconcile は in-flight 中は保留を残すため確定できず、
+      // settle が in-flight を 0 にするだけでは楽観オーバーレイが居残り後続のサーバ変更を隠す（#4）。
+      // ここで再突合して server==pending の確定済み保留を落とす（server 未追従なら残る＝フリッカーなし）。
+      if (plan.reconcile) reconcileNow();
+
+      const title = titleOf(entryId);
+      switch (plan.announce) {
         case "failure":
-          announce(messages.moveFailed(titleOf(entryId)));
+          announce(messages.moveFailed(title));
           break;
-        case "success": {
-          const successMessage = messages.moveSucceeded(titleOf(entryId), labelOf(target));
-          announce(successMessage);
-          // undo が配線されているときだけ「元に戻す」トーストを出す（onUndoMove 未提供なら出さない）。
-          if (callbacks.onUndoMove) showUndoToast(successMessage, entryId);
+        case "success":
+          announce(messages.moveSucceeded(title, labelOf(target)));
           break;
-        }
+        // 視覚利用者にはトーストで undo 導線が見えるが、非ライブの UndoToast（二重読み上げ回避のため
+        // role="group"）は SR/キーボード利用者に通知されず 8 秒で自動消滅する。undo 配線時は aria-live の
+        // 成功文言に「コマンドで元に戻せる」旨と到達方法を添えて発見可能性を担保する（#1）。
+        case "successUndoable":
+          announce(
+            messages.moveSucceededUndoable(title, labelOf(target), messages.undoCommandName),
+          );
+          break;
+        case "silent":
+          break;
       }
+      // undo が配線されているときだけ「元に戻す」トーストを出す（トースト本文は undo 導線ヒント無しの素の成功文言）。
+      if (plan.showToast) showUndoToast(messages.moveSucceeded(title, labelOf(target)), entryId);
     };
     // 書き戻しを委譲。成功/失敗いずれも settle へ（Notice はアダプタが出す）。
     callbacks.onMoveCard(entryId, axis).then(
@@ -470,8 +523,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             onUndo={() => {
               // undo は frontmatter を移動前へ戻すので、残っている楽観オーバーレイを先に落として
               // サーバ値の表示へ戻す（さもないと reconcile が「サーバ≠保留・非 in-flight」で保留を
-              // 落とせずカードが移動先象限に貼り付く＝レビュー指摘。コマンド経由の undo（main.ts）は
-              // このハンドラを通らないため次のドラッグ/再マウントまで残りうる既知の軽微な残存）。
+              // 落とせずカードが移動先象限に貼り付く＝レビュー指摘）。コマンド経由の undo（main.ts）は
+              // このハンドラを通らないが、undoLastMoveFromCommand が dropPendingOverlay（registerPendingDropper 経由）で
+              // 各ビューの pending を落とすため対称に解消される（#6）。
               setPending((prev) => dropPending(prev, undoToast.entryId));
               // 名指しノートの entryId を渡す（記録が別移動へ置き換わっていたら戻さないガード）。
               callbacks.onUndoMove?.(undoToast.entryId);

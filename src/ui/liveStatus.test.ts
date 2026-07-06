@@ -27,7 +27,9 @@ describe("nextAnnouncement", () => {
     const out = nextAnnouncement("", "移動しました");
     // 本文はそのまま含み、付加されるのは ZWSP のみ（読み上げに影響しない）
     expect(out.replace(new RegExp(ZWSP, "g"), "")).toBe("移動しました");
-    expect(out === "移動しました" || out === "移動しました" + ZWSP).toBe(true);
+    // 初回（prevLive="" は ZWSP 終端でない）は必ず ZWSP を 1 つ付ける契約を厳密に固定する。
+    // 旧アサーション（`=== 本文 || === 本文+ZWSP`）はどちらでも真になり、初回付加の退行を捕捉できなかった（レビュー指摘 #8）。
+    expect(out).toBe("移動しました" + ZWSP);
   });
 
   it("nextAnnouncement — 3 回連続でも毎回隣接が異なる（交互トグル）", () => {

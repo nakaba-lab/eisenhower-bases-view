@@ -101,6 +101,17 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
+# 手動確認モード（KEEP_OPEN=1）: 自動ハーネスを流さず Obsidian を開いたまま保持し、人が実際にカードを
+# 掴んで座標ズレを目視できるようにする（#43 の実機確認等）。ウィンドウを閉じるか Ctrl-C で終了→trap が片付ける。
+if [ "${KEEP_OPEN:-0}" = "1" ]; then
+  echo "[e2e] KEEP_OPEN: Obsidian を開いたまま保持します。"
+  echo "[e2e]   Vault: $VAULT"
+  echo "[e2e]   'Eisenhower.base' を開き、カードを掴んでオーバーレイがカーソルに追従するか目視してください。"
+  echo "[e2e]   終了: ウィンドウを閉じるか、この端末で Ctrl-C。"
+  wait "$OBSPID"
+  exit 0
+fi
+
 # set -e 下では node が非0で即 exit し RC 捕捉・案内 echo に到達しない（死コード）ため、明示的に成否を捕まえる。
 if VAULT="$VAULT" OUT="$OUT" CDP="http://127.0.0.1:$CDP_PORT" node "$HERE/run-cdp.js"; then
   RC=0

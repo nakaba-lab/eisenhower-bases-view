@@ -4,7 +4,12 @@ import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../bases/
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor, type Language } from "../i18n";
 import { resolvePresentation } from "../bases/presentation";
-import { render, unmount, shouldRescheduleAutoDismiss } from "./MatrixView";
+import {
+  render,
+  unmount,
+  shouldRescheduleAutoDismiss,
+  compensateOverlayTransform,
+} from "./MatrixView";
 
 /**
  * MatrixView — アダプタ層が onDataUpdated 内で呼ぶ命令的な描画入口（AC3）。
@@ -58,6 +63,33 @@ describe("shouldRescheduleAutoDismiss — undo トースト自動消滅の再開
 
   it("既にタイマーが走っていれば再開しない（二重予約を避ける）", () => {
     expect(shouldRescheduleAutoDismiss(false, false, true)).toBe(false);
+  });
+});
+
+describe("compensateOverlayTransform — DragOverlay の包含ブロック原点ずれ補正（#43 恒久対策）", () => {
+  const T = (x: number, y: number) => ({ x, y, scaleX: 1, scaleY: 1 });
+
+  it("原点 (0,0)（stock Obsidian で実測）では恒等＝現行の安定挙動を一切変えない", () => {
+    // body/html がビューポート原点なら差引ゼロ。#43 の body portal だけで足りるケースの無変化を固定。
+    expect(compensateOverlayTransform(T(120, 90), { x: 0, y: 0 })).toEqual(T(120, 90));
+  });
+
+  it("包含ブロック原点がずれている環境では、その分を transform から差し引く（掴みズレを打ち消す）", () => {
+    // body/html に transform 等が付いて fixed 原点が (70,45) へずれた環境で、overlay がその分ずれて浮くのを補正。
+    expect(compensateOverlayTransform(T(120, 90), { x: 70, y: 45 })).toEqual(T(50, 45));
+  });
+
+  it("縦だけ・横だけのずれも軸独立に補正する", () => {
+    expect(compensateOverlayTransform(T(120, 90), { x: 0, y: 55 })).toEqual(T(120, 35));
+    expect(compensateOverlayTransform(T(120, 90), { x: 30, y: 0 })).toEqual(T(90, 90));
+  });
+
+  it("scale は保持する（adjustScale 既定 false で通常 1・座標補正が拡大率を壊さない）", () => {
+    const result = compensateOverlayTransform(
+      { x: 10, y: 20, scaleX: 1, scaleY: 1 },
+      { x: 4, y: 6 },
+    );
+    expect(result).toEqual({ x: 6, y: 14, scaleX: 1, scaleY: 1 });
   });
 });
 

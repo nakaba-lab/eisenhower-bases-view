@@ -61,6 +61,18 @@
   }
 }
 
+/* DragOverlay の position:fixed 包含ブロック原点を実測する一時プローブ（#43 恒久対策）。
+ * 不可視・非干渉で即時撤去する。インラインスタイルを避けクラスで与える（no-static-styles-assignment 対応）。 */
+.eisenhower-cb-origin-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* 象限セル（カードのドロップ先になる領域＝DnD は #20）。 */
 .eisenhower-quadrant {
   display: flex;

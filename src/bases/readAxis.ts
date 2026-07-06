@@ -83,6 +83,13 @@ export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
  * degradation より重い全件失敗）。例外時は `null`（未設定相当）へ倒し、呼び出し側の設定デフォルト（`note.<name>`）
  * フォールバックに載せる＝軸解決が壊れても既定軸で描画を続ける。
  */
+/**
+ * 既にログ済みの失敗 option キー。`resolveAxisPropertyIds` は描画・データ更新毎に呼ばれるため、
+ * `getAsPropertyId` が失敗し続けると同一キーのログでコンソールを埋める。`loggedGetValueFailures` と
+ * 同様にキー単位で 1 回に間引く（レビュー指摘）。
+ */
+const loggedGetAsPropertyIdFailures = new Set<string>();
+
 function safeGetAsPropertyId(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   key: string,
@@ -91,7 +98,10 @@ function safeGetAsPropertyId(
   try {
     return config.getAsPropertyId(key);
   } catch (error) {
-    console.error("[Eisenhower Matrix] config.getAsPropertyId failed; using default axis", error);
+    if (!loggedGetAsPropertyIdFailures.has(key)) {
+      loggedGetAsPropertyIdFailures.add(key);
+      console.error("[Eisenhower Matrix] config.getAsPropertyId failed; using default axis", error);
+    }
     return null;
   }
 }

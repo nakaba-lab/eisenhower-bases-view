@@ -83,19 +83,23 @@ describe("messagesFor — 言語別メッセージ束（AC4）", () => {
     expect(messagesFor("ja").moveFailed("タスクA")).toContain("タスクA");
   });
 
-  it("messagesFor — moveSucceededUndoable は成功文言に undo 到達方法（コマンド）を添える（#1 発見可能性）", () => {
-    // given / when: undo 導線がある成功のライブ通知（SR/キーボード利用者に undo の存在と到達手段を届ける）
-    const ja = messagesFor("ja").moveSucceededUndoable("タスクA", "実行");
-    const en = messagesFor("en").moveSucceededUndoable("TaskA", "Do");
-    // then: タイトル・ラベルに加え「元に戻す」導線への言及を含む（素の moveSucceeded より情報が増える）
+  it("messagesFor — moveSucceededUndoable は成功文言に undo 到達方法（コマンド名）を添える（#1 発見可能性・#5 コマンド名一本化）", () => {
+    // given: 呼び出し側は undoCommandName を渡してコマンド名の真実源を一本化する（リテラル重複を避ける・#5）
+    const jaMsgs = messagesFor("ja");
+    const enMsgs = messagesFor("en");
+    // when: undo 導線がある成功のライブ通知（SR/キーボード利用者に undo の存在と到達手段を届ける）
+    const ja = jaMsgs.moveSucceededUndoable("タスクA", "実行", jaMsgs.undoCommandName);
+    const en = enMsgs.moveSucceededUndoable("TaskA", "Do", enMsgs.undoCommandName);
+    // then: タイトル・ラベルに加え、undoCommandName（コマンド名）を実際に含む（乖離ガード＝#5）
     expect(ja).toContain("タスクA");
     expect(ja).toContain("実行");
+    expect(ja).toContain(jaMsgs.undoCommandName);
     expect(ja).toContain("元に戻せます");
-    expect(ja).not.toBe(messagesFor("ja").moveSucceeded("タスクA", "実行"));
+    expect(ja).not.toBe(jaMsgs.moveSucceeded("タスクA", "実行"));
     expect(en).toContain("TaskA");
     expect(en).toContain("Do");
-    expect(en).toContain("Undo last move");
-    expect(en).not.toBe(messagesFor("en").moveSucceeded("TaskA", "Do"));
+    expect(en).toContain(enMsgs.undoCommandName);
+    expect(en).not.toBe(enMsgs.moveSucceeded("TaskA", "Do"));
   });
 });
 

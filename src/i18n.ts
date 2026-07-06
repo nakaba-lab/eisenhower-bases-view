@@ -52,8 +52,9 @@ export interface Messages {
   /**
    * 書き戻し成功のライブ通知（undo 導線がある場合）。成功文言に「元に戻せる」旨と到達方法（コマンド名）を
    * 添えて、非ライブのトーストに気づけない SR/キーボード利用者にも undo の存在と到達手段を届ける（レビュー指摘 #1）。
+   * `commandName` は呼び出し側が `undoCommandName` を渡す（コマンド名の真実源を一本化＝リテラル重複を避ける・レビュー指摘 #5）。
    */
-  moveSucceededUndoable(title: string, label: string): string;
+  moveSucceededUndoable(title: string, label: string, commandName: string): string;
   /** 書き戻し失敗（ロールバック）のライブ通知。 */
   moveFailed(title: string): string;
   /** undo トーストの領域アクセシブル名（`role="group"` の aria-label・undo）。 */
@@ -148,8 +149,8 @@ const JA: Messages = {
   returnedToOrigin: (title) => `「${title}」を元の位置に戻しました。`,
   cancelled: (title) => `「${title}」の移動をキャンセルしました。`,
   moveSucceeded: (title, label) => `「${title}」を ${label} へ移動しました。`,
-  moveSucceededUndoable: (title, label) =>
-    `「${title}」を ${label} へ移動しました。コマンド「直前の移動を元に戻す」で元に戻せます。`,
+  moveSucceededUndoable: (title, label, commandName) =>
+    `「${title}」を ${label} へ移動しました。コマンド「${commandName}」で元に戻せます。`,
   moveFailed: (title) => `「${title}」の移動に失敗しました。元に戻しました。`,
   undoRegionLabel: "移動の取り消し",
   undoMove: "元に戻す",
@@ -219,8 +220,8 @@ const EN: Messages = {
   returnedToOrigin: (title) => `Returned "${title}" to its original position.`,
   cancelled: (title) => `Cancelled moving "${title}".`,
   moveSucceeded: (title, label) => `Moved "${title}" to ${label}.`,
-  moveSucceededUndoable: (title, label) =>
-    `Moved "${title}" to ${label}. Run the "Undo last move" command to revert it.`,
+  moveSucceededUndoable: (title, label, commandName) =>
+    `Moved "${title}" to ${label}. Run the "${commandName}" command to revert it.`,
   moveFailed: (title) => `Failed to move "${title}". Reverted.`,
   undoRegionLabel: "Undo move",
   undoMove: "Undo",

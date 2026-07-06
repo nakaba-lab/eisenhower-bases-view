@@ -397,7 +397,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         // role="group"）は SR/キーボード利用者に通知されず 8 秒で自動消滅する。undo 配線時は aria-live の
         // 成功文言に「コマンドで元に戻せる」旨と到達方法を添えて発見可能性を担保する（#1）。
         case "successUndoable":
-          announce(messages.moveSucceededUndoable(title, labelOf(target)));
+          announce(
+            messages.moveSucceededUndoable(title, labelOf(target), messages.undoCommandName),
+          );
           break;
         case "silent":
           break;
@@ -521,8 +523,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             onUndo={() => {
               // undo は frontmatter を移動前へ戻すので、残っている楽観オーバーレイを先に落として
               // サーバ値の表示へ戻す（さもないと reconcile が「サーバ≠保留・非 in-flight」で保留を
-              // 落とせずカードが移動先象限に貼り付く＝レビュー指摘。コマンド経由の undo（main.ts）は
-              // このハンドラを通らないため次のドラッグ/再マウントまで残りうる既知の軽微な残存）。
+              // 落とせずカードが移動先象限に貼り付く＝レビュー指摘）。コマンド経由の undo（main.ts）は
+              // このハンドラを通らないが、undoLastMoveFromCommand が dropPendingOverlay（registerPendingDropper 経由）で
+              // 各ビューの pending を落とすため対称に解消される（#6）。
               setPending((prev) => dropPending(prev, undoToast.entryId));
               // 名指しノートの entryId を渡す（記録が別移動へ置き換わっていたら戻さないガード）。
               callbacks.onUndoMove?.(undoToast.entryId);

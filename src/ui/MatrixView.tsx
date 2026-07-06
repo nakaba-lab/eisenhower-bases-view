@@ -50,6 +50,31 @@ export function shouldRescheduleAutoDismiss(
   return !pointerInside && !focusInside && !timerActive;
 }
 
+/** dnd-kit の Transform 相当（DragOverlay の位置補正に使う x/y/scale）。 */
+export interface OverlayTransform {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+}
+
+/**
+ * DragOverlay（position:fixed）の transform から、portal 先の**包含ブロック原点ずれ**を差し引く純関数（#43 の恒久対策）。
+ *
+ * overlay の最終ビューポート位置 = 包含ブロック原点 + rect（掴んだカードの矩形）+ transform。
+ * #43 の body portal は「body/html の原点＝ビューポート (0,0)」を前提に原点ずれを消すが、Obsidian の
+ * バージョン/OS/テーマによっては body/html に `transform` 等が付き fixed 包含ブロック原点が (0,0) から
+ * ずれ、掴んだカードが**一定量ずれて浮く**（#43 再燃）。実測した原点を transform から引くと、rect＋ドラッグ量
+ * だけの正しい位置に戻る。原点 (0,0)（stock Obsidian で実測）では恒等＝現行の安定挙動を一切変えない。
+ * scale は保持する（DragOverlay の adjustScale 既定は false のため通常 1）。
+ */
+export function compensateOverlayTransform(
+  transform: OverlayTransform,
+  origin: { x: number; y: number },
+): OverlayTransform {
+  return { ...transform, x: transform.x - origin.x, y: transform.y - origin.y };
+}
+
 /**
  * Matrix ビューの命令的な描画入口（アダプタ層が onDataUpdated 内で呼ぶ＝AC3）。
  *
@@ -113,6 +138,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // マトリクス領域の参照。トーストのボタンをキーボードで操作するとボタンが即アンマウントされ
   // フォーカスが body へ落ちるため、操作直後にこの安定した受け皿へフォーカスを戻す（a11y・レビュー指摘）。
   const matrixSectionRef = useRef<HTMLElement>(null);
+  // DragOverlay（position:fixed）の座標原点を、portal 先（body）の**実効的な包含ブロック原点**へ
+  // 合わせて補正するためのオフセット。#43 の body portal は「body/html がビューポート原点 (0,0)」を
+  // 前提に原点ずれを消すが、Obsidian のバージョン/OS/テーマによっては body や html に transform 等が
+  // 付いて fixed の包含ブロック原点が (0,0) からずれ、掴んだカードが**一定量ずれて浮く**（#43 再燃）。
+  // ドラッグ開始時に実原点を測り、その分だけ overlay の transform から差し引く（原点 (0,0) では差引 0＝無変化）。
+  const overlayOriginRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   // #22（F5）: クリック（開く）とドラッグを両立させるため PointerSensor に距離活性化制約を付け、
   // 5px 未満の移動は掴みにせずクリックとして成立させる。KeyboardSensor の起動/ドロップキーは
   // Space のみに remap し、Enter を「開く」（NoteCard の onKeyDown）へ解放する。
@@ -235,7 +266,29 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     },
   };
 
+  // portal 先（ビューが属する document の body）の position:fixed 包含ブロック原点をビューポート座標で測る。
+  // top/left=0 の一時 fixed プローブの矩形が、そのまま包含ブロック原点になる（transform/contain いずれ由来でも実測できる）。
+  // body/html が (0,0) なら (0,0) を返し、後段の差引は no-op（現行の安定挙動を一切変えない）。
+  const measureOverlayOrigin = (): { x: number; y: number } => {
+    const doc = matrixSectionRef.current?.ownerDocument;
+    const body = doc?.body;
+    if (!doc || !body) return { x: 0, y: 0 };
+    const probe = doc.createElement("div");
+    probe.style.cssText =
+      "position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none";
+    body.appendChild(probe);
+    const rect = probe.getBoundingClientRect();
+    body.removeChild(probe);
+    return { x: rect.left, y: rect.top };
+  };
+
+  // DragOverlay の transform から包含ブロック原点ぶんを差し引く dnd-kit modifier（純関数へ委譲＝単体テスト済み）。
+  const compensatePortalOrigin = ({ transform }: { transform: OverlayTransform }) =>
+    compensateOverlayTransform(transform, overlayOriginRef.current);
+
   const handleDragStart = (event: DragStartEvent) => {
+    // 掴んだ瞬間の包含ブロック原点を測り、overlay 位置補正に使う（環境依存の原点ずれ＝#43 再燃を吸収）。
+    overlayOriginRef.current = measureOverlayOrigin();
     setActiveId(String(event.active.id));
     // 新しいドラッグを始めたら、直前の移動の「元に戻す」提案は古くなるため消す。
     dismissUndoToast();
@@ -445,7 +498,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
           `getOwnerDocument(event.target)`/`getWindow(event.target)`（`ownerDocument.defaultView`）で popout を
           正しく解決し realm 安全。真因は活性化/イベント配線側が最有力で実機プローブ待ち（v1 対応・要件 §9）。 */}
       {createPortal(
-        <DragOverlay>
+        <DragOverlay modifiers={[compensatePortalOrigin]}>
           {activeId ? (
             <div class="eisenhower-note-card eisenhower-note-card--overlay">
               {titleOf(activeId)}

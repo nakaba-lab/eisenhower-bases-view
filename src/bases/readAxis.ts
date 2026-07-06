@@ -75,6 +75,38 @@ export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
 }
 
 /**
+ * `config.getAsPropertyId(key)` を **throw させない**境界防御でくるむ（`getValue` と対称・レビュー指摘 #3）。
+ *
+ * `getAsPropertyId` は `getValue` と並ぶ churn 対象の Bases 接触点で、破壊的変更・内部不整合で throw しうる。
+ * これは `resolveAxisPropertyIds`（描画経路 `toViewModel`・書き戻し経路 `resolveWritableAxisKeys` の双方から呼ばれる）
+ * で走るため、throw が伝播すると `onDataUpdated` まで壊れて**ビュー全体の再描画が失敗**する（`getValue` の per-card
+ * degradation より重い全件失敗）。例外時は `null`（未設定相当）へ倒し、呼び出し側の設定デフォルト（`note.<name>`）
+ * フォールバックに載せる＝軸解決が壊れても既定軸で描画を続ける。
+ */
+/**
+ * 既にログ済みの失敗 option キー。`resolveAxisPropertyIds` は描画・データ更新毎に呼ばれるため、
+ * `getAsPropertyId` が失敗し続けると同一キーのログでコンソールを埋める。`loggedGetValueFailures` と
+ * 同様にキー単位で 1 回に間引く（レビュー指摘）。
+ */
+const loggedGetAsPropertyIdFailures = new Set<string>();
+
+function safeGetAsPropertyId(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  key: string,
+): BasesPropertyId | null {
+  if (config == null) return null;
+  try {
+    return config.getAsPropertyId(key);
+  } catch (error) {
+    if (!loggedGetAsPropertyIdFailures.has(key)) {
+      loggedGetAsPropertyIdFailures.add(key);
+      console.error("[Eisenhower Matrix] config.getAsPropertyId failed; using default axis", error);
+    }
+    return null;
+  }
+}
+
+/**
  * 軸 propertyId を解決する。ビュー options（`config.getAsPropertyId`）を主とし、
  * 未設定（null）なら設定タブのデフォルト（`note.<name>`）にフォールバックする（要件 F4）。
  */
@@ -83,10 +115,10 @@ export function resolveAxisPropertyIds(
   settings: EisenhowerSettings,
 ): AxisPropertyIds {
   const urgent =
-    config?.getAsPropertyId(URGENT_OPTION_KEY) ??
+    safeGetAsPropertyId(config, URGENT_OPTION_KEY) ??
     toNotePropertyId(settings.defaultUrgencyProperty);
   const important =
-    config?.getAsPropertyId(IMPORTANT_OPTION_KEY) ??
+    safeGetAsPropertyId(config, IMPORTANT_OPTION_KEY) ??
     toNotePropertyId(settings.defaultImportanceProperty);
   return { urgent, important };
 }
@@ -154,17 +186,57 @@ function normalizeAxis(value: Value | null): boolean | undefined {
 }
 
 /**
+ * `entry.getValue` の読み取り結果。成功は `{ ok: true; value }`、**例外は `{ ok: false }`** で表し、
+ * 「値が `null`（absent）だった」と「読み取り自体が throw した（型を確証できない）」を区別する。
+ * この区別が無いと、throw を absent と同一視して**非 boolean 値のカードをロックし損ね**、
+ * ドラッグ→両軸 `true/false` 上書きで元値を破壊しうる（レビュー指摘 #2）。
+ */
+type AxisReadResult = { ok: true; value: Value | null } | { ok: false };
+
+/**
+ * 既にログ済みの失敗 `propertyId`。同一キーの失敗を再描画毎・軸毎に `console.error` して
+ * ログを埋めるのを防ぐ（防御的パスの多重ログ抑制・レビュー指摘 #4）。
+ */
+const loggedGetValueFailures = new Set<string>();
+
+/**
+ * `entry.getValue(id)` を **throw させない**境界防御でくるむ（churn 耐性・レビュー指摘 #3）。
+ *
+ * `getValue` は Bases API 接触点（churn 対象）で、型契約上は `Value | null` を返すが、未対応
+ * プロパティ型・内部状態不整合・API 破壊的変更で throw しうる。1 件の entry の読み取り例外が
+ * `toViewModel`→`renderCurrent`→`onDataUpdated` まで伝播すると**ビュー全体の再描画が壊れ**、
+ * 他の正常カードも巻き添えになる。ここで捕捉して `{ ok: false }` を返し、呼び出し側が**用途ごとに
+ * 安全側の既定**（配置は未分類・ロック判定はロック）へ倒す（`isPlaceableNote`／`isWritableAxisProperty`
+ * の「Bases 境界で throw させない」防御と同じ流儀で、同期 read の境界にも対称に敷く）。
+ * 同一 `propertyId` の失敗は一度だけログする（#4）。
+ */
+function readAxisValueSafely(entry: BasesEntry, id: BasesPropertyId): AxisReadResult {
+  try {
+    return { ok: true, value: entry.getValue(id) };
+  } catch (error) {
+    const key = id as unknown as string;
+    if (typeof key !== "string" || !loggedGetValueFailures.has(key)) {
+      if (typeof key === "string") loggedGetValueFailures.add(key);
+      console.error("[Eisenhower Matrix] entry.getValue failed", error);
+    }
+    return { ok: false };
+  }
+}
+
+/**
  * 1 軸を読む。書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は **absent 扱い（undefined）**にして
  * 4 象限へ配置しない（未分類・ドロップ不可）。読み取り側を書き戻し側（{@link toFrontmatterKey}）と
  * 対称にし、「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない（レビュー指摘）。
  * 非 `note.*` 軸が設定されたときの本格的な UX（ドラッグ無効化・ビュー全体の警告）は F4（#21）で扱う。
+ * `getValue` が throw した軸は **absent 相当（undefined）＝配置は未分類**へ倒す（安全側）。
  */
 function readSingleAxis(
   entry: BasesEntry,
   id: BasesPropertyId,
 ): boolean | undefined {
   if (toFrontmatterKey(id) === null) return undefined;
-  return normalizeAxis(entry.getValue(id));
+  const result = readAxisValueSafely(entry, id);
+  return result.ok ? normalizeAxis(result.value) : undefined;
 }
 
 /** 1 エントリの両軸値を読み、absent を区別した {@link AxisValues} を返す。 */
@@ -198,7 +270,13 @@ function isUnsupportedOnWritableAxis(
 ): boolean {
   // 非 note.*（formula/file）軸は書き戻し自体が `resolveWritableAxisKeys` で弾かれ破壊経路が無いため対象外。
   if (!isWritableAxisProperty(id)) return false;
-  return isUnsupportedAxisValue(entry.getValue(id));
+  const result = readAxisValueSafely(entry, id);
+  // getValue が throw した書込可能 note.* 軸は **安全側でロック**する（レビュー指摘 #2）。読み取り（getValue）と
+  // 書き戻し（processFrontMatter）は別系統で、書き戻しは getValue を経由せず生 frontmatter を true/false 上書き
+  // するため、値の型を boolean と確証できないままドラッグを許すと元の数値/文字列を破壊しうる。throw を absent と
+  // 同一視して未ロック（ドラッグ可）にすると #34/#3 が塞いだ非 boolean 破壊経路を再開する。
+  if (!result.ok) return true;
+  return isUnsupportedAxisValue(result.value);
 }
 
 /**

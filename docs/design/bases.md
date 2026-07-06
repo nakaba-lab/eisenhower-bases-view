@@ -3,7 +3,7 @@ title: Bases アダプタ層 設計
 area: bases
 status: active
 relatedIssues: [18, 19, 20, 21, 22, 33, 34]
-updated: 2026-07-05
+updated: 2026-07-06
 kind: api
 ---
 
@@ -110,6 +110,7 @@ sequenceDiagram
     - **① 記録の無効化（`UndoManager.clearIfEntry`＋vault イベント）**: `main.ts` が `registerEvent` で `vault.on("delete")`／`vault.on("rename")` を購読し、記録した path のファイルが削除/リネームされたら `undoManager.clearIfEntry(path)` で記録を破棄する（rename は旧 path で判定）。パスが再利用される**前提条件（元ファイルの消滅）**の時点で記録を捨て、「削除→同名で作り直し→undo」で別ノートを壊す経路を根本から断つ。**フォルダ対応**: Obsidian はフォルダの delete/rename を**フォルダ 1 件のイベント**として発火し配下ファイルごとには発火しないため、`clearIfEntry` は完全一致に加え記録 path が `entryId + "/"` 配下（削除/リネームされたフォルダの中）でも破棄する（親フォルダ操作での取り残し防止・Gemini レビュー指摘）。
     - **② 値照合（`isUndoApplicable`）**: ①をすり抜ける「削除/リネームを伴わない外部改変」に対し、復元前に `processFrontMatter` 内で「両軸が記録時に自分が書いた値（`record.wrote`）のままか」を照合し、不一致なら**復元せず記録を破棄**する（`noUndo`）。①で path 再利用は断つが、②は同一象限（同じ boolean 値）の別ノートまでは区別できない残存があり、file.path が唯一の安定キーである以上の割り切り（delete 経路は①で実質封鎖済み）。
   - **トリガー（コマンド＋トースト）**: `main.ts` が `addCommand({ id: "undo-last-move", name: messages.undoCommandName, callback })` を登録（ホットキーはユーザーが割当・Ctrl+Z 以外＝ネイティブ undo 非統合）。ビュー内トーストの「元に戻す」は `MatrixCallbacks.onUndoMove` 経由で同じ復元経路を呼ぶ（コマンドとトーストで `runUndo` を単一化＝重複させない）。記録が無いときは `Notice`（`messages.noUndo`）。
+  - **コマンド経由 undo の楽観オーバーレイ落とし（レビュー指摘 #6）**: `runUndo` は**実際に復元した `entryId`（file.path）を返す**（未復元＝記録なし/名指し不一致/ファイル欠落/値不一致/書込失敗は `null`）。トースト undo は UI 内で `dropPending` して楽観オーバーレイを落とせるが、**コマンド undo は `MatrixView` を経由しない**ため、書込成功直後の在庫レース窓で残った `pending` を落とせずカードが移動先象限へ貼り付く（トースト経路との非対称）。`MatrixView` はマウント時に「pending を落とす関数」を `MatrixCallbacks.registerPendingDropper`（plain function 型＝AC5 維持・アンマウントで `null` 解除）でアダプタへ登録し、`EisenhowerBasesView` がそれを `dropPendingOverlay(entryId)` として保持する。`main.ts` の `undoLastMoveFromCommand` は `runUndo` の戻り値（`entryId`）で生存ビュー（`liveViews`）の `dropPendingOverlay` を呼び、各ビューの `pending` を落として表示をサーバ値へ戻す（トースト経路と対称化）。
 - **ビルド**: esbuild（`main.js`）。`minAppVersion` 1.12.0・`isDesktopOnly: true`（確定）。
 
 ## 主要な設計判断（現行の理由）
@@ -137,6 +138,10 @@ sequenceDiagram
   - **却下: `.base`（`extension === "base"`）だけを名指し除外** — 問題を `.base` に限定できるが、`.canvas`・画像等の他の非 md も未分類に残る。frontmatter 軸を持ちうるのは md ノートのみ（v1）なので、**正の許可リスト（md のみ通す）** の方が「未知/新規の非ノート型を既定で除外する」安全側に倒れる（`instanceof BooleanValue` の許可リストと同じ思想）。
   - **却下: 除外せず未分類に残す（従来）** — `.base` 自己エントリが常に未分類ゾーンのカードとして現れ、ドロップ不可の“分類できないカード”をユーザーに見せ続ける。
   - **テスト**: `toViewModel.test.ts` で file スタブの `extension` を path 末尾から導出し、`.base`／`.canvas`／`.png` がカード化されないこと・md 0 件で `state: "empty"` を固定する。実機の非 md 混入は `docs/test/` の手動チェックリストで確認する。
+- **Bases 接触点（`getValue`／`getAsPropertyId`）の例外を境界で退避しビュー全体を守る（churn 耐性・レビュー指摘 #3・収束レビュー #2/#3）**: 軸読み取り `entry.getValue(id)` と軸解決 `config.getAsPropertyId(key)` は churn 対象の Bases API 接触点で、型契約は `Value | null`／`BasesPropertyId | null` だが未対応プロパティ型・内部状態不整合・API 破壊的変更で throw しうる。読み取り例外が `toViewModel`→`renderCurrent`→`onDataUpdated` まで伝播すると**マトリクス全体の再描画が壊れ**、正常カードも巻き添えになる。
+  - **`getValue`**: `readAxisValueSafely(entry, id)` で try/catch し、成功は `{ ok:true, value }`・**例外は `{ ok:false }`** で返す（「値が `null`＝absent だった」と「読み取り自体が throw した＝型を確証できない」を区別）。呼び出し側は**用途ごとに安全側の既定**へ倒す: 配置 `readSingleAxis` は throw→`undefined`（未分類）、**ロック判定 `isUnsupportedOnWritableAxis` は throw→`true`（ロック）**。後者が重要で、読み取り（`getValue`）と書き戻し（`processFrontMatter`）は**別系統**（書き戻しは `getValue` を経由せず生 frontmatter を `true/false` 上書き）のため、throw を absent と同一視してロックし損ねると非 boolean 値を持つカードがドラッグ可能になり上書き破壊しうる（#34/`hasUnsupportedAxisValue` が塞いだ経路の再開＝収束レビュー #2 で是正）。同一 `propertyId` の失敗は `loggedGetValueFailures`（Set）で一度だけ `console.error` する（再描画毎・軸毎のログ洪水抑制＝収束レビュー #4）。
+  - **`getAsPropertyId`**: `safeGetAsPropertyId(config, key)` で try/catch し、例外時は `null`（未設定相当）へ倒して設定デフォルト `note.<name>` フォールバックに載せる（軸解決が壊れても既定軸で描画継続）。`resolveAxisPropertyIds` は描画経路と書き戻し経路の双方から呼ばれるため、per-card degradation より重い全件失敗を防ぐ（`getValue` 防御と粒度を揃える＝収束レビュー #3）。
+  - `isPlaceableNote`（`entry?.file?.extension`）・`isWritableAxisProperty`（`typeof string`）の「Bases 境界で throw させない」防御と同じ流儀を、同期 read の両接触点へ対称に敷く（純度は `readAxis.test.ts` の「getValue throw→読みは undefined・書込可能軸はロック」「getAsPropertyId throw→既定軸フォールバック」で固定）。
 - **軸許容ルールは単一述語 `isWritableAxisProperty`（`readAxis.ts`）に集約（#21 F4）**: 「書き戻せる `note.*` 軸か」の判定を 1 つの純関数に集約し、**options の `filter`（選択時に弾く）・読み取り `readSingleAxis`（非 note.* 軸を未分類へ）・書き戻し `writeBackAxes`（Notice で弾く）の 3 面が同じ定義を共有**する。選択・読み取り・書き戻しでルールがずれると「選べるのに壊れる」「読めるのに書けない」非対称が生まれるため、churn 面（options 宣言）と実行面（読み書き）を 1 述語で対称化する。述語は `readAxis.ts`（`NOTE_PROPERTY_PREFIX`・option キー・`toFrontmatterKey` の置き場）に置き、`viewOptions.ts` が一方向 import する（`readAxis`↔`viewOptions` の循環依存を避ける＝実装時の設計ドラフトから調整した点）。
   - **却下: 各面で `startsWith("note.")` をインライン** — 記述は最小だが 3 箇所に散り、v2 で数値/タグ軸の許容ルールを足すとき同期漏れが起きる。
   - **却下: 述語を `viewOptions.ts` に置く（初期ドラフト案）** — `viewOptions` が `readAxis` のキーを import し、`readAxis` が `viewOptions` の述語を import する双方向依存（循環）になる。ESM live-binding で動きはするが code smell のため、依存を一方向（`viewOptions`→`readAxis`）に正した。

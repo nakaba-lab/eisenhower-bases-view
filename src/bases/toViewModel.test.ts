@@ -281,15 +281,13 @@ describe("toViewModel — 非 boolean 軸カードのロック（ドラッグ不
 });
 
 describe("toViewModel — 数百件スケール（純パイプラインの回帰ガード）", () => {
-  it("toViewModel — 500 件を正しく 4 象限へ分類し、線形時間で完了する", () => {
+  it("toViewModel — 500 件を漏れなく正しい 4 象限へ分類する（大量入力の正しさ）", () => {
     // given: 4 象限に均等な 500 件の md ノート（i%4 で urgent/important を割り振る）
     const entries = Array.from({ length: 500 }, (_, i) =>
       mockEntry(`note-${i}.md`, `note-${i}`, i % 2 === 0 ? TRUE : FALSE, i % 4 < 2 ? TRUE : FALSE),
     );
     // when
-    const start = performance.now();
     const { state, placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
-    const elapsedMs = performance.now() - start;
     // then: 全件が象限に載り、未分類は空
     expect(state).toBe("ready");
     expect(mapped).toHaveLength(500);
@@ -300,9 +298,14 @@ describe("toViewModel — 数百件スケール（純パイプラインの回帰
       placements.delete.length;
     expect(classified).toBe(500);
     expect(placements.unclassified).toHaveLength(0);
-    // 純関数は O(n) で数百件は 1ms 未満。500ms は O(n^2) 退行を捕らえる緩い上限（描画ジャンクは
-    // 実機（docs/test/ の手動チェックリスト）で確認する。jsdom はレイアウトしないため描画時間は測れない）。
-    expect(elapsedMs).toBeLessThan(500);
+    // 各象限へ均等（i%4 の割り付けどおり）に載ることまで固定し、大量入力での取りこぼし/誤分類を捕らえる。
+    // 以前は wall-clock（elapsedMs < 500ms）で O(n^2) 退行を狙ったが、共有 CI のスロットルで偶発的に
+    // 落ちる一方で軽度の非線形退行は捕らえられず「実質常に通るがフレーキー」だったため撤去した（レビュー指摘 #9）。
+    // 性能退行の網はプロファイル/実機チェックリスト（docs/test/）に委ねる。
+    expect(placements.do).toHaveLength(125);
+    expect(placements.schedule).toHaveLength(125);
+    expect(placements.delegate).toHaveLength(125);
+    expect(placements.delete).toHaveLength(125);
   });
 });
 

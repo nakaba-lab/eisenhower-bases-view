@@ -273,9 +273,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     const doc = matrixSectionRef.current?.ownerDocument;
     const body = doc?.body;
     if (!doc || !body) return { x: 0, y: 0 };
+    // 一時的で不可視・即時撤去する計測用プローブ。src/ui は Obsidian 非依存（decoupling）のため
+    // Obsidian の createDiv() は使わず標準 DOM の createElement を使う（プレビュー/テストハーネスでも動く）。
+    // obsidianmd/prefer-create-el は warning のままにする（decoupled 層の意図的な標準 DOM 使用・bot は非ブロック）。
     const probe = doc.createElement("div");
-    probe.style.cssText =
-      "position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none";
+    // 位置指定はインラインスタイル（no-static-styles-assignment）ではなく CSS クラスで与える。
+    probe.className = "eisenhower-cb-origin-probe";
     body.appendChild(probe);
     const rect = probe.getBoundingClientRect();
     body.removeChild(probe);

@@ -64,9 +64,15 @@ function preactDndKitResolver(): Plugin {
 
 export default defineConfig({
   plugins: [preactDndKitResolver()],
-  esbuild: {
-    jsx: "automatic",
-    jsxImportSource: "preact",
+  // vitest 4 は変換器を esbuild から oxc へ切り替えたため、JSX 設定は oxc 側に置く
+  // （esbuild ブロックは無視され、実行のたびに警告になる）。アプリの .tsx を preact の
+  // automatic JSX へ直接変換する（dnd-kit が import する react/jsx-runtime は上の
+  // preactDndKitResolver が引き続き preact/jsx-runtime へ再解決する）。
+  oxc: {
+    jsx: {
+      runtime: "automatic",
+      importSource: "preact",
+    },
   },
   test: {
     environment: "jsdom",

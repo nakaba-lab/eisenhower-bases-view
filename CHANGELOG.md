@@ -6,7 +6,7 @@
 
 ### Changed
 
-- 依存パッケージを更新した（プラグインの挙動・配布バンドル `main.js` は不変）。ランタイム依存 preact を 10.29.3 → 10.29.4 に、開発ツール（vitest 2 → 4・jsdom 25 → 29・@types/node 22 → 26・typescript-eslint 8.62.1）を更新した。develop に載せた結合状態で typecheck・273 テスト・lint・production build がすべて緑であることを確認済み（Dependabot #49, #50, #53, #54, #55 を統合）。
+- 依存パッケージを更新した（プラグインの挙動は不変）。ランタイム依存 preact を 10.29.3 → 10.29.4（patch）に更新した（preact は配布バンドルに取り込まれるため次回ビルドの `main.js` は preact 10.29.4 を含むが、機能上の変化はない）。開発ツール（vitest 2 → 4・jsdom 25 → 29・@types/node 22 → 26・typescript-eslint 8.62.1）も更新した（`main.js` には無影響）。develop に載せた結合状態で typecheck・273 テスト・lint・production build がすべて緑であることを確認済み（Dependabot #49, #50, #53, #54, #55 を統合）。
 
 ## [0.1.7] - 2026-07-06
 

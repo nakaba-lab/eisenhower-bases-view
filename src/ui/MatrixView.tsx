@@ -420,6 +420,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 両軸が同一の書き戻し可能キー＝全カードロックの設定ミス。原因＋直し方を role="note" で提示する
   //（視覚補助＝Issue AC）。aria-live は付けない: 初期レンダーでは polite は元々発火せず、SR 利用者へは
   // 各カードの cardLockedLabel（移動不可）が届く。移動アナウンス専用の sr-status にもバナー文言は載せない。
+  // sharedAxisKey は buildDiagnostics が shared 時に必ず設定する（?? urgentAxis は手構築 ViewModel への
+  // 防御フォールバック＝shared 時は両者一致＝toFrontmatterKey(ids.urgent)）。
   const diagnosticWarning = diagnostics?.axesShareWritableKey ? (
     <p class="eisenhower-matrix__diag-warning" role="note">
       {messages.diagSharedAxisWarning(diagnostics.sharedAxisKey ?? diagnostics.urgentAxis)}

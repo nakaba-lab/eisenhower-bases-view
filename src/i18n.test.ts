@@ -210,6 +210,9 @@ describe("messagesFor — 診断バナー・軸名行の i18n（#103 F7）", () 
     // 共有キー（frontmatter キー）を実際に含む＝原因を名指しする
     expect(ja).toContain("urgent");
     expect(en).toContain("urgent");
+    // 原因（共有キー）だけでなく「直し方」節も含む（AC4 の「原因＋直し方」両 clause を固定）
+    expect(ja).toContain("別々");
+    expect(en.toLowerCase()).toContain("different");
     // 非空・翻訳されている（同一文字列で取り残されていない）
     expect(ja.length).toBeGreaterThan(0);
     expect(en.length).toBeGreaterThan(0);

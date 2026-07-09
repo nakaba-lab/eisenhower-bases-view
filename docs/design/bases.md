@@ -2,8 +2,8 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34]
-updated: 2026-07-06
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103]
+updated: 2026-07-09
 kind: api
 ---
 
@@ -89,6 +89,14 @@ sequenceDiagram
   export interface MatrixViewModel {
     state: MatrixState;
     entries: MatrixEntry[];   // F1 ではシェル表示用（配置は #19）
+    diagnostics?: MatrixDiagnostics;  // #103 F7: 既存解決結果の転送（Bases 新規接触なし）
+  }
+  // #103 F7: 設定ミス診断・解決済み軸の可視化（既存の resolveAxisPropertyIds／axesShareWritableKey の結果を転送）
+  export interface MatrixDiagnostics {
+    axesShareWritableKey: boolean;  // 両軸が同一の書き戻し可能 note.* キー（設定ミス確定）
+    sharedAxisKey?: string;         // 上が true のとき共有キー（frontmatter キー表記・例 "urgent"）
+    urgentAxis: string;             // 解決済み緊急度軸名（frontmatter キー表記・非 note.* は生 id フォールバック）
+    importantAxis: string;          // 解決済み重要度軸名（同上）
   }
   export interface MatrixCallbacks {
     // F3（#20）でドラッグ書き戻し、F5（#22）で開く/プレビューを追加。いずれも UI は plain データを
@@ -122,6 +130,7 @@ sequenceDiagram
 - **解除は Preact `unmount` を明示**: ビュー破棄・`onunload` で Preact ルートを `unmount` し DOM/購読リークを防ぐ（AC4）。
 - **F1 で境界型を先に確定**（`MatrixCallbacks` は空でも置く）: F2〜F5 が同じ境界に積み増せるよう、契約面を最初に固定して後続の手戻りを避ける。
 - **手動再描画は持たない**: 書き戻し→`onDataUpdated` 自動再発火で反応ループが閉じる（スパイク #16 確定）。F1 は描画経路の確立まで。
+- **診断情報は既存解決結果の「転送」に徹する（#103 F7・churn 耐性）**: `toViewModel` が既に計算している `resolveAxisPropertyIds`（軸解決）と `axesShareWritableKey`（同一キー設定ミス）の結果を `MatrixViewModel.diagnostics`（plain string／boolean）へ載せるだけで、Bases API への**新規接触点を一切増やさない**（既存の `safeGetAsPropertyId` 経由の解決値の再利用）。UI（`MatrixView`）はこの plain データを描画するだけで `obsidian`/Bases 型に触れない（AC5 維持）。軸名は書き戻しキー（`toFrontmatterKey` の `<key>`＝利用者が設定タブ・Bases options で編集する表記）で持ち、非 `note.*`（`formula.*`/`file.*`＝`toFrontmatterKey` が `null`）は生の property id をフォールバック表示する（`"null"` を出さない）。**empty 分岐でも diagnostics を計算する**（現状 `toViewModel` は notes 0 件で `ids` 計算前に return するため、empty 分岐に `resolveAxisPropertyIds`＋`axesShareWritableKey` の算出を追加＝空状態でも軸名・設定ミスを提示できる。既存関数の再利用のため新規接触ではない）。却下「UI が axesShareWritableKey を再計算」: 同一ロジックの二重実装で乖離リスク。却下「Bases options から警告文言を引く」: Bases API 接触面を増やし churn 耐性方針に反する。
 - **書き戻しはアダプタに隔離（#20）**: `MatrixCallbacks.onMoveCard` は両軸の boolean だけを受け、`TFile` 解決・frontmatter キー算出・`app.fileManager.processFrontMatter` 実行をアダプタ（`EisenhowerBasesView`）が担う。UI・logic に `obsidian` 型を漏らさず（AC5 維持）、書き込み経路を読み取り経路（`getValue`）と同じく 1 領域へ集約する。frontmatter キーの取り出し（`note.urgent`→`urgent`）は純関数として切り出し単体テスト対象にする（`extends BasesView` 本体は obsidian ランタイム必須で対象外のため、テスト可能な純度をキー算出に逃がす）。
 - **開く/プレビューもアダプタに隔離（#22 F5）**: `onOpenCard`/`onHoverCard` は UI から plain データ（`entryId`・`newLeaf`・`targetEl`）だけを受け、`TFile` 解決・`workspace.openFile`・`hover-link` 発火をアダプタが担う（`onMoveCard` と同じ疎結合＝AC5 維持）。TFile 解決は書き戻しと共通の `resolveTargetFile` に集約して重複を避ける（#22 リファクタで抽出）。ホバープレビューはコア page-preview へ委譲し（`workspace.trigger("hover-link", …)`）プラグイン側で preview UI を再実装しない（表示可否はユーザーのコア設定に従う）。`extends BasesView` 本体は obsidian ランタイム必須で単体テスト対象外のため、開く/プレビューの往復は手動/結合で担保し、UI 側の意図算出（修飾キー→`newLeaf`・Enter 判定）は純関数（`src/ui/cardInteraction.ts`）として単体テストする。
 - **absent 判定は型同一性 `instanceof NullValue`（#33）**: 欠損プロパティの `getValue` は **NullValue（singleton）** を返す。これを `value instanceof NullValue` で検出し、明示 `false`（BooleanValue・`isTruthy()===false`）と区別する。

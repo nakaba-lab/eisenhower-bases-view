@@ -425,3 +425,79 @@ describe("toViewModel — presentation（ラベル/色/言語文言の解決・#
     expect(viewModel.presentation?.quadrantLabels.delete.length).toBeGreaterThan(0);
   });
 });
+
+describe("toViewModel — 診断情報（設定ミス診断・軸可視化・#103 F7）", () => {
+  /** 緊急・重要の両方に同じ note.urgent を割り当てる設定ミス config。 */
+  const sameKeyConfig = {
+    getAsPropertyId: (key: string): BasesPropertyId | null =>
+      key === "urgentProperty" || key === "importantProperty"
+        ? ("note.urgent" as BasesPropertyId)
+        : null,
+  };
+  /** 任意の軸プロパティ id を両軸に割り当てる config。 */
+  function axisConfig(
+    urgent: BasesPropertyId | null,
+    important: BasesPropertyId | null,
+  ): { getAsPropertyId: (key: string) => BasesPropertyId | null } {
+    return {
+      getAsPropertyId: (key: string) =>
+        key === "urgentProperty" ? urgent : key === "importantProperty" ? important : null,
+    };
+  }
+
+  it("toViewModel — 両軸が同一の書き戻し可能 note.* キーなら axesShareWritableKey=true・sharedAxisKey に共有キー（AC）", () => {
+    // given: 緊急・重要の両方に note.urgent を割り当てた設定ミス
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { diagnostics } = toViewModel(entries, sameKeyConfig, DEFAULT_SETTINGS);
+    // then: 設定ミス確定＋共有キー（frontmatter キー表記）が載る
+    expect(diagnostics?.axesShareWritableKey).toBe(true);
+    expect(diagnostics?.sharedAxisKey).toBe("urgent");
+  });
+
+  it("toViewModel — 両軸が異なる note.* キーなら axesShareWritableKey=false・urgentAxis/importantAxis に解決済み軸名（frontmatter キー・AC）", () => {
+    // given: config=null → 設定デフォルト（urgent / important）
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { diagnostics } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then
+    expect(diagnostics?.axesShareWritableKey).toBe(false);
+    expect(diagnostics?.urgentAxis).toBe("urgent");
+    expect(diagnostics?.importantAxis).toBe("important");
+    expect(diagnostics?.sharedAxisKey).toBeUndefined();
+  });
+
+  it("toViewModel — 空状態（entries 0 件）でも diagnostics に解決済み軸名が載る（空でも軸を提示・AC）", () => {
+    // given / when: notes 0 件でも軸解決を行う（empty 分岐でも診断を計算する）
+    const viewModel = toViewModel([], null, DEFAULT_SETTINGS);
+    // then
+    expect(viewModel.state).toBe("empty");
+    expect(viewModel.diagnostics?.urgentAxis).toBe("urgent");
+    expect(viewModel.diagnostics?.importantAxis).toBe("important");
+    expect(viewModel.diagnostics?.axesShareWritableKey).toBe(false);
+  });
+
+  it("toViewModel — 空状態でも両軸同一キー設定ミスを検出する（バナーは empty でも出しうる）", () => {
+    // given / when: notes 0 件 × 両軸同一キー
+    const viewModel = toViewModel([], sameKeyConfig, DEFAULT_SETTINGS);
+    // then
+    expect(viewModel.state).toBe("empty");
+    expect(viewModel.diagnostics?.axesShareWritableKey).toBe(true);
+    expect(viewModel.diagnostics?.sharedAxisKey).toBe("urgent");
+  });
+
+  it('toViewModel — 非 note.*（formula.*）軸は生の property id をフォールバック表示する（"null" を出さない）', () => {
+    // given: 緊急軸を formula.* に（書き戻し不可＝toFrontmatterKey は null）、重要軸は note.important
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { diagnostics } = toViewModel(
+      entries,
+      axisConfig("formula.due" as BasesPropertyId, "note.important" as BasesPropertyId),
+      DEFAULT_SETTINGS,
+    );
+    // then: frontmatter キーが取れない軸は生 id を出す（"null" 文字列にしない）
+    expect(diagnostics?.urgentAxis).toBe("formula.due");
+    expect(diagnostics?.importantAxis).toBe("important");
+    expect(diagnostics?.axesShareWritableKey).toBe(false);
+  });
+});

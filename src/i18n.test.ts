@@ -202,3 +202,30 @@ describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i
     );
   });
 });
+
+describe("messagesFor — 診断バナー・軸名行の i18n（#103 F7）", () => {
+  it("messagesFor — diagSharedAxisWarning が共有キーを差し込み言語別（原因＋直し方）", () => {
+    const ja = messagesFor("ja").diagSharedAxisWarning("urgent");
+    const en = messagesFor("en").diagSharedAxisWarning("urgent");
+    // 共有キー（frontmatter キー）を実際に含む＝原因を名指しする
+    expect(ja).toContain("urgent");
+    expect(en).toContain("urgent");
+    // 原因（共有キー）だけでなく「直し方」節も含む（AC4 の「原因＋直し方」両 clause を固定）
+    expect(ja).toContain("別々");
+    expect(en.toLowerCase()).toContain("different");
+    // 非空・翻訳されている（同一文字列で取り残されていない）
+    expect(ja.length).toBeGreaterThan(0);
+    expect(en.length).toBeGreaterThan(0);
+    expect(ja).not.toBe(en);
+  });
+
+  it("messagesFor — diagAxisNames が緊急度/重要度の軸名を差し込み言語別", () => {
+    const ja = messagesFor("ja").diagAxisNames("urgent", "important");
+    const en = messagesFor("en").diagAxisNames("urgent", "important");
+    expect(ja).toContain("urgent");
+    expect(ja).toContain("important");
+    expect(en).toContain("urgent");
+    expect(en).toContain("important");
+    expect(ja).not.toBe(en);
+  });
+});

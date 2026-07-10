@@ -464,6 +464,18 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const placements = applyPendingMoves(viewModel.placements, pending);
   // 未分類ゾーンの表示可否（設定 showUnclassified。省略時は表示＝後方互換）。
   const showUnclassified = viewModel.showUnclassified !== false;
+  // 完了トグル（#105 F10）: 有効フラグ・状態別 aria-label・トグルハンドラを組み、各セル→カードへ渡す。
+  // 完了書き込みは onDataUpdated 再クエリで反映する（Base の done!=true フィルタでカードが消える）。
+  // ドラッグのような楽観オーバーレイは持たない（Bases 委譲＝最小実装）。
+  const completionEnabled = viewModel.completionEnabled ?? false;
+  const dimCompleted = viewModel.dimCompleted ?? false;
+  const completionLabel = (isCompleted: boolean) =>
+    isCompleted ? messages.completionToggleDone : messages.completionToggle;
+  const handleToggleCompletion = callbacks.onToggleCompletion
+    ? (entryId: string, done: boolean) => {
+        void callbacks.onToggleCompletion?.(entryId, done);
+      }
+    : undefined;
   return (
     <DndContext
       sensors={sensors}
@@ -507,6 +519,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               emptyText={messages.emptyQuadrant}
               onOpenCard={callbacks.onOpenCard}
               onHoverCard={callbacks.onHoverCard}
+              completionEnabled={completionEnabled}
+              completionLabel={completionLabel}
+              onToggleCompletion={handleToggleCompletion}
+              dimCompleted={dimCompleted}
             />
           ))}
         </div>
@@ -541,6 +557,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             variant="unclassified"
             onOpenCard={callbacks.onOpenCard}
             onHoverCard={callbacks.onHoverCard}
+            completionEnabled={completionEnabled}
+            completionLabel={completionLabel}
+            onToggleCompletion={handleToggleCompletion}
+            dimCompleted={dimCompleted}
           />
         )}
         {/* 移動成功直後の「元に戻す」トースト（undo・最小実装）。onUndoMove 配線時のみ。

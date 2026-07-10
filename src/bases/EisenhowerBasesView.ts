@@ -9,11 +9,11 @@ import {
 import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolvePresentation } from "./presentation";
-import { resolveWritableAxisKeys } from "./readAxis";
+import { resolveCompletionKey, resolveWritableAxisKeys } from "./readAxis";
 import { runUndo } from "./undoWriteBack";
 import { VIEW_ID } from "./registerView";
 import {
-  capturePreviousAxes,
+  buildUndoEntries,
   type FrontmatterLike,
   type UndoManager,
   type UndoRecord,
@@ -100,6 +100,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       onHoverCard: (entryId, targetEl, event) =>
         this.previewNote(entryId, targetEl, event),
       onUndoMove: (expectedEntryId) => this.undoLastMove(expectedEntryId),
+      onToggleCompletion: (entryId, done) => this.writeCompletion(entryId, done),
       registerPendingDropper: (drop) => {
         this.pendingDropper = drop;
       },
@@ -199,13 +200,15 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     let undoRecord: UndoRecord | null = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
+        // 両軸を 1 記録（entries 2 要素）に捕捉する（#105 でキーリスト化）。書き込んだ値（value）は
+        // undo 適用前の同一性照合（別ノートへの誤 delete/上書き防止）に使う。
         undoRecord = {
           entryId,
           title: file.basename,
-          keys,
-          previous: capturePreviousAxes(frontmatter, keys),
-          // 書き込んだ両軸値を保持する（undo 適用前の同一性照合＝別ノートへの誤 delete/上書き防止）。
-          wrote: { urgent: axisValues.urgent, important: axisValues.important },
+          entries: buildUndoEntries(frontmatter, [
+            { key: keys.urgent, value: axisValues.urgent },
+            { key: keys.important, value: axisValues.important },
+          ]),
         };
         frontmatter[keys.urgent] = axisValues.urgent;
         frontmatter[keys.important] = axisValues.important;
@@ -216,6 +219,60 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       throw error;
     }
     if (undoRecord) this.undoManager?.record(undoRecord);
+  }
+
+  /**
+   * カード上の完了トグル（#105 F10）: 完了プロパティへ単一 boolean を明示書き込みする（`true`⇄`false`・
+   * `delete` しない＝双方向トグル）。書込前に**非 boolean 値（日付型等）は上書きしない**で元値を守り
+   *（AC2・UI の disabled と二重化）、`processFrontMatter` のコールバック内で undo 記録（entries 1 要素）を
+   * 組む。書き戻し（`writeBackAxes`）と同じく `getValue` を経由せず生 frontmatter を書く。成功後に
+   * `UndoManager` へ「直前 1 手」として保存し、成功/失敗/非対応を `Notice` で通知する。完了ノートの
+   * 表示/非表示は Base の `done != true` フィルタ（+ `onDataUpdated` 再クエリ）に委譲する。
+   */
+  private async writeCompletion(entryId: string, done: boolean): Promise<void> {
+    const messages = this.getMessages();
+    const completionKey = resolveCompletionKey(this.config, this.getSettings());
+    if (completionKey === null) {
+      // 完了プロパティ未設定/無効（非 note.*・軸衝突）。UI はボタンを出さない前提だが防御的に弾く。
+      new Notice(`Eisenhower Matrix: ${messages.completionFailed(entryId)}`);
+      throw new Error("completion property is not writable");
+    }
+
+    const file = this.resolveTargetFile(entryId, messages.fileNotFoundForMove);
+    if (!file) {
+      throw new Error(`target file not found: ${entryId}`);
+    }
+
+    let undoRecord: UndoRecord | null = null;
+    let unsupported = false;
+    try {
+      await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
+        const existing = frontmatter[completionKey];
+        // 非 boolean（存在し boolean でない＝日付型等）は上書きせず元値を守る（AC2・破壊防止）。
+        // absent（未定義）は新規に書けるため許可する（分類として done を立てられる）。
+        if (existing !== undefined && typeof existing !== "boolean") {
+          unsupported = true;
+          return;
+        }
+        undoRecord = {
+          entryId,
+          title: file.basename,
+          entries: buildUndoEntries(frontmatter, [{ key: completionKey, value: done }]),
+        };
+        frontmatter[completionKey] = done;
+      });
+    } catch (error) {
+      console.error("[Eisenhower Matrix] failed to write completion frontmatter", error);
+      new Notice(`Eisenhower Matrix: ${messages.completionFailed(file.basename)}`);
+      throw error;
+    }
+    if (unsupported) {
+      // 非 boolean を検出して書き込まなかった（元値を破壊していない）。undo 記録も作らない。
+      new Notice(`Eisenhower Matrix: ${messages.completionUnsupported}`);
+      return;
+    }
+    if (undoRecord) this.undoManager?.record(undoRecord);
+    new Notice(`Eisenhower Matrix: ${messages.completionSucceeded(file.basename)}`);
   }
 
   /**

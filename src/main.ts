@@ -7,7 +7,11 @@ import {
   VIEW_NAME,
   safeRegisterBasesView,
 } from "./bases/registerView";
-import { buildAxisViewOptions, buildBadgeViewOptions } from "./bases/viewOptions";
+import {
+  buildAxisViewOptions,
+  buildBadgeViewOptions,
+  buildCompletionViewOption,
+} from "./bases/viewOptions";
 import { runUndo } from "./bases/undoWriteBack";
 import { EisenhowerSettingTab } from "./settingsTab";
 import { UndoManager } from "./logic/undo";
@@ -79,6 +83,9 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
           options: () => [
             ...buildAxisViewOptions(this.resolveMessages()),
             ...buildBadgeViewOptions(this.resolveMessages()),
+            // カード上の完了トグル（#105 F10）: 完了プロパティのセレクタ（filter は書き戻し可能な
+            // note.* 判定＝軸と同型）。displayName は評価時点の解決言語に追従する（i18n）。
+            buildCompletionViewOption(this.resolveMessages()),
           ],
         }),
       () => {

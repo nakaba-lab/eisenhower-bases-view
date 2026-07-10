@@ -51,6 +51,63 @@ function NoteBadges({ badges }: { badges: MatrixEntry["badges"] }) {
   );
 }
 
+/**
+ * カード上の完了チェックボタン（#105 F10）。タイトル行の右端に置き、hover/focus で出現する
+ *（完了時は常時可視・CSS）。クリック（またはカードフォーカス中の `x` キー）で完了をトグルする。
+ * click-to-open と `PointerSensor(distance:5)` に対し `stopPropagation` して開く/掴むと衝突させない
+ *（AC5）。非 boolean 完了値（`unsupported`）は `disabled` で押下を塞ぎ元値を守る（AC2）。
+ * アイコンは装飾（`aria-hidden`）で、状態別 `aria-label` と `aria-pressed` を SR に届ける。
+ */
+function CompletionButton({
+  completed,
+  unsupported,
+  label,
+  onToggle,
+}: {
+  completed: boolean;
+  unsupported: boolean;
+  label: (completed: boolean) => string;
+  onToggle: (done: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      class={"eisenhower-note-card__complete" + (completed ? " is-completed" : "")}
+      aria-label={label(completed)}
+      aria-pressed={completed}
+      disabled={unsupported}
+      onClick={(event) => {
+        // 開く導線（カードの onClick）へ伝播させない（AC5）。目的値は現状態の反転（双方向トグル）。
+        event.stopPropagation();
+        // disabled でも念のためガード（非 boolean は元値を破壊しない・AC2）。
+        if (unsupported) return;
+        onToggle(!completed);
+      }}
+      // ドラッグ開始（PointerSensor distance:5）とカードのキー操作（開く/掴む）に伝播させない。
+      onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <svg
+        class="eisenhower-note-card__complete-icon"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path
+          class="eisenhower-note-card__complete-check"
+          d="M5 8.25 L7 10.25 L11 6"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
 export interface NoteCardProps {
   entry: MatrixEntry;
   /** クリック/Enter で開く（#22 F5）。UI は修飾キーから `newLeaf` を算出して渡す。 */
@@ -72,6 +129,25 @@ export interface NoteCardProps {
    * 省略時はバッジ本文にフォールバックする（SR で経過日数だけは伝わる）。
    */
   stagnantLabel?: (days: number) => string;
+  /**
+   * 完了トグル（#105 F10）が有効か。true のときのみカードにチェックボタンを描画し、`x` キーでトグルする
+   *（`MatrixViewModel.completionEnabled` を上流から渡す）。省略/false のときはボタンを出さない（opt-in）。
+   */
+  completionEnabled?: boolean;
+  /**
+   * チェックボタンの状態別 aria-label（`completed` → 未完了に戻す／未完了 → 完了にする・#105 F10）。
+   * i18n（`completionToggle`/`completionToggleDone`）から組んで渡す。
+   */
+  completionLabel?: (completed: boolean) => string;
+  /**
+   * 完了状態をトグルする（#105 F10）。UI は目的値 `done` を渡すだけで、書き込みはアダプタが担う（AC5）。
+   */
+  onToggleCompletion?: (entryId: string, done: boolean) => void;
+  /**
+   * 完了ノートを淡色表示するか（設定 `dimCompleted` の反映・#105 F10）。true かつ完了時に
+   * `--dimmed`（弱色トークンで色を落とす。`opacity` ではない）を付ける。
+   */
+  dimCompleted?: boolean;
 }
 
 /** 滞留バッジの経過日数（present なら number、それ以外は null）。`stagnant` かつ日数が数値のときだけ描画する。 */
@@ -91,7 +167,32 @@ export function NoteCard({
   lockedLabel,
   stagnantBadge,
   stagnantLabel,
+  completionEnabled,
+  completionLabel,
+  onToggleCompletion,
+  dimCompleted,
 }: NoteCardProps) {
+  // 完了トグル（#105 F10）: 完了状態・非対応（非 boolean）・描画条件を組む。
+  const completed = entry.completed ?? false;
+  const completionUnsupported = entry.completionUnsupported ?? false;
+  // ボタン・x キーを出す条件（有効＋ラベル＋コールバックが揃う）。
+  const showCompletion = Boolean(completionEnabled && completionLabel && onToggleCompletion);
+  const toggleCompletion = () => {
+    if (completionUnsupported) return; // 非 boolean は破壊しないため無効
+    onToggleCompletion?.(entry.id, !completed);
+  };
+  const completionButton = showCompletion ? (
+    <CompletionButton
+      completed={completed}
+      unsupported={completionUnsupported}
+      label={completionLabel!}
+      onToggle={(done) => onToggleCompletion!(entry.id, done)}
+    />
+  ) : null;
+  // 完了カードは --completed（CSS が ☑ を常時可視にする）、淡色オプション on なら --dimmed（弱色トークン）。
+  const completionClass =
+    (completed && showCompletion ? " eisenhower-note-card--completed" : "") +
+    (completed && showCompletion && dimCompleted ? " eisenhower-note-card--dimmed" : "");
   // 滞留バッジ（#106）: 滞留カードにのみ時計＋経過日数を控えめ（--text-muted）に付ける。
   // 時計は装飾（aria-hidden）で、バッジ全体に aria-label を付けて経過日数を SR に読み上げる。
   const stagnantDays = stagnantDaysOf(entry);
@@ -132,7 +233,8 @@ export function NoteCard({
   });
   const className =
     "eisenhower-note-card" +
-    (isDragging ? " eisenhower-note-card--dragging" : "");
+    (isDragging ? " eisenhower-note-card--dragging" : "") +
+    completionClass;
   // dnd-kit の attributes（role:string）/listeners は React 型のため、
   // Preact の div 属性型へ寄せて展開する（role/tabindex/aria-* とキーボード操作を付与＝AC5）。
   const dndAttributes = attributes as unknown as DivProps;
@@ -153,12 +255,24 @@ export function NoteCard({
       onOpenCard?.(entry.id, openLeafIntent(event));
       return;
     }
+    // x キーで完了トグル（#105 F10）。Space=掴む/Enter=開く と非衝突（掴み中は発火しない）。
+    if (event.key === "x" && showCompletion && !isDragging) {
+      event.preventDefault();
+      toggleCompletion();
+      return;
+    }
     dndKeyDown?.(event);
   };
   // ロックカードのキーボード操作: 掴めない（Space の掴み予約が無い）ため、Enter に加え **Space でも開く**。
   // role=button の標準操作（Enter/Space で活性化）に揃え、preventDefault で Space によるペインのスクロールを
   // 防ぐ（Space が無反応かつスクロールする壊れた挙動の是正・レビュー指摘）。
   const handleLockedKeyDown = (event: DivKeyboardEvent) => {
+    // x キーで完了トグル（軸ロックでも完了プロパティが有効なら切り替えられる・#105 F10）。
+    if (event.key === "x" && showCompletion) {
+      event.preventDefault();
+      toggleCompletion();
+      return;
+    }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onOpenCard?.(entry.id, openLeafIntent(event));
@@ -192,6 +306,7 @@ export function NoteCard({
               {entry.title}
             </span>
             {stagnationBadge}
+            {completionButton}
           </div>
           <NoteBadges badges={entry.badges} />
         </div>
@@ -217,6 +332,7 @@ export function NoteCard({
         <div class="eisenhower-note-card__title-row">
           <span class="eisenhower-note-card__title">{entry.title}</span>
           {stagnationBadge}
+          {completionButton}
         </div>
         <NoteBadges badges={entry.badges} />
       </div>

@@ -41,6 +41,16 @@ export interface MatrixEntry {
    * `{ label, text, emphasized? }` を載せ、`NoteCard` が控えめに描画する。表示 0 個（既定）では省略する。
    */
   badges?: Badge[];
+  /**
+   * 完了（`done: true`）カード（#105 F10・`true` のときのみ設定）。淡色表示＋☑ 状態に使う。
+   * 完了プロパティ有効時のみ `toViewModel` が算出する（`locked?` と同じ optional 流儀）。
+   */
+  completed?: boolean;
+  /**
+   * 完了プロパティが非 boolean 値（日付型等）を持ち、トグルが破壊的になるため無効化するカード
+   *（#105 F10・AC2・`true` のときのみ設定）。UI はチェックボタンを disabled にして元値を守る。
+   */
+  completionUnsupported?: boolean;
 }
 
 /** ビューの描画状態。 */
@@ -104,6 +114,13 @@ export interface MatrixViewModel {
    *（後方互換・loading シェル）。アダプタは ready/empty で常に載せる。
    */
   diagnostics?: MatrixDiagnostics;
+  /**
+   * カード上の完了トグル（#105 F10）が有効か（完了プロパティが書き戻し可能 `note.*` に解決＝
+   * チェックボタンを描画する）。省略/false のとき UI はチェックボタンを出さない（opt-in）。
+   */
+  completionEnabled?: boolean;
+  /** 完了ノートをカードで淡色表示するか（設定 `dimCompleted` の反映・#105 F10）。 */
+  dimCompleted?: boolean;
 }
 
 /** ドラッグ書き戻しで UI からアダプタへ渡す目的両軸値（両軸とも明示 boolean）。 */
@@ -156,6 +173,13 @@ export interface MatrixCallbacks {
    * 渡しても unbound-method を誘発しないため。）
    */
   onUndoMove?: (expectedEntryId?: string) => void;
+  /**
+   * カードの完了状態をトグルする（#105 F10）。UI は目的値 `done`（`true`＝完了 / `false`＝未完了へ
+   * 戻す・双方向・`delete` しない）を渡すだけで、`TFile` 解決・`processFrontMatter` での単一キー
+   * 書き込み・undo 記録はアダプタ（`EisenhowerBasesView`）が担う（`onMoveCard` と同じ疎結合＝AC5）。
+   * 書込失敗時は reject し、UI 側は楽観的なトグル表示をロールバックする。
+   */
+  onToggleCompletion?: (entryId: string, done: boolean) => Promise<void>;
   /**
    * ビュー内の楽観オーバーレイ（pending）を `entryId` 単位で落とす関数をアダプタへ登録する（レビュー指摘 #6）。
    *

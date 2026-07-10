@@ -14,6 +14,7 @@
 import type { BasesPropertyOption } from "obsidian";
 import type { Messages } from "../i18n";
 import {
+  COMPLETION_OPTION_KEY,
   IMPORTANT_OPTION_KEY,
   URGENT_OPTION_KEY,
   isWritableAxisProperty,
@@ -70,4 +71,23 @@ export function buildBadgeViewOptions(
     displayName: messages.badgeOption(index + 1),
     filter: () => true,
   }));
+}
+
+/**
+ * `registerBasesView` の `options` が返す**完了プロパティセレクタ**（#105 F10）。
+ *
+ * カード上の完了トグルの書き戻し先を選ぶ property セレクタを 1 つ宣言する（`key`＝
+ * {@link COMPLETION_OPTION_KEY}＝{@link resolveCompletionId} が読むキーと一致）。完了は frontmatter へ
+ * `true/false` を**書き戻す**ため、軸セレクタと同じく `filter` は書き戻し可能な `note.*` に限定する
+ *（読み取り専用のバッジセレクタと異なり `formula.*`／`file.*` は選べない）。`displayName` は解決済み
+ * 言語メッセージ（`messages.completionOption`）から出す（軸/バッジと同じく Configure view の i18n を及ぼす）。
+ */
+export function buildCompletionViewOption(messages: Messages): BasesPropertyOption {
+  return {
+    key: COMPLETION_OPTION_KEY,
+    type: "property",
+    displayName: messages.completionOption,
+    placeholder: "note.done",
+    filter: isWritableAxisProperty,
+  };
 }

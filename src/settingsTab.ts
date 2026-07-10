@@ -132,6 +132,29 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+    // カード上の完了トグル（#105 F10）: 完了プロパティ名（boolean note.*・空で無効＝opt-in）。
+    // 完了ノートの表示/非表示は Base の done!=true フィルタに委譲する（README 参照）。ビュー options が主。
+    new Setting(containerEl)
+      .setName(messages.settings.completionName)
+      .setDesc(messages.settings.completionDesc)
+      .addText((text) =>
+        text
+          .setValue(settings.completionProperty)
+          .onChange(async (value) => {
+            settings.completionProperty = value.trim();
+            await this.plugin.saveSettings();
+          }),
+      );
+    // 完了ノート淡色表示トグル（#105 F10・既定オフ）: done!=true フィルタを張らない利用者向けの目印。
+    new Setting(containerEl)
+      .setName(messages.settings.dimCompletedName)
+      .setDesc(messages.settings.dimCompletedDesc)
+      .addToggle((toggle) =>
+        toggle.setValue(settings.dimCompleted).onChange(async (value) => {
+          settings.dimCompleted = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     // ▸ 象限ラベル・色
     new Setting(containerEl).setName(messages.settings.quadrantHeading).setHeading();

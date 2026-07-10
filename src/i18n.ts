@@ -111,6 +111,18 @@ export interface Messages {
   axisOption: { urgency: string; important: string };
   /** Bases Configure view のカードバッジセレクタ displayName（#104 F8・番号付き `badgeProperty1..N`）。 */
   badgeOption(index: number): string;
+  /** カード上の完了チェックボタンの aria-label（未完了→完了・#105 F10）。 */
+  completionToggle: string;
+  /** カード上の完了チェックボタンの aria-label（完了→未完了・双方向トグル・#105 F10）。 */
+  completionToggleDone: string;
+  /** 完了トグル成功のライブ通知（#105 F10）。 */
+  completionSucceeded(title: string): string;
+  /** 完了トグル失敗のライブ通知（#105 F10）。 */
+  completionFailed(title: string): string;
+  /** 非 boolean な完了値のため変更できない Notice（元値を破壊しない・#105 F10・AC2）。 */
+  completionUnsupported: string;
+  /** Bases Configure view の完了プロパティセレクタ displayName（#105 F10）。 */
+  completionOption: string;
 }
 
 /** 設定タブの i18n 文言（見出し・設定名・説明・ツールチップ）。 */
@@ -143,6 +155,14 @@ export interface SettingsMessages {
   emphasizePastDatesName: string;
   /** 期日強調トグルの説明（#104 F8）。 */
   emphasizePastDatesDesc: string;
+  /** 完了プロパティ設定の名前（#105 F10）。 */
+  completionName: string;
+  /** 完了プロパティ設定の説明（boolean note.* 限定・Bases 委譲を明示・#105 F10）。 */
+  completionDesc: string;
+  /** 完了ノート淡色表示トグルの名前（#105 F10）。 */
+  dimCompletedName: string;
+  /** 完了ノート淡色表示トグルの説明（#105 F10）。 */
+  dimCompletedDesc: string;
 }
 
 const JA: Messages = {
@@ -227,9 +247,22 @@ const JA: Messages = {
     emphasizePastDatesName: "期日を強調",
     emphasizePastDatesDesc:
       "厳格な ISO 日付（YYYY-MM-DD）が今日以前のバッジをアクセント色で強調します。",
+    completionName: "完了プロパティ",
+    completionDesc:
+      "カードのチェックで完了（true）を書き込む boolean プロパティ名（空で無効）。完了ノートを消す/残すは Base 側に「done != true」フィルタを張って委譲します（README 参照）。軸と同じプロパティは指定できません。",
+    dimCompletedName: "完了ノートを淡色表示",
+    dimCompletedDesc:
+      "完了（true）のカードを淡色で表示します（「done != true」フィルタを張らない場合の目印）。",
   },
   axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
   badgeOption: (index) => `カード表示プロパティ ${index}`,
+  completionToggle: "完了にする",
+  completionToggleDone: "未完了に戻す",
+  completionSucceeded: (title) => `「${title}」の完了状態を更新しました。`,
+  completionFailed: (title) => `「${title}」の完了状態を変更できませんでした。`,
+  completionUnsupported:
+    "完了プロパティが boolean 型ではないため変更できません（日付などの既存の値を壊さないよう保護しました）。",
+  completionOption: "完了プロパティ",
 };
 
 const EN: Messages = {
@@ -315,9 +348,22 @@ const EN: Messages = {
     emphasizePastDatesName: "Emphasize due dates",
     emphasizePastDatesDesc:
       "Accent badges whose strict ISO date (YYYY-MM-DD) is today or earlier.",
+    completionName: "Completion property",
+    completionDesc:
+      "Boolean property written as done (true) when you check a card (empty to disable). To hide or keep completed notes, add a \"done != true\" filter to your Base (see the README). Can't be the same as an axis property.",
+    dimCompletedName: "Dim completed notes",
+    dimCompletedDesc:
+      "Show completed (true) cards dimmed — a cue when you don't add a \"done != true\" filter.",
   },
   axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
   badgeOption: (index) => `Card property ${index}`,
+  completionToggle: "Mark done",
+  completionToggleDone: "Mark not done",
+  completionSucceeded: (title) => `Updated completion for "${title}".`,
+  completionFailed: (title) => `Couldn't change completion for "${title}".`,
+  completionUnsupported:
+    "The completion property isn't a boolean, so it can't be changed (its existing value, e.g. a date, was left intact).",
+  completionOption: "Completion property",
 };
 
 /** 言語別メッセージ束を返す。 */

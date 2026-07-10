@@ -281,3 +281,181 @@ describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F
     expect(container.querySelector(".eisenhower-note-card__badges")).toBeNull();
   });
 });
+
+describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）", () => {
+  /** 完了ラベル（i18n の状態別 aria-label 相当）。 */
+  const completionLabel = (completed: boolean) => (completed ? "未完了に戻す" : "完了にする");
+
+  function completionEntry(over: Partial<MatrixEntry> = {}): MatrixEntry {
+    return { id: "a.md", title: "タスクA", urgent: true, important: true, ...over };
+  }
+
+  it("NoteCard_完了プロパティ有効時_チェックボタンを描画する（未完了は『完了にする』ラベル）", () => {
+    // given / when
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={vi.fn()}
+      />,
+    );
+    // then: aria-label 付きのチェックボタンが出る（状態別文言）
+    expect(screen.getByRole("button", { name: "完了にする" })).toBeTruthy();
+  });
+
+  it("NoteCard_完了プロパティ無効時_チェックボタンを描画しない（opt-in）", () => {
+    // given / when: completionEnabled を渡さない
+    render(<NoteCard entry={completionEntry()} onToggleCompletion={vi.fn()} />);
+    // then
+    expect(screen.queryByRole("button", { name: "完了にする" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "未完了に戻す" })).toBeNull();
+  });
+
+  it("NoteCard_チェックボタンのクリック_onToggleCompletion(id, true) を呼ぶ（未完了→完了・AC1）", () => {
+    // given
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+      />,
+    );
+    // when
+    fireEvent.click(screen.getByRole("button", { name: "完了にする" }));
+    // then: 目的値 true（done:true 書き込み）を渡す
+    expect(onToggleCompletion).toHaveBeenCalledWith("a.md", true);
+  });
+
+  it("NoteCard_チェックボタンのクリックは開く導線に伝播しない（stopPropagation・AC5）", () => {
+    // given: 開く導線とトグルを両方渡す
+    const onOpenCard = vi.fn();
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+        onOpenCard={onOpenCard}
+      />,
+    );
+    // when: チェックボタンをクリック（カード全体の onClick=開く と衝突しうる）
+    fireEvent.click(screen.getByRole("button", { name: "完了にする" }));
+    // then: トグルは呼ばれ、開く（onOpenCard）は呼ばれない（click-to-open と衝突しない）
+    expect(onToggleCompletion).toHaveBeenCalledWith("a.md", true);
+    expect(onOpenCard).not.toHaveBeenCalled();
+  });
+
+  it("NoteCard_完了カードのチェックボタンは『未完了に戻す』で onToggleCompletion(id, false)（双方向・AC4）", () => {
+    // given: 既に完了（done:true）のカード
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry({ completed: true })}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+      />,
+    );
+    // when
+    fireEvent.click(screen.getByRole("button", { name: "未完了に戻す" }));
+    // then: 目的値 false（done:false を明示書き込み・delete しない）
+    expect(onToggleCompletion).toHaveBeenCalledWith("a.md", false);
+  });
+
+  it("NoteCard_完了カードは淡色クラス（--completed）を持つ（AC4 淡色表示）", () => {
+    // given / when
+    const { container } = render(
+      <NoteCard
+        entry={completionEntry({ completed: true })}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={vi.fn()}
+      />,
+    );
+    // then: 淡色マークのクラス（styles.css が弱色トークンを当てる。opacity ではない）
+    expect(container.querySelector(".eisenhower-note-card--completed")).toBeTruthy();
+  });
+
+  it("NoteCard_未完了カードは淡色クラスを持たない", () => {
+    const { container } = render(
+      <NoteCard
+        entry={completionEntry({ completed: false })}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={vi.fn()}
+      />,
+    );
+    expect(container.querySelector(".eisenhower-note-card--completed")).toBeNull();
+  });
+
+  it("NoteCard_非 boolean 完了値のカード_チェックボタンは無効（disabled）でトグルしない（AC2）", () => {
+    // given: completionUnsupported（日付型 done 等）
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry({ completionUnsupported: true })}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+      />,
+    );
+    // when
+    const button = screen.getByRole("button", { name: "完了にする" }) as HTMLButtonElement;
+    fireEvent.click(button);
+    // then: disabled で押しても書き込み経路を塞ぐ（元値を破壊しない）
+    expect(button.disabled).toBe(true);
+    expect(onToggleCompletion).not.toHaveBeenCalled();
+  });
+
+  it("NoteCard_x キー_フォーカス中のカードで完了をトグルする（Space=掴む/Enter=開く と非衝突・AC1）", () => {
+    // given
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+      />,
+    );
+    // when: カード（title のアクセシブル名）に x キー
+    fireEvent.keyDown(screen.getByRole("button", { name: "タスクA" }), { key: "x" });
+    // then: 完了をトグル（未完了→完了＝true）
+    expect(onToggleCompletion).toHaveBeenCalledWith("a.md", true);
+  });
+
+  it("NoteCard_x キーは Enter（開く）・Space（掴む）を発火しない（キー衝突なし・AC1）", () => {
+    // given
+    const onOpenCard = vi.fn();
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+        onOpenCard={onOpenCard}
+      />,
+    );
+    const card = screen.getByRole("button", { name: "タスクA" });
+    // when: x はトグルのみ・Enter は開くのみ
+    fireEvent.keyDown(card, { key: "x" });
+    fireEvent.keyDown(card, { key: "Enter" });
+    // then: x で開かず、Enter でトグルしない（責務が交わらない）
+    expect(onToggleCompletion).toHaveBeenCalledTimes(1);
+    expect(onOpenCard).toHaveBeenCalledTimes(1);
+  });
+
+  it("NoteCard_完了プロパティ無効時_x キーはトグルしない（機能オフ）", () => {
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard entry={completionEntry()} onToggleCompletion={onToggleCompletion} />,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "タスクA" }), { key: "x" });
+    expect(onToggleCompletion).not.toHaveBeenCalled();
+  });
+});

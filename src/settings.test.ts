@@ -151,3 +151,32 @@ describe("mergeSettings — カード追加プロパティ表示の設定（#104
     expect(DEFAULT_SETTINGS.cardBadgeProperties).toEqual([]);
   });
 });
+
+describe("mergeSettings — カード上の完了トグルの設定（#105 F10）", () => {
+  it("DEFAULT_SETTINGS — 既定は完了プロパティ空（機能オフ＝opt-in）・淡色表示オフ", () => {
+    expect(DEFAULT_SETTINGS.completionProperty).toBe("");
+    expect(DEFAULT_SETTINGS.dimCompleted).toBe(false);
+  });
+
+  it("mergeSettings — 空オブジェクト・レガシー data.json でも完了設定を既定で埋める", () => {
+    const merged = mergeSettings({});
+    expect(merged.completionProperty).toBe("");
+    expect(merged.dimCompleted).toBe(false);
+    // F9 時代の data.json（完了フィールドを持たない）でも補完される
+    expect(mergeSettings({ stagnationThresholdDays: 30 }).completionProperty).toBe("");
+  });
+
+  it("mergeSettings — completionProperty を保存値から復元（プロパティ名文字列）", () => {
+    expect(mergeSettings({ completionProperty: "done" }).completionProperty).toBe("done");
+  });
+
+  it("mergeSettings — completionProperty の非文字列は既定（空文字＝オフ）へフォールバック", () => {
+    expect(mergeSettings({ completionProperty: 42 }).completionProperty).toBe("");
+    expect(mergeSettings({ completionProperty: null }).completionProperty).toBe("");
+  });
+
+  it("mergeSettings — dimCompleted を保存値から復元・不正値は既定 false", () => {
+    expect(mergeSettings({ dimCompleted: true }).dimCompleted).toBe(true);
+    expect(mergeSettings({ dimCompleted: "yes" }).dimCompleted).toBe(false);
+  });
+});

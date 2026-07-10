@@ -471,9 +471,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const dimCompleted = viewModel.dimCompleted ?? false;
   const completionLabel = (isCompleted: boolean) =>
     isCompleted ? messages.completionToggleDone : messages.completionToggle;
-  const handleToggleCompletion = callbacks.onToggleCompletion
+  // クロージャ内で narrow するためコールバックを const 捕捉する。完了トグルは楽観オーバーレイを
+  // 持たない（カード状態は onDataUpdated 再描画で最新化）ため、書込失敗（アダプタが Notice 済み）の
+  // reject は握りつぶして未処理 rejection を防ぐ（ロールバック対象が無い・レビュー指摘）。
+  const toggleCompletionCallback = callbacks.onToggleCompletion;
+  const handleToggleCompletion = toggleCompletionCallback
     ? (entryId: string, done: boolean) => {
-        void callbacks.onToggleCompletion?.(entryId, done);
+        void toggleCompletionCallback(entryId, done).catch(() => {});
       }
     : undefined;
   return (

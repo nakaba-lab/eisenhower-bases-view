@@ -195,14 +195,14 @@ interface UndoEntry  { key: string; previous: PreviousAxisValue; wrote: unknown 
 interface UndoRecord { entryId; title; entries: UndoEntry[]; … }
 ```
 
-- `capturePreviousAxes(fm, keys)` → 汎用 `capturePrevious(fm, keys: string[]): UndoEntry[]`（各キーを既存 `capturePreviousValue` で捕捉）。
+- `capturePreviousAxes(fm, keys)` → 汎用 `buildUndoEntries(fm, writes: AxisWrite[]): UndoEntry[]`（各 `{key, value}` について書き込み前の値を既存 `capturePreviousValue` で捕捉し、書き込む値 `value` を `wrote` に対にする）。
 - `applyUndo(fm, record)` → `record.entries.forEach(e => restoreKey(fm, e.key, e.previous))`（present は代入・absent は `delete`）。
 - `isUndoApplicable(fm, record)` → `record.entries.every(e => fm[e.key] === e.wrote)`（全キー一致で適用・別ノート誤爆防止は不変）。
 - 呼び出し側: `writeBackAxes` は **2 entries**（urgent/important）、`writeCompletion` は **1 entry**（completion key）で同じ記録を組む。`UndoManager`・`runUndo`・`clearIfEntry`・`expectedEntryId` ガード・vault の delete/rename 購読は**不変**（記録の中身だけ一般化）。`wrote` の型は `boolean`→`unknown` に緩め、将来の数値軸（#88）に備えて verbatim 照合にする。
 - **挙動を変えない内部リファクタ**（2 軸移動＝2 要素で従来と同一の復元）。既存 `undo.test.ts`／`undoWriteBack` の振る舞いを保ちつつ、新規に「単一キー完了トグルの undo」テストを足す。#93 多段 undo・#88 数値軸・#98 複数選択の共通基盤になる（今回は 1 手保持のまま）。
 - **却下**（設計オプション比較）: ① 基盤 Issue 先行切り出し＝#105 が直列依存でブロック・プロセス増／③ 完了トグル専用の別 undo＝2 機構が「直前 1 手」を奪い合い drift・#93/#88/#98 で結局一般化が要る。2 つ目の具体ユースケース（#105）を得た今が一般化の好機、かつ #105 を自己完結（`> 依存:` 追加なし）に保てる本案（②→採択の① 本 Issue 内一般化）を採る。
 
-**3 キー衝突ガード（`axesShareWritableKey` の 3 キー総当たり版・AC3）**: 完了プロパティが緊急/重要のどちらかと同一 `note.*` キーだと、完了書き込みが軸値を巻き添えに壊す/象限が飛ぶ。既存 2 軸の `axesShareWritableKey(ids)` を **N キーの衝突検出** `firstSharedWritableKey(keys: (string|null)[]): string | null`（書込可能キーの最初の重複を返す）へ一般化し、① 軸×軸（F7 診断バナー・既存経路）② 軸×完了（F10・完了を無効化＋Notice/診断）に使う。完了が軸と衝突する場合は `resolveCompletionKey` が `null` を返して**チェックボタンを出さない**（＋診断で理由提示）。
+**3 キー衝突ガード（AC3）**: 完了プロパティが緊急/重要のどちらかと同一 `note.*` キーだと、完了書き込みが軸値を巻き添えに壊す/象限が飛ぶ。これを防ぐため、既存 2 軸の `axesShareWritableKey(ids)` を **N キーの衝突検出** `firstSharedWritableKey(keys: (string|null)[]): string | null`（書込可能キーの最初の重複を返す）へ一般化した（`axesShareWritableKey` は本関数の 2 キー適用として再表現＝軸×軸 F7 診断バナーの既存経路）。**軸×完了の衝突は `resolveCompletionId` が直接 `===` 比較**（完了キー == 緊急キー or == 重要キー）で検出し `null` を返して**完了トグルを静かに無効化**する（チェックボタンを出さない）。**実行時の Notice/診断バナーは持たない**（全カードをロックする軸×軸の設定ミスと違い影響が opt-in 機能に限定されるため）＝設定ミスの気づきは設定タブの説明文（`completionDesc`＝軸と同一キー不可）で config 時に伝える（`ui.md` 同名節）。
 
 **非 boolean 完了値のガード（`isUnsupportedAxisValue` 流用・AC2）**: Obsidian は完了を日付型（`completed: 2026-07-06`）で持つ運用が多く、非 boolean への `true` 上書きはデータ破壊。完了キー軸の値を `readAxisValueSafely`＋`isUnsupportedAxisValue` で判定し、非 boolean（`getValue` の throw も安全側で）なら `MatrixEntry.completionUnsupported=true` を立てて UI がチェックボタンを**無効化**（押下＝書き込み経路自体を塞ぐ）。既存 `isUnsupportedOnWritableAxis`（軸ロック）と同型の per-card 判定を完了キーにも敷く。
 

@@ -379,7 +379,7 @@ stateDiagram-v2
   完了ノートを淡色表示       [ ──○ OFF ]     ← #105。Base に done!=true を張らない人向け
 ```
 
-**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle`／`completionToggleDone`＝「完了にする」/「未完了に戻す」）・押下結果アナウンス（`completionSucceeded(title)`／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・軸同一キー弾き（`completionSharesAxis`・診断バナー流用）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。
+**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle`／`completionToggleDone`＝「完了にする」/「未完了に戻す」）・押下結果アナウンス（`completionSucceeded(title)`／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。**軸同一キーの衝突（3 キーガード）は実行時 Notice/診断バナーを持たず、`resolveCompletionKey` が `null` を返して静かに完了トグルを無効化する**（＝チェックボタンを出さない）。設定ミスの気づきは**設定タブの説明文**（`completionDesc`＝「軸と同じプロパティは指定できません」/ "Can't be the same as an axis property"）で config 時に伝える（opt-in 機能の設定衝突は影響が限定的なため、全ロック時の F7 診断バナーのような実行時提示は持たない）。
 
 **ViewModel 追加（契約の正は `bases.md`）**: `MatrixEntry.completed?`（`done:true`＝淡色＋☑ 状態）・`MatrixEntry.completionUnsupported?`（非 boolean done＝ボタン無効）、`MatrixViewModel.completionEnabled?`（完了プロパティが有効に解決＝チェックボタンを描画）・`dimCompleted?`（淡色オプション）。`MatrixCallbacks.onToggleCompletion?(entryId, done)`。
 

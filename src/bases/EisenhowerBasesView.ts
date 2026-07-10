@@ -248,9 +248,10 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
         const existing = frontmatter[completionKey];
-        // 非 boolean（存在し boolean でない＝日付型等）は上書きせず元値を守る（AC2・破壊防止）。
-        // absent（未定義）は新規に書けるため許可する（分類として done を立てられる）。
-        if (existing !== undefined && typeof existing !== "boolean") {
+        // 非 boolean の**実値**（日付型等）は上書きせず元値を守る（AC2・破壊防止）。absent（未定義）・
+        // 明示 null（空値）は新規に書けるため許可する＝読み取り側 `readCompletionState`（null/absent を
+        // 書ける と判定しボタンを有効化）と対称にする（`!= null` で undefined と null の両方を許可・レビュー指摘）。
+        if (existing != null && typeof existing !== "boolean") {
           unsupported = true;
           return;
         }

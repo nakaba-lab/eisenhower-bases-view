@@ -177,7 +177,9 @@ export interface MatrixCallbacks {
    * カードの完了状態をトグルする（#105 F10）。UI は目的値 `done`（`true`＝完了 / `false`＝未完了へ
    * 戻す・双方向・`delete` しない）を渡すだけで、`TFile` 解決・`processFrontMatter` での単一キー
    * 書き込み・undo 記録はアダプタ（`EisenhowerBasesView`）が担う（`onMoveCard` と同じ疎結合＝AC5）。
-   * 書込失敗時は reject し、UI 側は楽観的なトグル表示をロールバックする。
+   * **完了トグルは楽観オーバーレイを持たない**（`onMoveCard` と異なりカード状態は `onDataUpdated` 再描画で
+   * 最新化する）。書込失敗はアダプタが `Notice` で通知し reject するが、ロールバック対象が無いため
+   * 呼び出し側は reject を握りつぶしてよい。
    */
   onToggleCompletion?: (entryId: string, done: boolean) => Promise<void>;
   /**

@@ -2,8 +2,8 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34]
-updated: 2026-07-06
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 106]
+updated: 2026-07-10
 kind: api
 ---
 
@@ -149,6 +149,48 @@ sequenceDiagram
 - **undo は純ロジック（捕捉/復元/1手保持）とアダプタ隔離（実機接触）に分ける**: 「何を捕捉し、どう復元するか」（`capturePreviousAxes`/`applyUndo`/`UndoManager`）を `src/logic/undo.ts` の obsidian 非依存な純関数・純状態に切り出して単体テストで固定し、`processFrontMatter`/`getAbstractFileByPath`/`addCommand` の実機接触は `writeBackAxes`（捕捉）・`runUndo`（復元）・`main.ts`（コマンド登録）に隔離する。`writeBackAxes` の破壊性テスト不能面（`extends BasesView`）に純ロジックを逃がす既存流儀（`resolveWritableAxisKeys`・`cardInteraction`）を踏襲。捕捉値は boolean に限定せず verbatim で持ち、万一非 boolean 値が書き込まれても undo で可逆に戻せる（#34 のデータ破壊防止を undo でも二重化）。
 - **undo の記録は単一 `UndoManager` をプラグインが所有しビューへ注入**: コマンド（プラグイン全体）とビュー内トーストの双方が同一の「直前 1 手」を指すよう、記録の真実源を 1 箇所（プラグインの `UndoManager`）に置く。ビューは書き込み成功時に `record`、トリガーは `runUndo` で復元して `clear`。却下「ビューごとに記録を持つ」: コマンドがどのビューの記録を指すか曖昧になり、複数ビューで不整合。却下「トーストのローカル状態だけで復元」: コマンド経路と二重管理になる。複数ビューで別々に動かした場合は「最後の移動」を指す割り切り（最小実装・redo/多段なし）。**ただしトーストは特定ノートを名指しするため、`onUndoMove(expectedEntryId)` のガードで「記録が名指しの移動でなければ戻さず `Notice`」とし、無言で別ノートを undo する鋭いハザードだけは塞ぐ（code-reviewer 指摘）。コマンドは名指ししないため無条件に「直前 1 手」を戻す。**
 - **AC1/AC4 の UI はすべて Bases ネイティブ（独自 Preact コンポーネントを持たない）（#21 F4）**: 軸選択 UI は Bases の Configure view が options 宣言から自動描画し、options 変更→`onDataUpdated` 自動再発火で再配置される（手動再描画なし）。書込不可軸のガードは既存 Notice を流用。ゆえに F4 は `src/ui` に差分を持たず、ビジュアル/UX 検証はロジック（filter/ガード/再解決）の単体テストと結合（実機 Configure view 操作）で担保する。
+
+## 滞留インジケータ（mtime ヒューリスティック・#106・実装前ドラフト）
+
+> **⚠️ 実装前ドラフト（#106）**: 本節は着手前の設計合意（設計オプション比較・人間承認済み）を先行記述する。実装完了後の「ドキュメント更新」タスクで実装の現状に合わせて確定し、本マーカーを外す。
+
+Schedule / Delegate は「置いたきり忘れる」象限で、古いカードの沈殿がマトリクス運用崩壊の典型。全カードが同じ見た目だと「どれを見直すべきか」の手がかりが無いため、**最終更新から N 日を超えたカードに控えめな滞留マーク**（時計 + 経過日数バッジ）を付ける。読み取り専用ヒューリスティックで、**書き込みゼロ・ネットワークゼロ**（v1 の「boolean のみ書く」原則を守り、分類日時のタイムスタンプ書き戻しはしない）。
+
+### 責務分担（純ロジック / アダプタ / UI）
+
+- **純ロジック（`src/logic/stagnation.ts`・新規・単体 TDD 対象）**: 「今日 − mtime」から滞留の有無と経過日数を求める純関数。Obsidian 非依存で `now` を注入する。
+
+  ```ts
+  export interface StagnationResult {
+    /** しきい値超過で滞留とみなすか（thresholdDays<=0 のときは常に false）。 */
+    stagnant: boolean;
+    /** 経過日数（Math.floor((now - mtime) / 1 日)）。バッジ表示に使う。 */
+    days: number;
+  }
+  // 境界: stagnant = thresholdDays > 0 && days > thresholdDays（超過のみ滞留＝ちょうど N 日はセーフ）。
+  export function evaluateStagnation(
+    mtime: number, now: number, thresholdDays: number,
+  ): StagnationResult;
+  ```
+
+- **アダプタ（`toViewModel` / `readAxis` 近傍）**: `entry.file.stat.mtime`（`TFile.stat.mtime`＝スパイク #16 で確定した安定コア API）を読み、`resolveStagnationThresholdDays(config, settings)` で解決したしきい値と注入した `now` で `evaluateStagnation` を呼び、結果を `MatrixEntry.stagnant` / `MatrixEntry.stagnantDays`（**滞留時のみ設定**＝`locked?` と同じ optional 流儀）に載せる。`entry.file`/`stat` 欠落は境界防御（`isPlaceableNote` と同流儀）で滞留なし（false）へ倒す。
+- **UI（`NoteCard`）**: `stagnant` のカードにのみ時計 + 経過日数バッジを `--text-muted` で描画する（レイアウトは `ui.md`）。
+
+### しきい値の解決（ビュー options 主 + グローバル既定＝ハイブリッド・#106 で選択）
+
+軸プロパティ（F4/#21）と同じ**ハイブリッド**を採る: ビュー options を主とし、未設定ならプラグイン設定 `stagnationThresholdDays`（既定 14）にフォールバックする。Base ごとに性質が違う（例: Someday 用の Base はしきい値を長く）ため Base 単位で上書きできる。`resolveAxisPropertyIds` と対称に `safeGetAsPropertyId` 相当の境界防御でくるみ、Bases 接触点の throw でビュー全体の再描画を壊さない。`0` は機能オフ（滞留判定を常に false）。
+
+### 再計算タイミング（`toViewModel` 実行時のみ・#106 で選択）
+
+滞留判定は **`toViewModel` 実行時にのみ**再計算する（`now` はアダプタが実行時に注入）。ビューを開きっぱなしのまま日付境界を跨いでもバッジは次の `onDataUpdated`／再描画まで更新されない。**日単位粒度のため実害は小さい**と判断し、日次タイマー（`setInterval`＋`onunload` クリーンアップ）は持たない（複雑さとライフサイクル管理の増加を避ける）。この制約は既知の割り切りとして本節に明記する。
+
+### mtime 近似の明示（#106 論点①）
+
+mtime は「分類した日」ではなく「最後に**更新**された日」の近似で、Linter / Templater / 同期などの**自動処理でも滞留がリセット**される。設定タブの説明文と README で「編集」だけでなく「自動処理でも更新される」旨を明示する。ドラッグ再分類も mtime を更新するが「触った＝レビュー済み」として妥当。
+
+### テスト方針（TDD 対象）
+
+単体（`npm test`）で ① `evaluateStagnation` の 超過/境界ちょうど/しきい値0オフ/経過日数（`now` 注入のテーブル駆動）、② `toViewModel` が `stat.mtime` から `stagnant`/`stagnantDays` を載せること（file スタブに `stat.mtime` を足す）、③ しきい値解決のハイブリッド（options 主・設定既定フォールバック・0 オフ）を赤→緑で固める。実機の mtime 反映は `docs/test/` の手動チェックリストで確認する。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

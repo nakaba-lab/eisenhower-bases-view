@@ -58,6 +58,10 @@
   <body>
     <div id="root"></div>
     <script>
+      // Obsidian ランタイムが注入するグローバル `activeDocument`（#44 のポップアウト対応で
+      // MatrixView が DragOverlay の portal 先フォールバックに使う）を、実 Obsidian 非依存の
+      // 本ハーネスでは素の document で近似する（テーマ CSS 変数の近似と同じ趣旨のシム）。
+      window.activeDocument = window.activeDocument || document;
       // ?theme=dark でダークテーマを適用。
       const params = new URLSearchParams(location.search);
       document.body.classList.add(

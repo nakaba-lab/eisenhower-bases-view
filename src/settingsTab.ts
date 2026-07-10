@@ -2,7 +2,7 @@ import { PluginSettingTab, Setting, type App } from "obsidian";
 import type EisenhowerBasesViewPlugin from "./main";
 import { QUADRANT_KEYS } from "./logic/quadrant";
 import { messagesFor, resolveLanguage } from "./i18n";
-import type { LanguageSetting } from "./settings";
+import { DEFAULT_STAGNATION_THRESHOLD_DAYS, type LanguageSetting } from "./settings";
 
 /**
  * プラグイン設定タブ（#23 F6）。Obsidian 標準 `Setting` を使い `setHeading` で 4 区分
@@ -83,6 +83,23 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           settings.showUnclassified = value;
           await this.plugin.saveSettings();
         }),
+      );
+    // 滞留とみなす日数（0=オフ・#106）。ビュー options 未設定時のグローバル既定。
+    // 非負整数のみ受け付け、不正入力は既定へフォールバックする（mergeSettings の読込側ガードと対称）。
+    new Setting(containerEl)
+      .setName(messages.settings.stagnationName)
+      .setDesc(messages.settings.stagnationDesc)
+      .addText((text) =>
+        text
+          .setValue(String(settings.stagnationThresholdDays))
+          .onChange(async (value) => {
+            const parsed = Number.parseInt(value.trim(), 10);
+            settings.stagnationThresholdDays =
+              Number.isFinite(parsed) && parsed >= 0
+                ? parsed
+                : DEFAULT_STAGNATION_THRESHOLD_DAYS;
+            await this.plugin.saveSettings();
+          }),
       );
 
     // ▸ 象限ラベル・色

@@ -86,3 +86,30 @@ describe("mergeSettings — 既定補完（AC5 読み書き）", () => {
     expect(DEFAULT_SETTINGS.quadrantLabels.schedule).toBe("");
   });
 });
+
+describe("mergeSettings — 滞留しきい値 stagnationThresholdDays（#106）", () => {
+  it("mergeSettings — 既定は 14 日（未保存・レガシー data.json でも補完）", () => {
+    // given / when / then: 初回・F6 時代の data.json（滞留フィールドを持たない）でも既定 14
+    expect(DEFAULT_SETTINGS.stagnationThresholdDays).toBe(14);
+    expect(mergeSettings({}).stagnationThresholdDays).toBe(14);
+    expect(
+      mergeSettings({ defaultUrgencyProperty: "due" }).stagnationThresholdDays,
+    ).toBe(14);
+  });
+
+  it("mergeSettings — 保存された有効な日数を復元する（0=オフ含む）", () => {
+    expect(mergeSettings({ stagnationThresholdDays: 30 }).stagnationThresholdDays).toBe(30);
+    expect(mergeSettings({ stagnationThresholdDays: 0 }).stagnationThresholdDays).toBe(0);
+  });
+
+  it("mergeSettings — 不正な日数（負・非数値・NaN）は既定 14 へフォールバック", () => {
+    // given / when / then: 手編集された data.json 等の不正値を弾く
+    expect(mergeSettings({ stagnationThresholdDays: -3 }).stagnationThresholdDays).toBe(14);
+    expect(mergeSettings({ stagnationThresholdDays: "21" }).stagnationThresholdDays).toBe(14);
+    expect(mergeSettings({ stagnationThresholdDays: Number.NaN }).stagnationThresholdDays).toBe(14);
+  });
+
+  it("mergeSettings — 小数の日数は floor して整数日にする", () => {
+    expect(mergeSettings({ stagnationThresholdDays: 20.7 }).stagnationThresholdDays).toBe(20);
+  });
+});

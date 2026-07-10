@@ -425,3 +425,136 @@ describe("toViewModel — presentation（ラベル/色/言語文言の解決・#
     expect(viewModel.presentation?.quadrantLabels.delete.length).toBeGreaterThan(0);
   });
 });
+
+describe("toViewModel — 滞留インジケータ（mtime ヒューリスティック・#106）", () => {
+  const MS_PER_DAY = 86_400_000;
+  /** 固定の「今日」（決定性のためアダプタから注入する。実機は Date.now()）。 */
+  const NOW = 1_700_000_000_000;
+  const daysAgo = (days: number): number => NOW - days * MS_PER_DAY;
+  /** しきい値 14 の設定（既定と同値だが意図を明示）。 */
+  const settingsWithThreshold = (days: number) => ({
+    ...DEFAULT_SETTINGS,
+    stagnationThresholdDays: days,
+  });
+
+  /** `stat.mtime` を持つ md ノートの entry（滞留判定は mtime を読む）。 */
+  function mtimeEntry(
+    path: string,
+    mtime: number,
+    urgent: Value = TRUE,
+    important: Value = TRUE,
+  ): BasesEntry {
+    const values: Record<string, Value | null> = {
+      "note.urgent": urgent,
+      "note.important": important,
+    };
+    const dot = path.lastIndexOf(".");
+    const extension = dot >= 0 ? path.slice(dot + 1) : "";
+    return {
+      file: {
+        path,
+        basename: path.replace(/\.[^.]+$/, ""),
+        extension,
+        stat: { mtime, ctime: mtime, size: 0 },
+      },
+      getValue: (id: BasesPropertyId) => values[id] ?? null,
+    } as unknown as BasesEntry;
+  }
+
+  it("toViewModel — mtime が古いカードに stagnant=true・経過日数を載せる（AC1）", () => {
+    // given: 21 日前更新・しきい値 14
+    const entries = [mtimeEntry("old.md", daysAgo(21))];
+    // when
+    const { entries: mapped } = toViewModel(
+      entries,
+      null,
+      settingsWithThreshold(14),
+      messagesFor("en"),
+      NOW,
+    );
+    // then: 滞留フラグと経過日数が載る（象限配置と両立）
+    expect(mapped[0].stagnant).toBe(true);
+    expect(mapped[0].stagnantDays).toBe(21);
+  });
+
+  it("toViewModel — 滞留カードも通常どおり象限に配置される（バッジは配置に影響しない）", () => {
+    // given: 両軸 true で 21 日前
+    const entries = [mtimeEntry("old.md", daysAgo(21), TRUE, TRUE)];
+    // when
+    const { placements } = toViewModel(
+      entries,
+      null,
+      settingsWithThreshold(14),
+      messagesFor("en"),
+      NOW,
+    );
+    // then: Do 象限に載り、その card が滞留フラグを持つ
+    const card = placements.do.find((e) => e.id === "old.md");
+    expect(card?.stagnant).toBe(true);
+  });
+
+  it("toViewModel — しきい値内の新しいカードは stagnant を付けない（未設定）", () => {
+    // given: 3 日前更新・しきい値 14
+    const entries = [mtimeEntry("fresh.md", daysAgo(3))];
+    // when
+    const { entries: mapped } = toViewModel(
+      entries,
+      null,
+      settingsWithThreshold(14),
+      messagesFor("en"),
+      NOW,
+    );
+    // then: 滞留でないカードにはフラグを付けない（locked? と同じ optional 流儀）
+    expect(mapped[0].stagnant).toBeUndefined();
+    expect(mapped[0].stagnantDays).toBeUndefined();
+  });
+
+  it("toViewModel — しきい値 0（オフ）ならどれだけ古くても stagnant を付けない", () => {
+    // given: 365 日前・しきい値 0
+    const entries = [mtimeEntry("ancient.md", daysAgo(365))];
+    // when
+    const { entries: mapped } = toViewModel(
+      entries,
+      null,
+      settingsWithThreshold(0),
+      messagesFor("en"),
+      NOW,
+    );
+    // then
+    expect(mapped[0].stagnant).toBeUndefined();
+  });
+
+  it("toViewModel — ビュー options のしきい値が設定既定を上書きする（ハイブリッド・#106）", () => {
+    // given: 設定既定 14 だが options で 30 に上書き。21 日前のカードは 30 日しきい値では滞留しない。
+    const config = {
+      getAsPropertyId: () => null,
+      get: (key: string) => (key === "stagnationThresholdDays" ? 30 : undefined),
+    };
+    const entries = [mtimeEntry("old.md", daysAgo(21))];
+    // when
+    const { entries: mapped } = toViewModel(
+      entries,
+      config,
+      settingsWithThreshold(14),
+      messagesFor("en"),
+      NOW,
+    );
+    // then: options 30 が主＝21 日は超過せず滞留しない（設定既定 14 なら滞留だった）
+    expect(mapped[0].stagnant).toBeUndefined();
+  });
+
+  it("toViewModel — stat.mtime を持たない entry は滞留判定を安全側（false）に倒す（境界防御）", () => {
+    // given: stat を持たない旧来 file スタブ相当（Bases 境界の欠落）
+    const entry = mockEntry("no-stat.md", "no-stat", TRUE, TRUE);
+    // when
+    const { entries: mapped } = toViewModel(
+      [entry],
+      null,
+      settingsWithThreshold(14),
+      messagesFor("en"),
+      NOW,
+    );
+    // then: mtime が読めないカードは滞留させない（throw もしない）
+    expect(mapped[0].stagnant).toBeUndefined();
+  });
+});

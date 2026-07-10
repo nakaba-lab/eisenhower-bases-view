@@ -159,19 +159,51 @@
   min-width: 0;
 }
 
-/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。 */
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。
+ * タイトルと滞留バッジ（#106）を横並びにする flex 行。タイトルは truncate し、バッジは右端に固定する。 */
 .eisenhower-note-card {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1, 4px);
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
   border-radius: var(--radius-s, 4px);
   background-color: var(--background-primary);
   color: var(--text-normal);
   font-size: var(--font-ui-small, 0.8em);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   /* ドラッグ可能であることを示す（#20）。開く導線（#22）は role=button で伝わる。 */
   cursor: grab;
   touch-action: none;
+}
+
+/* カードのタイトル。バッジに場所を譲りつつ長いタイトルは省略記号で truncate する（#106）。 */
+.eisenhower-note-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 滞留バッジ（最終更新から N 日超過・#106）。時計＋経過日数を --text-muted で控えめに、
+ * タイトル行の右端へ固定する（一覧の視線移動を最小化）。数字は等幅で桁揺れを抑える。 */
+.eisenhower-note-card__stagnation {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.75em);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 時計アイコン（装飾＝aria-hidden）。currentColor で --text-muted を継ぎ、文字と一体の控えめさにする。 */
+.eisenhower-note-card__stagnation-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
 }
 
 /* クリックで開けることを示すホバー（#22 F5）。ドラッグ affordance（grab）は保ちつつ、

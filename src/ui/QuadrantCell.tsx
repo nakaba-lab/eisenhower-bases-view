@@ -45,6 +45,10 @@ export interface QuadrantCellProps {
   itemCountLabel?: (count: number) => string;
   /** ロックカード（`entry.locked`）のアクセシブル名を組む（i18n `messages.cardLockedLabel`）。各 NoteCard へ委譲。 */
   lockedLabel?: (title: string) => string;
+  /** 滞留バッジ本文を経過日数から組む（i18n `messages.stagnantBadge`・#106）。各 NoteCard へ委譲。 */
+  stagnantBadge?: (days: number) => string;
+  /** 滞留バッジの aria-label を経過日数から組む（i18n `messages.stagnantLabel`・#106）。各 NoteCard へ委譲。 */
+  stagnantLabel?: (days: number) => string;
 }
 
 const DEFAULT_EMPTY_TEXT = "なし";
@@ -64,6 +68,8 @@ export function QuadrantCell({
   regionLabel,
   itemCountLabel = DEFAULT_ITEM_COUNT,
   lockedLabel,
+  stagnantBadge,
+  stagnantLabel,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
   const isDropDisabled = variant === "unclassified";
@@ -109,6 +115,8 @@ export function QuadrantCell({
               onOpenCard={onOpenCard}
               onHoverCard={onHoverCard}
               lockedLabel={lockedLabel}
+              stagnantBadge={stagnantBadge}
+              stagnantLabel={stagnantLabel}
             />
           ))}
         </ul>

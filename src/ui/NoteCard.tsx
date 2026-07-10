@@ -33,9 +33,68 @@ export interface NoteCardProps {
    *（i18n の `messages.cardLockedLabel`）。省略時は `entry.title` のみ。
    */
   lockedLabel?: (title: string) => string;
+  /**
+   * 滞留バッジ本文を経過日数から組む（i18n `messages.stagnantBadge`・例 "21d"/"21日"・#106）。
+   * 省略時は `${days}d` にフォールバック。
+   */
+  stagnantBadge?: (days: number) => string;
+  /**
+   * 滞留バッジの aria-label を経過日数から組む（i18n `messages.stagnantLabel`・SR 読み上げ・#106）。
+   * 省略時はバッジ本文にフォールバックする（SR で経過日数だけは伝わる）。
+   */
+  stagnantLabel?: (days: number) => string;
 }
 
-export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCardProps) {
+/** 滞留バッジの経過日数（present なら number、それ以外は null）。`stagnant` かつ日数が数値のときだけ描画する。 */
+function stagnantDaysOf(entry: MatrixEntry): number | null {
+  return entry.stagnant === true && typeof entry.stagnantDays === "number"
+    ? entry.stagnantDays
+    : null;
+}
+
+/** 滞留バッジ本文の既定フォールバック（i18n `stagnantBadge` 未配線時・例 "21d"・#106）。 */
+const DEFAULT_STAGNANT_BADGE = (days: number): string => `${days}d`;
+
+export function NoteCard({
+  entry,
+  onOpenCard,
+  onHoverCard,
+  lockedLabel,
+  stagnantBadge,
+  stagnantLabel,
+}: NoteCardProps) {
+  // 滞留バッジ（#106）: 滞留カードにのみ時計＋経過日数を控えめ（--text-muted）に付ける。
+  // 時計は装飾（aria-hidden）で、バッジ全体に aria-label を付けて経過日数を SR に読み上げる。
+  const stagnantDays = stagnantDaysOf(entry);
+  // バッジ本文は i18n（stagnantBadge）→ 既定 "Nd"。aria-label は詳細文言（stagnantLabel）を優先し、
+  // 無ければバッジ本文へフォールバックする（SR には少なくとも経過日数が伝わる）。
+  const badgeText = stagnantBadge ?? DEFAULT_STAGNANT_BADGE;
+  const stagnationBadge =
+    stagnantDays !== null ? (
+      <span
+        class="eisenhower-note-card__stagnation"
+        role="img"
+        aria-label={(stagnantLabel ?? badgeText)(stagnantDays)}
+      >
+        <svg
+          class="eisenhower-note-card__stagnation-icon"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+          <path
+            d="M8 4.5 V8 L10.5 9.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        {badgeText(stagnantDays)}
+      </span>
+    ) : null;
   // 非 boolean 軸値のカードはドラッグ不可（ドロップの両軸 true/false 上書きで元値破壊を防ぐ・#34 補完）。
   const locked = entry.locked ?? false;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -99,7 +158,8 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
           <span class="eisenhower-note-card__lock" aria-hidden="true">
             🔒
           </span>
-          {entry.title}
+          <span class="eisenhower-note-card__title">{entry.title}</span>
+          {stagnationBadge}
         </div>
       </li>
     );
@@ -120,7 +180,8 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
         onKeyDown={handleKeyDown}
         onMouseEnter={handleMouseEnter}
       >
-        {entry.title}
+        <span class="eisenhower-note-card__title">{entry.title}</span>
+        {stagnationBadge}
       </div>
     </li>
   );

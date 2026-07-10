@@ -202,3 +202,31 @@ describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i
     );
   });
 });
+
+describe("messagesFor — 滞留バッジの i18n（#106 AC5）", () => {
+  it("messagesFor — stagnantBadge が経過日数を言語別に差し込む（英 Nd／日 N日）", () => {
+    // given / when / then: 英は "21d"、日は "21日"（両言語で欠けなく定義）
+    expect(messagesFor("en").stagnantBadge(21)).toBe("21d");
+    expect(messagesFor("ja").stagnantBadge(21)).toBe("21日");
+    expect(messagesFor("en").stagnantBadge(3)).toBe("3d");
+    expect(messagesFor("ja").stagnantBadge(3)).toBe("3日");
+  });
+
+  it("messagesFor — stagnantLabel（aria-label）が経過日数を差し込み言語別（SR 読み上げ）", () => {
+    // given / when
+    const en = messagesFor("en").stagnantLabel(21);
+    const ja = messagesFor("ja").stagnantLabel(21);
+    // then: 経過日数を含み、両言語で異なる（片方欠けを検出）
+    expect(en).toContain("21");
+    expect(ja).toContain("21");
+    expect(ja).not.toBe(en);
+  });
+
+  it("messagesFor — 両言語で滞留バッジ／ラベルが欠けなく定義されている（AC5 の欠けなし）", () => {
+    for (const lang of ["en", "ja"] as Language[]) {
+      const messages = messagesFor(lang);
+      expect(messages.stagnantBadge(14).length).toBeGreaterThan(0);
+      expect(messages.stagnantLabel(14).length).toBeGreaterThan(0);
+    }
+  });
+});

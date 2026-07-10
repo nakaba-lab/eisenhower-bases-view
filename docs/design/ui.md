@@ -72,11 +72,11 @@ flowchart LR
 
 > 軸の向き（緊急を左右どちらに置くか）・ラベル文言・色は設定可能（向き反転は v2）。未決事項は `docs/要件定義書.md`「未決事項」。
 
-### 滞留バッジ（mtime ヒューリスティック・#106・実装前ドラフト）
+### 滞留バッジ（mtime ヒューリスティック・#106）
 
-> **⚠️ 実装前ドラフト（#106）**: 本節は着手前の設計合意（UI 2 案比較・人間承認済み）を先行記述する。実装完了後の「ドキュメント更新」タスクで確定し本マーカーを外す。ロジック/しきい値解決/再計算タイミングは `bases.md` の「滞留インジケータ」節が正。
+> #106 で実装した現状を反映（`status: active`）。ロジック/しきい値解決/再計算タイミングは `bases.md` の「滞留インジケータ」節が正。
 
-滞留（最終更新から N 日超過）のカードに、**時計 + 経過日数バッジ**（例 `21d`／「21日」）を `--text-muted` で控えめに付ける。非滞留カードには何も出さない。`NoteCard` は ViewModel の `entry.stagnant`/`entry.stagnantDays` を描画するだけ（判定は `bases.md`）。
+滞留（最終更新から N 日超過）のカードに、**時計 + 経過日数バッジ**（例 `21d`／「21日」）を `--text-muted` で控えめに付ける。非滞留カードには何も出さない。`NoteCard` は ViewModel の `entry.stagnant`/`entry.stagnantDays` を描画するだけ（判定は `bases.md`）。`stagnantBadge`/`stagnantLabel`（i18n）は `MatrixView` → `QuadrantCell` → `NoteCard` へ関数で配線する（`lockedLabel`/`itemCountLabel` と同じ流儀）。
 
 **レイアウト: タイトル行の右端にインライン（案A・#106 で選択）**
 

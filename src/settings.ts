@@ -23,12 +23,20 @@ export interface EisenhowerSettings {
   quadrantLabels: Record<QuadrantKey, string>;
   /** 象限ごとのカスタムアクセント色（hex）。空文字＝テーマ既定にフォールバック（#23 F6）。 */
   quadrantColors: Record<QuadrantKey, string>;
+  /**
+   * 滞留とみなす日数のグローバル既定（#106）。最終更新から N 日を超えたカードに滞留マークを付ける。
+   * ビュー options 未設定時のフォールバック（軸プロパティと同じハイブリッド）。`0` は機能オフ。
+   */
+  stagnationThresholdDays: number;
 }
 
 /** 全象限を空文字で初期化した Record（ラベル/色の既定＝「未カスタム」を表す）。 */
 function emptyQuadrantRecord(): Record<QuadrantKey, string> {
   return mapQuadrantKeys(() => "");
 }
+
+/** 滞留とみなす日数の既定（14 日）。#106。 */
+export const DEFAULT_STAGNATION_THRESHOLD_DAYS = 14;
 
 export const DEFAULT_SETTINGS: EisenhowerSettings = {
   defaultUrgencyProperty: "urgent",
@@ -37,6 +45,7 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   language: "auto",
   quadrantLabels: emptyQuadrantRecord(),
   quadrantColors: emptyQuadrantRecord(),
+  stagnationThresholdDays: DEFAULT_STAGNATION_THRESHOLD_DAYS,
 };
 
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];
@@ -46,6 +55,18 @@ function isLanguageSetting(value: unknown): value is LanguageSetting {
     typeof value === "string" &&
     (LANGUAGE_SETTINGS as readonly string[]).includes(value)
   );
+}
+
+/**
+ * `loadData()` 由来の滞留しきい値日数を検証して整数へ正規化する（欠損・不正値は既定へ）。
+ * 有効値は「有限・0 以上の数値」で、小数は `floor` して整数日にする（`0` はオフの有効値）。
+ * 負・非数値・NaN は手編集された `data.json` 等の不正値として既定（14）へフォールバックする。
+ */
+function mergeStagnationThresholdDays(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
+    return Math.floor(raw);
+  }
+  return DEFAULT_STAGNATION_THRESHOLD_DAYS;
 }
 
 /** `loadData()` 由来の Record<QuadrantKey,string> を既定（空文字）で補完する（欠損キー対策）。 */
@@ -84,5 +105,6 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
       : DEFAULT_SETTINGS.language,
     quadrantLabels: mergeQuadrantRecord(data.quadrantLabels),
     quadrantColors: mergeQuadrantRecord(data.quadrantColors),
+    stagnationThresholdDays: mergeStagnationThresholdDays(data.stagnationThresholdDays),
   };
 }

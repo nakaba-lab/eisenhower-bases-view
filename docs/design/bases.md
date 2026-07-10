@@ -150,9 +150,9 @@ sequenceDiagram
 - **undo の記録は単一 `UndoManager` をプラグインが所有しビューへ注入**: コマンド（プラグイン全体）とビュー内トーストの双方が同一の「直前 1 手」を指すよう、記録の真実源を 1 箇所（プラグインの `UndoManager`）に置く。ビューは書き込み成功時に `record`、トリガーは `runUndo` で復元して `clear`。却下「ビューごとに記録を持つ」: コマンドがどのビューの記録を指すか曖昧になり、複数ビューで不整合。却下「トーストのローカル状態だけで復元」: コマンド経路と二重管理になる。複数ビューで別々に動かした場合は「最後の移動」を指す割り切り（最小実装・redo/多段なし）。**ただしトーストは特定ノートを名指しするため、`onUndoMove(expectedEntryId)` のガードで「記録が名指しの移動でなければ戻さず `Notice`」とし、無言で別ノートを undo する鋭いハザードだけは塞ぐ（code-reviewer 指摘）。コマンドは名指ししないため無条件に「直前 1 手」を戻す。**
 - **AC1/AC4 の UI はすべて Bases ネイティブ（独自 Preact コンポーネントを持たない）（#21 F4）**: 軸選択 UI は Bases の Configure view が options 宣言から自動描画し、options 変更→`onDataUpdated` 自動再発火で再配置される（手動再描画なし）。書込不可軸のガードは既存 Notice を流用。ゆえに F4 は `src/ui` に差分を持たず、ビジュアル/UX 検証はロジック（filter/ガード/再解決）の単体テストと結合（実機 Configure view 操作）で担保する。
 
-## 滞留インジケータ（mtime ヒューリスティック・#106・実装前ドラフト）
+## 滞留インジケータ（mtime ヒューリスティック・#106）
 
-> **⚠️ 実装前ドラフト（#106）**: 本節は着手前の設計合意（設計オプション比較・人間承認済み）を先行記述する。実装完了後の「ドキュメント更新」タスクで実装の現状に合わせて確定し、本マーカーを外す。
+> #106 で実装した現状を反映（`status: active`）。着手前の設計合意（設計オプション比較・人間承認）を実装の現状に合わせて確定した。
 
 Schedule / Delegate は「置いたきり忘れる」象限で、古いカードの沈殿がマトリクス運用崩壊の典型。全カードが同じ見た目だと「どれを見直すべきか」の手がかりが無いため、**最終更新から N 日を超えたカードに控えめな滞留マーク**（時計 + 経過日数バッジ）を付ける。読み取り専用ヒューリスティックで、**書き込みゼロ・ネットワークゼロ**（v1 の「boolean のみ書く」原則を守り、分類日時のタイムスタンプ書き戻しはしない）。
 
@@ -178,7 +178,7 @@ Schedule / Delegate は「置いたきり忘れる」象限で、古いカード
 
 ### しきい値の解決（ビュー options 主 + グローバル既定＝ハイブリッド・#106 で選択）
 
-軸プロパティ（F4/#21）と同じ**ハイブリッド**を採る: ビュー options を主とし、未設定ならプラグイン設定 `stagnationThresholdDays`（既定 14）にフォールバックする。Base ごとに性質が違う（例: Someday 用の Base はしきい値を長く）ため Base 単位で上書きできる。`resolveAxisPropertyIds` と対称に `safeGetAsPropertyId` 相当の境界防御でくるみ、Bases 接触点の throw でビュー全体の再描画を壊さない。`0` は機能オフ（滞留判定を常に false）。
+軸プロパティ（F4/#21）と同じ**ハイブリッド**を採る（`resolveStagnationThresholdDays`・`src/bases/stagnationThreshold.ts`）: ビュー options（`config.get(STAGNATION_OPTION_KEY)`＝数値の view option）を主とし、未設定・不正ならプラグイン設定 `stagnationThresholdDays`（既定 14）にフォールバックする。Base ごとに性質が違う（例: Someday 用の Base はしきい値を長く）ため Base 単位で上書きできる。`config.get` は軸解決の `getAsPropertyId` と並ぶ churn 対象の接触点のため、`safeGetOption`（try/catch）で throw を境界退避し、ビュー全体の再描画を壊さず設定既定へ倒す。options 値は「有限・0 以上・floor」に正規化し（`toThresholdDays`。負・非数値は null＝フォールバック要求）、`0` は機能オフ（滞留判定を常に false）。
 
 ### 再計算タイミング（`toViewModel` 実行時のみ・#106 で選択）
 

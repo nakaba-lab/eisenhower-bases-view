@@ -11,8 +11,14 @@
 import type { EisenhowerSettings } from "../settings";
 
 /**
- * Bases ビュー options のキー（滞留しきい値・日数）。設定 UI（Configure view の slider/number）が
- * このキーに書き込み、本層は `config.get(key)` で読む（軸の `getAsPropertyId` と対称の numeric 版）。
+ * Bases ビュー options のキー（滞留しきい値・日数）。本層は `config.get(key)` で `.base` の
+ * view config が持つ値を読み、未設定なら設定タブのグローバル既定へフォールバックする（軸の
+ * `getAsPropertyId` と対称の numeric 版）。
+ *
+ * ⚠️ v1 では Configure view の**専用 UI コントロール（数値/slider オプション）は未登録**
+ *（`buildAxisViewOptions` は軸 property セレクタのみ宣言）。Base 単位の上書きは `.base` の view config に
+ * 本キーを手で置いたときに効く。GUI コントロールの登録は Bases options round-trip の実機スパイク後に
+ * 別途行う（CLAUDE.md「着手前スパイク必須」の Bases UI 方針。しきい値の主動線は設定タブのグローバル値）。
  */
 export const STAGNATION_OPTION_KEY = "stagnationThresholdDays";
 

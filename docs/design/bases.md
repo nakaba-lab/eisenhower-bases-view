@@ -178,7 +178,9 @@ Schedule / Delegate は「置いたきり忘れる」象限で、古いカード
 
 ### しきい値の解決（ビュー options 主 + グローバル既定＝ハイブリッド・#106 で選択）
 
-軸プロパティ（F4/#21）と同じ**ハイブリッド**を採る（`resolveStagnationThresholdDays`・`src/bases/stagnationThreshold.ts`）: ビュー options（`config.get(STAGNATION_OPTION_KEY)`＝数値の view option）を主とし、未設定・不正ならプラグイン設定 `stagnationThresholdDays`（既定 14）にフォールバックする。Base ごとに性質が違う（例: Someday 用の Base はしきい値を長く）ため Base 単位で上書きできる。`config.get` は軸解決の `getAsPropertyId` と並ぶ churn 対象の接触点のため、`safeGetOption`（try/catch）で throw を境界退避し、ビュー全体の再描画を壊さず設定既定へ倒す。options 値は「有限・0 以上・floor」に正規化し（`toThresholdDays`。負・非数値は null＝フォールバック要求）、`0` は機能オフ（滞留判定を常に false）。
+軸プロパティ（F4/#21）と同じ**ハイブリッド**を採る（`resolveStagnationThresholdDays`・`src/bases/stagnationThreshold.ts`）: ビュー設定（`config.get(STAGNATION_OPTION_KEY)`）を主とし、未設定・不正ならプラグイン設定 `stagnationThresholdDays`（既定 14）にフォールバックする。Base ごとに性質が違う（例: Someday 用の Base はしきい値を長く）ため Base 単位で上書きできる設計。`config.get` は軸解決の `getAsPropertyId` と並ぶ churn 対象の接触点のため、`safeGetOption`（try/catch）で throw を境界退避し、ビュー全体の再描画を壊さず設定既定へ倒す。options 値は「有限・0 以上・floor」に正規化し（`toThresholdDays`。負・非数値は null＝フォールバック要求）、`0` は機能オフ（滞留判定を常に false）。
+
+> **v1 の実装状況（Configure view の UI コントロールは未提供）**: 解決ロジックはビュー設定値を主に読むが、**しきい値を Configure view から編集する専用 UI コントロール（数値/slider オプション）は `buildAxisViewOptions` に未登録**。したがって v1 の主動線は**設定タブのグローバル値**で、Base 単位の上書きは `.base` の view config に本キーを手で置いたときに効く。GUI コントロールの登録は Bases options round-trip の実機スパイク（CLAUDE.md「着手前スパイク必須」の Bases UI 方針）を経てから別 Issue で行う。`resolveStagnationThresholdDays` は当該オプション登録時に無改修で GUI 値を主に採れる前方互換にしてある。
 
 ### 再計算タイミング（`toViewModel` 実行時のみ・#106 で選択）
 

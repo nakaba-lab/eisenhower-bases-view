@@ -47,3 +47,6 @@ scripts/preview/preview.bundle.js
 .claude/settings.local.json
 # /remember・継続メモリのハンドオフ記録（チームで共有する場合はこの行を外す）
 .remember/
+
+# 一時的なスクリーンショット用ハーネス（#105 のビジュアル確認・コミット対象外）
+.screenshot-harness/

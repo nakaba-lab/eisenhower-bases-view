@@ -728,3 +728,89 @@ describe("toViewModel — 診断情報（設定ミス診断・軸可視化・#10
     expect(diagnostics?.axesShareWritableKey).toBe(false);
   });
 });
+
+describe("toViewModel — カード上の完了トグル（#105 F10）", () => {
+  /** 完了プロパティ note.done を持つ md ノート（軸は既定で Do＝true/true）。 */
+  function completionEntry(
+    path: string,
+    done: Value | null,
+    urgent: Value | null = new BooleanValue(true),
+    important: Value | null = new BooleanValue(true),
+  ): BasesEntry {
+    const values: Record<string, Value | null> = {
+      "note.urgent": urgent,
+      "note.important": important,
+      "note.done": done,
+    };
+    return {
+      file: fileStub(path),
+      getValue: (id: BasesPropertyId) => values[id] ?? null,
+    } as unknown as BasesEntry;
+  }
+
+  const withCompletion = (over: Partial<typeof DEFAULT_SETTINGS> = {}) => ({
+    ...DEFAULT_SETTINGS,
+    completionProperty: "done",
+    ...over,
+  });
+
+  it("toViewModel — 完了プロパティ未設定（既定）は completionEnabled を立てず、カードに完了状態を付けない（opt-in）", () => {
+    // given: 既定（completionProperty=""）
+    const entries = [completionEntry("done.md", new BooleanValue(true))];
+    // when
+    const viewModel = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: 機能オフ＝チェックボタンを出さない・completed も付かない
+    expect(viewModel.completionEnabled).toBeFalsy();
+    expect(viewModel.entries[0].completed).toBeUndefined();
+    expect(viewModel.entries[0].completionUnsupported).toBeUndefined();
+  });
+
+  it("toViewModel — 完了プロパティ有効時は completionEnabled=true と dimCompleted を ViewModel に載せる", () => {
+    // given
+    const entries = [completionEntry("a.md", new BooleanValue(false))];
+    // when
+    const viewModel = toViewModel(entries, null, withCompletion({ dimCompleted: true }));
+    // then
+    expect(viewModel.completionEnabled).toBe(true);
+    expect(viewModel.dimCompleted).toBe(true);
+  });
+
+  it("toViewModel — done:true のカードは completed=true（淡色＋☑ 状態・AC4）", () => {
+    const entries = [completionEntry("done.md", new BooleanValue(true))];
+    const viewModel = toViewModel(entries, null, withCompletion());
+    const card = viewModel.entries.find((e) => e.id === "done.md");
+    expect(card?.completed).toBe(true);
+  });
+
+  it("toViewModel — done:false / done 未定義のカードは completed を付けない（未完了）", () => {
+    const entries = [
+      completionEntry("f.md", new BooleanValue(false)),
+      completionEntry("absent.md", NullValue.value),
+    ];
+    const viewModel = toViewModel(entries, null, withCompletion());
+    expect(viewModel.entries.find((e) => e.id === "f.md")?.completed).toBeUndefined();
+    expect(viewModel.entries.find((e) => e.id === "absent.md")?.completed).toBeUndefined();
+  });
+
+  it("toViewModel — 非 boolean 完了値（日付=文字列/数値）は completionUnsupported=true（トグル無効・AC2）", () => {
+    const entries = [
+      completionEntry("date.md", new StringValue("2026-07-06")),
+      completionEntry("num.md", new NumberValue(1)),
+    ];
+    const viewModel = toViewModel(entries, null, withCompletion());
+    expect(viewModel.entries.find((e) => e.id === "date.md")?.completionUnsupported).toBe(true);
+    expect(viewModel.entries.find((e) => e.id === "num.md")?.completionUnsupported).toBe(true);
+    // 非 boolean は completed にしない（true 上書きで破壊しないよう無効化するだけ）
+    expect(viewModel.entries.find((e) => e.id === "date.md")?.completed).toBeUndefined();
+  });
+
+  it("toViewModel — 完了プロパティが軸と同一キーなら機能無効（3 キー衝突ガード・AC3）", () => {
+    // given: completionProperty が緊急軸（既定 note.urgent）と同一
+    const entries = [completionEntry("x.md", new BooleanValue(true))];
+    // when
+    const viewModel = toViewModel(entries, null, withCompletion({ completionProperty: "urgent" }));
+    // then: チェックボタンを出さない（掴めるのに壊す設定ミスを封鎖）
+    expect(viewModel.completionEnabled).toBeFalsy();
+    expect(viewModel.entries[0].completed).toBeUndefined();
+  });
+});

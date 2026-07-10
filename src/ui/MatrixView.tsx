@@ -464,6 +464,22 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const placements = applyPendingMoves(viewModel.placements, pending);
   // 未分類ゾーンの表示可否（設定 showUnclassified。省略時は表示＝後方互換）。
   const showUnclassified = viewModel.showUnclassified !== false;
+  // 完了トグル（#105 F10）: 有効フラグ・状態別 aria-label・トグルハンドラを組み、各セル→カードへ渡す。
+  // 完了書き込みは onDataUpdated 再クエリで反映する（Base の done!=true フィルタでカードが消える）。
+  // ドラッグのような楽観オーバーレイは持たない（Bases 委譲＝最小実装）。
+  const completionEnabled = viewModel.completionEnabled ?? false;
+  const dimCompleted = viewModel.dimCompleted ?? false;
+  const completionLabel = (isCompleted: boolean) =>
+    isCompleted ? messages.completionToggleDone : messages.completionToggle;
+  // クロージャ内で narrow するためコールバックを const 捕捉する。完了トグルは楽観オーバーレイを
+  // 持たない（カード状態は onDataUpdated 再描画で最新化）ため、書込失敗（アダプタが Notice 済み）の
+  // reject は握りつぶして未処理 rejection を防ぐ（ロールバック対象が無い・レビュー指摘）。
+  const toggleCompletionCallback = callbacks.onToggleCompletion;
+  const handleToggleCompletion = toggleCompletionCallback
+    ? (entryId: string, done: boolean) => {
+        void toggleCompletionCallback(entryId, done).catch(() => {});
+      }
+    : undefined;
   return (
     <DndContext
       sensors={sensors}
@@ -507,6 +523,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               emptyText={messages.emptyQuadrant}
               onOpenCard={callbacks.onOpenCard}
               onHoverCard={callbacks.onHoverCard}
+              completionEnabled={completionEnabled}
+              completionLabel={completionLabel}
+              onToggleCompletion={handleToggleCompletion}
+              dimCompleted={dimCompleted}
             />
           ))}
         </div>
@@ -541,6 +561,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             variant="unclassified"
             onOpenCard={callbacks.onOpenCard}
             onHoverCard={callbacks.onHoverCard}
+            completionEnabled={completionEnabled}
+            completionLabel={completionLabel}
+            onToggleCompletion={handleToggleCompletion}
+            dimCompleted={dimCompleted}
           />
         )}
         {/* 移動成功直後の「元に戻す」トースト（undo・最小実装）。onUndoMove 配線時のみ。

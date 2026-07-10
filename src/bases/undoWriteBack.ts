@@ -15,7 +15,7 @@ import type { Messages } from "../i18n";
  * `TFile` を解決して `processFrontMatter` で {@link applyUndo}（present は代入・absent は delete）を適用する。
  * 記録が無ければ `Notice`（`messages.noUndo`）。成功で記録を消し（`clear`）、`onDataUpdated` 自動再発火で
  * 再配置される（手動再描画は不要）。`extends BasesView`／`app` 接触面のため単体テスト対象外（純ロジックの
- * `applyUndo`／`capturePreviousAxes`／`UndoManager` を単体で固定し、この実機接触は手動/結合で担保する）。
+ * `applyUndo`／`buildUndoEntries`／`UndoManager` を単体で固定し、この実機接触は手動/結合で担保する）。
  *
  * `expectedEntryId` を渡すと、**現在の記録がその entry の移動である場合のみ**戻す（トーストが特定ノートを
  * 名指しするため、複数ビュー併用で記録が別の移動に置き換わっていた場合に別ノートを誤って戻さないガード）。

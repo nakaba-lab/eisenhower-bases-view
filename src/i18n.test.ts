@@ -191,6 +191,7 @@ describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i
     const noticeKeys = [
       "fileNotFoundForMove",
       "fileNotFoundForOpen",
+      "fileNotFoundForCompletion",
       "axisNotWritable",
       "writeBackFailed",
       "openFailed",
@@ -292,5 +293,56 @@ describe("messagesFor — 診断バナー・軸名行の i18n（#103 F7）", () 
     expect(en).toContain("urgent");
     expect(en).toContain("important");
     expect(ja).not.toBe(en);
+  });
+});
+
+describe("messagesFor — カード上の完了トグルの i18n（#105 F10・AC6 両言語欠けなし）", () => {
+  it("messagesFor — チェックボタンの状態別ラベル（完了にする/未完了に戻す）が両言語で定義され異なる", () => {
+    for (const lang of ["en", "ja"] as Language[]) {
+      const messages = messagesFor(lang);
+      expect(messages.completionToggle.length).toBeGreaterThan(0); // 未完了→完了にする
+      expect(messages.completionToggleDone.length).toBeGreaterThan(0); // 完了→未完了に戻す
+    }
+    // 状態別で文言が異なる（同一 aria-label で「トグルの向き」が伝わらないのを防ぐ）
+    expect(messagesFor("ja").completionToggle).not.toBe(messagesFor("ja").completionToggleDone);
+    expect(messagesFor("en").completionToggle).not.toBe(messagesFor("en").completionToggleDone);
+    // 翻訳されている（en/ja で異なる）
+    expect(messagesFor("ja").completionToggle).not.toBe(messagesFor("en").completionToggle);
+  });
+
+  it("messagesFor — 完了トグルの結果アナウンス（成功/失敗）がノート名を差し込み言語別", () => {
+    expect(messagesFor("ja").completionSucceeded("タスクA")).toContain("タスクA");
+    expect(messagesFor("en").completionSucceeded("TaskA")).toContain("TaskA");
+    expect(messagesFor("ja").completionFailed("タスクA")).toContain("タスクA");
+    expect(messagesFor("en").completionFailed("TaskA")).toContain("TaskA");
+    expect(messagesFor("ja").completionSucceeded("x")).not.toBe(
+      messagesFor("en").completionSucceeded("x"),
+    );
+  });
+
+  it("messagesFor — 非 boolean 完了値の弾き Notice が両言語で定義され異なる（AC2）", () => {
+    expect(messagesFor("ja").completionUnsupported.length).toBeGreaterThan(0);
+    expect(messagesFor("en").completionUnsupported.length).toBeGreaterThan(0);
+    expect(messagesFor("ja").completionUnsupported).not.toBe(messagesFor("en").completionUnsupported);
+  });
+
+  it("messagesFor — 設定タブの完了トグル文言（名前・説明・淡色トグル）が両言語で欠けなく定義される", () => {
+    const completionKeys = [
+      "completionName",
+      "completionDesc",
+      "dimCompletedName",
+      "dimCompletedDesc",
+    ] as const;
+    for (const key of completionKeys) {
+      expect(messagesFor("ja").settings[key].length).toBeGreaterThan(0);
+      expect(messagesFor("en").settings[key].length).toBeGreaterThan(0);
+      expect(messagesFor("ja").settings[key]).not.toBe(messagesFor("en").settings[key]);
+    }
+  });
+
+  it("messagesFor — Configure view の完了セレクタ displayName が言語で切り替わる", () => {
+    expect(messagesFor("ja").completionOption.length).toBeGreaterThan(0);
+    expect(messagesFor("en").completionOption.length).toBeGreaterThan(0);
+    expect(messagesFor("ja").completionOption).not.toBe(messagesFor("en").completionOption);
   });
 });

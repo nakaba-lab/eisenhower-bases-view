@@ -49,6 +49,14 @@ export interface QuadrantCellProps {
   stagnantBadge?: (days: number) => string;
   /** 滞留バッジの aria-label を経過日数から組む（i18n `messages.stagnantLabel`・#106）。各 NoteCard へ委譲。 */
   stagnantLabel?: (days: number) => string;
+  /** 完了トグル（#105 F10）が有効か。各 NoteCard へ委譲する。 */
+  completionEnabled?: boolean;
+  /** 完了チェックボタンの状態別 aria-label（i18n）。各 NoteCard へ委譲する。 */
+  completionLabel?: (completed: boolean) => string;
+  /** 完了状態をトグルする（#105 F10）。各 NoteCard へ委譲する。 */
+  onToggleCompletion?: (entryId: string, done: boolean) => void;
+  /** 完了ノートを淡色表示するか（設定 `dimCompleted`・#105 F10）。各 NoteCard へ委譲する。 */
+  dimCompleted?: boolean;
 }
 
 const DEFAULT_EMPTY_TEXT = "なし";
@@ -70,6 +78,10 @@ export function QuadrantCell({
   lockedLabel,
   stagnantBadge,
   stagnantLabel,
+  completionEnabled,
+  completionLabel,
+  onToggleCompletion,
+  dimCompleted,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
   const isDropDisabled = variant === "unclassified";
@@ -117,6 +129,10 @@ export function QuadrantCell({
               lockedLabel={lockedLabel}
               stagnantBadge={stagnantBadge}
               stagnantLabel={stagnantLabel}
+              completionEnabled={completionEnabled}
+              completionLabel={completionLabel}
+              onToggleCompletion={onToggleCompletion}
+              dimCompleted={dimCompleted}
             />
           ))}
         </ul>

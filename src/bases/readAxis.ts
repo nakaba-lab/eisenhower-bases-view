@@ -30,6 +30,8 @@ import type { AxisValues } from "../logic/quadrant";
  */
 export const URGENT_OPTION_KEY = "urgentProperty";
 export const IMPORTANT_OPTION_KEY = "importantProperty";
+/** 完了プロパティ（#105 F10）のビュー options キー。`config.getAsPropertyId(key)` で解決する。 */
+export const COMPLETION_OPTION_KEY = "completionProperty";
 
 /** 解決済みの両軸 propertyId。 */
 export interface AxisPropertyIds {
@@ -163,9 +165,89 @@ export function resolveWritableAxisKeys(
  * するために、`toViewModel` がこの述語で検出する（書き込み前ガードと対称の読み取り側ガード・レビュー指摘）。
  */
 export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
-  const urgent = toFrontmatterKey(ids.urgent);
-  const important = toFrontmatterKey(ids.important);
-  return urgent !== null && urgent === important;
+  return firstSharedWritableKey([ids.urgent, ids.important]) !== null;
+}
+
+/**
+ * 与えた propertyId 群のうち、**書込可能な `note.*` キーの最初の重複**を返す（無ければ null）。
+ *
+ * #105 で 2 軸固定の {@link axesShareWritableKey} を N キーへ一般化した。非 `note.*`
+ *（`formula.*`／`file.*`）・`null` は書き戻せないため衝突対象外（`toFrontmatterKey` が `null`）。
+ * 軸×軸（F7 診断）と軸×完了（F10・{@link resolveCompletionId}）の設定ミス検出を単一述語で共有する。
+ */
+export function firstSharedWritableKey(
+  ids: readonly (BasesPropertyId | null | undefined)[],
+): string | null {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (id == null) continue;
+    const key = toFrontmatterKey(id);
+    if (key === null) continue;
+    if (seen.has(key)) return key;
+    seen.add(key);
+  }
+  return null;
+}
+
+/**
+ * 完了プロパティ（#105 F10）の propertyId を解決する（opt-in）。ビュー options（config）主・
+ * 設定デフォルト（`note.<completionProperty>`）。次のとき **`null`（機能オフ）**:
+ * ① 未設定（`completionProperty` 空 かつ options 未設定）② 非 `note.*`（書き戻せない）
+ * ③ 完了キーが緊急/重要軸のいずれかと同一（3 キー衝突ガード・AC3＝完了書き込みが軸値を巻き添えに壊す）。
+ */
+export function resolveCompletionId(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+): BasesPropertyId | null {
+  const fromConfig = safeGetAsPropertyId(config, COMPLETION_OPTION_KEY);
+  const id =
+    fromConfig ??
+    (settings.completionProperty ? toNotePropertyId(settings.completionProperty) : null);
+  if (id === null) return null; // 未設定＝opt-in オフ
+  const key = toFrontmatterKey(id);
+  if (key === null) return null; // 非 note.*（formula/file）は書き戻せないので無効
+  // 3 キー衝突ガード（AC3）: 完了キーが軸キーと同一なら無効（チェックボタンを出さない）。
+  const axes = resolveAxisPropertyIds(config, settings);
+  if (key === toFrontmatterKey(axes.urgent) || key === toFrontmatterKey(axes.important)) {
+    return null;
+  }
+  return id;
+}
+
+/** 完了プロパティの frontmatter 書き戻しキー（#105 F10）。無効時は `null`（{@link resolveCompletionId}）。 */
+export function resolveCompletionKey(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+): string | null {
+  const id = resolveCompletionId(config, settings);
+  return id === null ? null : toFrontmatterKey(id);
+}
+
+/** 完了プロパティの読み取り結果（#105 F10）。 */
+export interface CompletionState {
+  /** 完了（`done: true`）か。淡色表示＋☑ 状態に使う。 */
+  completed: boolean;
+  /** 非 boolean 値（日付型等）でトグルすると破壊するため無効化するか（AC2）。 */
+  unsupported: boolean;
+}
+
+/**
+ * 完了プロパティ軸の値を読み、完了状態を返す（#105 F10）。`BooleanValue` は `isTruthy()` で
+ * completed に、非 boolean（`getValue` の throw を含む）は `unsupported=true`（`true` 上書きで元値を
+ * 破壊しないよう無効化・AC2）、absent（`NullValue`）は未完了（新規に書ける）。軸ロック
+ *（{@link isUnsupportedOnWritableAxis}）と同型の per-card 判定を完了キーに敷く。
+ */
+export function readCompletionState(
+  entry: BasesEntry,
+  completionId: BasesPropertyId,
+): CompletionState {
+  const result = readAxisValueSafely(entry, completionId);
+  // getValue が throw した完了軸は安全側でロック（型を確証できないまま true 上書きさせない・#2 と同型）。
+  if (!result.ok) return { completed: false, unsupported: true };
+  const value = result.value;
+  if (isUnsupportedAxisValue(value)) return { completed: false, unsupported: true };
+  const completed = value instanceof BooleanValue ? value.isTruthy() : false;
+  return { completed, unsupported: false };
 }
 
 /**

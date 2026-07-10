@@ -249,6 +249,86 @@
   flex: 0 0 auto;
 }
 
+/* カード上の完了チェックボタン（#105 F10）。タイトル行の右端に置き、hover/focus で出現する
+ * （完了時は常時可視）。テーマ変数のみ（--text-muted 待機・--interactive-accent 完了）で配色し
+ * ハードコードしない。レイアウト用の幅を常に確保し、hover での揺れを防ぐ。 */
+.eisenhower-note-card__complete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-s, 4px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  /* 既定は不可視（hover/focus・完了で可視化）。opacity:0 でもフォーカス可能＝キーボードパリティを保つ。 */
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+/* カード hover・カード focus・ボタン focus で出現（マウスにもキーボードにも露出＝a11y フロア）。
+ * カード hover/focus のリビールは **:not(:disabled)** に限る: 非対応（disabled）ボタンまで
+ * opacity:1 にすると下の :disabled{opacity:.4} を詳細度で上書きし、押せる「未完了」ボタンと
+ * 見分けがつかなくなる（frontend-reviewer should）。カード focus でもリビールして x キーの発見性を上げる。 */
+.eisenhower-note-card:hover .eisenhower-note-card__complete:not(:disabled),
+.eisenhower-note-card:focus-visible .eisenhower-note-card__complete:not(:disabled),
+.eisenhower-note-card__complete:focus-visible {
+  opacity: 1;
+}
+
+/* 完了カードのボタンは常時可視・アクセント色（再度押して未完了に戻せることを示す）。 */
+.eisenhower-note-card__complete.is-completed {
+  opacity: 1;
+  color: var(--interactive-accent);
+}
+
+.eisenhower-note-card__complete:hover:not(:disabled) {
+  color: var(--text-normal);
+}
+
+/* 非 boolean 完了値のカードは無効（AC2）。押下を塞ぎ、控えめに落とす。 */
+.eisenhower-note-card__complete:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* 明示フォーカスリング（テーマ既定に頼らない・NoteCard/UndoToast と同方針）。 */
+.eisenhower-note-card__complete:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.eisenhower-note-card__complete-icon {
+  width: 1em;
+  height: 1em;
+}
+
+/* 未完了は円のみ、完了はチェックを可視にする（状態を形でも示す＝色のみ依存を避ける）。 */
+.eisenhower-note-card__complete-check {
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+.eisenhower-note-card__complete.is-completed .eisenhower-note-card__complete-check {
+  opacity: 1;
+}
+
+/* 完了ノートの淡色表示（設定 dimCompleted on）。opacity ではなく弱色トークンで色だけ落とす
+ * （タイトルの可読性＝AA を保つ・--locked と同方針）。チェックボタンはアクセント色のまま残す。 */
+.eisenhower-note-card--dimmed {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eisenhower-note-card__complete,
+  .eisenhower-note-card__complete-check {
+    transition: none;
+  }
+}
+
 /* カード追加プロパティのバッジ行（#104 F8・読み取り専用）。タイトル下に控えめに折返し表示する。 */
 .eisenhower-note-card__badges {
   display: flex;

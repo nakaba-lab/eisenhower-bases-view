@@ -36,6 +36,17 @@ export interface EisenhowerSettings {
   cardBadgeProperties: string[];
   /** 期日らしい値（厳格 ISO・今日以前）をアクセント強調するか（#104 F8・既定オフ）。 */
   emphasizePastDates: boolean;
+  /**
+   * カード上の完了トグル（#105 F10）の完了プロパティ名（boolean の `note.*`）。
+   * 既定は空文字＝**機能オフの opt-in**（例 `done`）。ビュー options 未設定時のデフォルト
+   *（軸プロパティと同じハイブリッド）。空・非 boolean・軸と同一キーは実行時に無効化される。
+   */
+  completionProperty: string;
+  /**
+   * 完了ノートをカードで淡色表示するか（#105 F10・既定オフ）。Base に `done != true` フィルタを
+   * 張らない利用者向けの表示のみのオプション（消す/残すの本体は Bases 委譲）。
+   */
+  dimCompleted: boolean;
 }
 
 /** 全象限を空文字で初期化した Record（ラベル/色の既定＝「未カスタム」を表す）。 */
@@ -56,6 +67,8 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   stagnationThresholdDays: DEFAULT_STAGNATION_THRESHOLD_DAYS,
   cardBadgeProperties: [],
   emphasizePastDates: false,
+  completionProperty: "",
+  dimCompleted: false,
 };
 
 /** `loadData()` 由来の値を文字列だけの配列に整える（非配列は空・非文字列要素は捨てる。手編集の防御）。 */
@@ -126,5 +139,13 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
       typeof data.emphasizePastDates === "boolean"
         ? data.emphasizePastDates
         : DEFAULT_SETTINGS.emphasizePastDates,
+    completionProperty:
+      typeof data.completionProperty === "string"
+        ? data.completionProperty
+        : DEFAULT_SETTINGS.completionProperty,
+    dimCompleted:
+      typeof data.dimCompleted === "boolean"
+        ? data.dimCompleted
+        : DEFAULT_SETTINGS.dimCompleted,
   };
 }

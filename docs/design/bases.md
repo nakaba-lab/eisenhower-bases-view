@@ -2,7 +2,7 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 106]
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106]
 updated: 2026-07-10
 kind: api
 ---
@@ -12,6 +12,8 @@ kind: api
 > Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項」に接地する。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。** **#33 で absent 判定を `toString()===null`（スパイク #16 の誤観測）から `instanceof NullValue`（型同一性）へ是正した（実機 `scripts/e2e` プローブで確定）。** **#21（F4）で軸プロパティ設定 UI（ビュー options＝主・プラグイン設定＝デフォルトのハイブリッド）を本領域に積み増した: `registerBasesView` の `options` に `note.*` のみ選択可の軸プロパティセレクタを 2 つ宣言し、選択時（`filter`）・読み取り時・書き戻し時の 3 面で「書き戻せる `note.*` 軸」を単一述語 `isWritableAxisProperty` で判定する。** **#22（F5）でカード操作（開く/新タブ/プレビュー）を本領域に積み増した: `MatrixCallbacks` に `onOpenCard`/`onHoverCard` を追加し、アダプタが `workspace.getLeaf(...).openFile` と `workspace.trigger("hover-link", …)` を実装する（UI は修飾キー→`newLeaf` の plain データを渡すだけ＝AC5 維持。UI 側の相互作用設計は `ui.md`）。** **#34（fix）で軸値正規化を v1 の boolean 軸限定まで狭めた: `note.*` 接頭辞ガード（書き戻し可能性）に加え、値の型が `BooleanValue` の軸だけを 4 象限に分類し、非 boolean（数値 `NumberValue`／文字列 `StringValue` 等）や absent（`NullValue`）は未分類へ退避する（正の許可リスト `instanceof BooleanValue`）。これで非 boolean `note.*` 軸が 4 象限へ自動配置されてドラッグ露出する（無操作で上書き可能になる）経路を断つ。未分類からの手動ドラッグ書き戻しの無効化（書き戻し側の boolean ガード）は F4/#21 の範囲として残す（読み取り側のみ boolean に狭めた非対称）。**
 >
 > **#104（F8 カード追加プロパティ表示）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示する。書き戻し軸（`note.*` 限定）と違い**別サーフェス（読み取り専用）**のため `formula.*`／`file.*` も選択可。境界契約 `MatrixEntry.badges`（`{ label; text; emphasized? }[]` の plain データ＝`readBadges.ts` の `Badge`）を追加し、アダプタ（`toViewModel`）が `entry.getValue` で読み Value→表示文字列へ正規化して載せ、`NoteCard` が控えめに描画する（UI は Bases 非依存を維持＝AC5）。値の正規化・例外退避は軸読み取り（`readAxisValueSafely`）と**同型の境界防御を `readBadges.ts` に独立して**敷く（`readAxis` とは共有しない＝軸/バッジのサーフェスを結合させない）。日付強調（AC4）は純ロジック `isEmphasizedDate(text, today)`（`src/logic/dateEmphasis.ts`）で判定し、`today`（ローカル日付 ISO）はアダプタ `EisenhowerBasesView.todayIso()` が注入する（`Date.now()` を純ロジックに持ち込まない）。**選択 UI は独自セレクタ方式（案 a）を採用**（下記「主要な設計判断」に案 b＝Bases ネイティブ Properties の却下理由）。
+>
+> **#105（F10 カード上の完了トグル）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: 完了は **boolean 単一プロパティ書き戻し**で v1 の boolean 軸限定制約と同じ型面に収まり、既存の書き戻し（`writeCompletion`）・locked 機構・境界防御を流用する。**undo 記録を 2 軸固定形からキーリスト形（`UndoRecord.entries[]`）へ一般化**（設計オプション比較で本 Issue 内実施に決定・基盤 Issue を切り出さない）＝ドラッグ書き戻し＝2 要素・完了トグル＝1 要素が同じ「直前 1 手」機構を共有する（挙動不変の内部リファクタ）。3 キー衝突ガードは `axesShareWritableKey` を N キー版 `firstSharedWritableKey` へ一般化。完了ノートの表示/非表示は **Bases 委譲**（`done != true` フィルタ）で自前フィルタしない。詳細は下記「カード上の完了トグル」節。
 
 Obsidian Bases のカスタムビューとして Eisenhower マトリクスを登録し、Bases API（`registerBasesView`／`BasesView`／`QueryController`／`BasesEntry.getValue`／ビュー設定）への接触を 1 領域に集約する。各エントリを **Bases 非依存の ViewModel** に変換して UI（`src/ui`）へ渡し、UI・純ロジック（`src/logic`）が Bases 型へ直接依存しないようにする（疎結合化＝AC5）。
 
@@ -172,6 +174,43 @@ sequenceDiagram
   - **日付強調は純ロジックに隔離（`src/logic`・AC4）**: 「厳格 ISO（`YYYY-MM-DD`）かつ今日以前」を純関数 `isEmphasizedDate(text, today)`（`today` は ISO 文字列で注入＝`Date.now()` 非依存で単体テスト可能）で判定し、`toString()`／ロケール依存の緩いパースはしない。**Bases の filter/formula の再実装には踏み込まない**（将来これを条件付き書式 DSL に育てない＝v1 は厳格 ISO 判定 1 種のみ。線引きを設計書に固定）。強調トグル（`emphasizePastDates`）は**既定オフ**。
   - **バッジの SR 読み上げは「ラベル＋値」（AC・人間承認済み）**: カードのアクセシブル名はノート名（title）を保ち、バッジはその後に**補足として読み上げる**（`aria-hidden` にしない）。Do↔Schedule 判断材料（期日）を SR 利用者にも届ける。UI 詳細（描画・コントラスト・レスポンシブ）は `ui.md`。
   - **新規/変更モジュール（#104）**: `viewOptions.ts`（`buildBadgeViewOptions` 追加）・`readAxis.ts` 隣に `readBadges.ts`（バッジ解決・読み取り・正規化。`readBadgeValueSafely` の境界防御）・`toViewModel.ts`（`badges` 算出を載せる）・`src/logic/`（`isEmphasizedDate` 純関数）・`settings.ts`（`cardBadgeProperties: string[]`・`emphasizePastDates: boolean` を追加＋`mergeSettings` の既定補完）・`i18n.ts`（バッジ設定/セレクタ文言を en/ja に追加）・`types.ts`（`MatrixEntry.badges` 契約）。
+
+## カード上の完了トグル（#105 F10・`status: active`）
+
+> **#105 を実装し `status: active` に確定した（2026-07-10・人間承認済み）**。UI／操作／a11y は `ui.md` の同名節が正。本節は完了プロパティ解決・単一キー書き戻し・undo 一般化・衝突/非 boolean ガード・Bases 委譲を扱う。**実装で確定した点**: 非 boolean ガードは 2 面で二重化する — 読み取り側は `readCompletionState`（`isUnsupportedAxisValue` 流用で `completionUnsupported` を UI に伝えボタンを disabled 化）、**書き込み側は `writeCompletion` が `processFrontMatter` 内で生値の `typeof !== "boolean"` を確認して上書きせず Notice**（UI disabled と独立した最後の砦・元値破壊を断つ）。
+
+Do のライフサイクル（分類→着手→完了）をビュー内で閉じる。完了は **boolean 単一プロパティ書き込み**で v1 の「boolean 軸限定」制約と同じ型面に収まり、既存の書き戻し（`writeBackAxes`）・locked 機構・境界防御をそのまま流用する。
+
+**完了プロパティの解決（軸と同型のハイブリッド）**: 設定 `completionProperty: string`（既定 `""`＝機能オフの opt-in）＋ビュー option `COMPLETION_OPTION_KEY = "completionProperty"`。`resolveCompletionKey(config, settings)` が `config.getAsPropertyId` 主・設定デフォルトで解決し、**書き戻し可能な `note.<key>` のみ**（`isWritableAxisProperty` を共有）frontmatter キーを返す。空・非 `note.*`・軸と衝突（下記 3 キーガード）なら `null`＝機能無効（チェックボタンを出さない）。Configure view セレクタは `buildCompletionViewOption(messages)`（`buildAxisViewOptions` と同型・`filter: isWritableAxisProperty`）。
+
+**単一キー書き戻し（`writeCompletion`）**: `EisenhowerBasesView.writeCompletion(entryId, done)` が `resolveCompletionKey` でキーを解決し、共通 `resolveTargetFile` で `TFile` を解決、`processFrontMatter(file, fm => { …capture…; fm[key] = done })` で**単一 boolean を明示書き込み**（`true`⇄`false`・`delete` しない＝AC1/AC4）。`onDataUpdated` 自動再発火で反映。失敗は `Notice`＋reject（UI は楽観状態をロールバック）。読み取り（`getValue`）とは別系統なのは既存書き戻しと同じ。
+
+**undo 一般化（記録形式のキーリスト化・本 Issue 内で実施・設計オプション比較で選択・人間承認済み）**: 完了トグルも「直前 1 手」の undo 対象にするため、2 軸固定形の `UndoRecord` を**キーリスト形**へ一般化する（既存の「前値 verbatim 捕捉＋値照合＋1 手保持」の思想は不変・型だけ一般化）:
+
+```ts
+// before（2 軸固定）
+interface UndoRecord { keys:{urgent,important}; previous:{urgent,important}; wrote:{urgent:boolean;important:boolean}; … }
+// after（キーリスト）
+interface UndoEntry  { key: string; previous: PreviousAxisValue; wrote: unknown }
+interface UndoRecord { entryId; title; entries: UndoEntry[]; … }
+```
+
+- `capturePreviousAxes(fm, keys)` → 汎用 `buildUndoEntries(fm, writes: AxisWrite[]): UndoEntry[]`（各 `{key, value}` について書き込み前の値を既存 `capturePreviousValue` で捕捉し、書き込む値 `value` を `wrote` に対にする）。
+- `applyUndo(fm, record)` → `record.entries.forEach(e => restoreKey(fm, e.key, e.previous))`（present は代入・absent は `delete`）。
+- `isUndoApplicable(fm, record)` → `record.entries.every(e => fm[e.key] === e.wrote)`（全キー一致で適用・別ノート誤爆防止は不変）。
+- 呼び出し側: `writeBackAxes` は **2 entries**（urgent/important）、`writeCompletion` は **1 entry**（completion key）で同じ記録を組む。`UndoManager`・`runUndo`・`clearIfEntry`・`expectedEntryId` ガード・vault の delete/rename 購読は**不変**（記録の中身だけ一般化）。`wrote` の型は `boolean`→`unknown` に緩め、将来の数値軸（#88）に備えて verbatim 照合にする。
+- **挙動を変えない内部リファクタ**（2 軸移動＝2 要素で従来と同一の復元）。既存 `undo.test.ts`／`undoWriteBack` の振る舞いを保ちつつ、新規に「単一キー完了トグルの undo」テストを足す。#93 多段 undo・#88 数値軸・#98 複数選択の共通基盤になる（今回は 1 手保持のまま）。
+- **却下**（設計オプション比較）: ① 基盤 Issue 先行切り出し＝#105 が直列依存でブロック・プロセス増／③ 完了トグル専用の別 undo＝2 機構が「直前 1 手」を奪い合い drift・#93/#88/#98 で結局一般化が要る。2 つ目の具体ユースケース（#105）を得た今が一般化の好機、かつ #105 を自己完結（`> 依存:` 追加なし）に保てる本案（②→採択の① 本 Issue 内一般化）を採る。
+
+**3 キー衝突ガード（AC3）**: 完了プロパティが緊急/重要のどちらかと同一 `note.*` キーだと、完了書き込みが軸値を巻き添えに壊す/象限が飛ぶ。これを防ぐため、既存 2 軸の `axesShareWritableKey(ids)` を **N キーの衝突検出** `firstSharedWritableKey(keys: (string|null)[]): string | null`（書込可能キーの最初の重複を返す）へ一般化した（`axesShareWritableKey` は本関数の 2 キー適用として再表現＝軸×軸 F7 診断バナーの既存経路）。**軸×完了の衝突は `resolveCompletionId` が直接 `===` 比較**（完了キー == 緊急キー or == 重要キー）で検出し `null` を返して**完了トグルを静かに無効化**する（チェックボタンを出さない）。**実行時の Notice/診断バナーは持たない**（全カードをロックする軸×軸の設定ミスと違い影響が opt-in 機能に限定されるため）＝設定ミスの気づきは設定タブの説明文（`completionDesc`＝軸と同一キー不可）で config 時に伝える（`ui.md` 同名節）。
+
+**非 boolean 完了値のガード（`isUnsupportedAxisValue` 流用・AC2）**: Obsidian は完了を日付型（`completed: 2026-07-06`）で持つ運用が多く、非 boolean への `true` 上書きはデータ破壊。完了キー軸の値を `readAxisValueSafely`＋`isUnsupportedAxisValue` で判定し、非 boolean（`getValue` の throw も安全側で）なら `MatrixEntry.completionUnsupported=true` を立てて UI がチェックボタンを**無効化**（押下＝書き込み経路自体を塞ぐ）。既存 `isUnsupportedOnWritableAxis`（軸ロック）と同型の per-card 判定を完了キーにも敷く。
+
+**Bases 委譲（自前フィルタしない）**: 完了ノートの表示/非表示は**ビュー側でフィルタせず Bases に委譲**する。Base に `done != true` を張れば書込→再クエリ→`onDataUpdated` でカードが消える（README に推奨フィルタ例を記載）。フィルタを張らない利用者向けに「完了を淡色表示」（`dimCompleted`）だけ持つ。**④ フィルタ意味論プローブ（要実機確認・この環境では検証不可）**: 「`done` 未定義のノートが `done != true` を通過するか」の Bases フィルタ意味論は実機（Obsidian）でしか確認できないため、**README 推奨フィルタ文言の確定は手動/結合フェーズの実機 1 プローブに委ねる**（コア実装はブロックしない。要件定義書「未決事項」に記録する）。
+
+**境界契約の追加（`src/bases/types.ts`）**: `MatrixEntry.completed?: boolean`（`done:true`）・`MatrixEntry.completionUnsupported?: boolean`（非 boolean done）／`MatrixViewModel.completionEnabled?: boolean`（完了プロパティ有効）・`dimCompleted?: boolean`／`MatrixCallbacks.onToggleCompletion?(entryId: string, done: boolean): Promise<void>`。いずれも Bases 非依存の plain データ＝AC5 維持。
+
+**新規/変更モジュール（#105・予定）**: `settings.ts`（`completionProperty`・`dimCompleted` ＋ `mergeSettings` 既定補完）・`readAxis.ts`（`COMPLETION_OPTION_KEY`・`resolveCompletionKey`・`firstSharedWritableKey` の N キー一般化）・`viewOptions.ts`（`buildCompletionViewOption`）・`logic/undo.ts`（`UndoRecord` キーリスト一般化・`capturePrevious`・`applyUndo`/`isUndoApplicable`）・`EisenhowerBasesView.ts`（`writeCompletion`・undo 捕捉の一般化）・`toViewModel.ts`（`completed`/`completionUnsupported`/`completionEnabled`/`dimCompleted` 算出）・`types.ts`（契約追加）・`i18n.ts`（完了トグル文言 en/ja）・`NoteCard.tsx`（チェックボタン＋`x` キー＋`stopPropagation`＋淡色）。テスト: `undo.test.ts`／`readAxis.test.ts`／`NoteCard.test.tsx`／`i18n.test.ts`／`toViewModel.test.ts`／`settings.test.ts`。
 
 ## 滞留インジケータ（mtime ヒューリスティック・#106 F9）
 

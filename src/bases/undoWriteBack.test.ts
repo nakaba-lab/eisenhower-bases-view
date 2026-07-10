@@ -23,11 +23,13 @@ function makeRecord(entryId = "a.md"): UndoRecord {
   return {
     entryId,
     title: "タスクA",
-    keys: { urgent: "urgent", important: "important" },
-    // 移動前: urgent は absent（復元で delete）・important は true（復元で代入）
-    previous: { urgent: { present: false }, important: { present: true, value: true } },
-    // 移動で書き込んだ両軸値（同一性照合用）。復元前に現 frontmatter がこれと一致する場合のみ戻す。
-    wrote: { urgent: true, important: false },
+    // #105 でキーリスト形（entries）へ一般化。移動前: urgent は absent（復元で delete）・
+    // important は true（復元で代入）。wrote は移動で書き込んだ値（同一性照合用＝復元前に現
+    // frontmatter がこれと一致する場合のみ戻す）。
+    entries: [
+      { key: "urgent", previous: { present: false }, wrote: true },
+      { key: "important", previous: { present: true, value: true }, wrote: false },
+    ],
   };
 }
 

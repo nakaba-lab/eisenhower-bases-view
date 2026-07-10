@@ -6,7 +6,9 @@ import {
   axesShareWritableKey,
   hasUnsupportedAxisValue,
   readAxisValues,
+  readCompletionState,
   resolveAxisPropertyIds,
+  resolveCompletionId,
   toFrontmatterKey,
   type AxisPropertyIds,
 } from "./readAxis";
@@ -112,6 +114,10 @@ export function toViewModel(
   // 軸解決と診断は notes 有無に依らず行う（空状態でも軸名・設定ミスを提示する＝#103 F7）。
   const ids = resolveAxisPropertyIds(config, settings);
   const diagnostics = buildDiagnostics(ids);
+  // カード上の完了トグル（#105 F10）: 完了プロパティを解決する（opt-in・非 note.*/軸衝突は null＝無効）。
+  // 有効なら UI がチェックボタンを描画する（completionEnabled）。null のときは機能オフ。
+  const completionId = resolveCompletionId(config, settings);
+  const completionEnabled = completionId !== null;
   if (notes.length === 0) {
     return {
       state: "empty",
@@ -120,6 +126,8 @@ export function toViewModel(
       showUnclassified: settings.showUnclassified,
       presentation,
       diagnostics,
+      completionEnabled,
+      dimCompleted: settings.dimCompleted,
     };
   }
 
@@ -161,6 +169,13 @@ export function toViewModel(
         emphasizePastDates: settings.emphasizePastDates,
       });
     }
+    // 完了状態（#105 F10）: 完了プロパティ有効時のみ、done:true は completed・非 boolean は
+    // completionUnsupported（トグル無効＝元値破壊防止・AC2）を載せる（`locked?` と同じ optional 流儀）。
+    if (completionId !== null) {
+      const completion = readCompletionState(entry, completionId);
+      if (completion.completed) matrixEntry.completed = true;
+      if (completion.unsupported) matrixEntry.completionUnsupported = true;
+    }
     placements[quadrant].push(matrixEntry);
     return matrixEntry;
   });
@@ -172,5 +187,7 @@ export function toViewModel(
     showUnclassified: settings.showUnclassified,
     presentation,
     diagnostics,
+    completionEnabled,
+    dimCompleted: settings.dimCompleted,
   };
 }

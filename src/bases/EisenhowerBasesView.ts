@@ -238,7 +238,8 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       throw new Error("completion property is not writable");
     }
 
-    const file = this.resolveTargetFile(entryId, messages.fileNotFoundForMove);
+    // 完了トグルの file 欠落は「移動」ではなく「完了状態を変更できない」旨で通知する（gemini 指摘）。
+    const file = this.resolveTargetFile(entryId, messages.fileNotFoundForCompletion);
     if (!file) {
       throw new Error(`target file not found: ${entryId}`);
     }

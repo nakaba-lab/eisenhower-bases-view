@@ -97,6 +97,8 @@ export interface Messages {
   fileNotFoundForMove: string;
   /** アダプタ層 Notice: 対象ファイルが見つからず開けない。 */
   fileNotFoundForOpen: string;
+  /** アダプタ層 Notice: 対象ファイルが見つからず完了状態を変更できない（#105 F10）。 */
+  fileNotFoundForCompletion: string;
   /** アダプタ層 Notice: 書き戻せない軸（note. 以外）のため移動できない。 */
   axisNotWritable: string;
   /** アダプタ層 Notice: frontmatter 書き戻しに失敗（ロールバック）。 */
@@ -217,6 +219,7 @@ const JA: Messages = {
   stagnantLabel: (days) => `滞留: ${days}日更新なし`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
   fileNotFoundForOpen: "対象ファイルが見つからないため開けません。",
+  fileNotFoundForCompletion: "対象ファイルが見つからないため完了状態を変更できません。",
   axisNotWritable:
     "軸プロパティの設定が不正（note. 以外、または両軸に同じプロパティ）のため移動できません。",
   writeBackFailed: "書き戻しに失敗しました。元に戻します。",
@@ -317,6 +320,7 @@ const EN: Messages = {
   stagnantLabel: (days) => `Stale: not updated for ${days} days`,
   fileNotFoundForMove: "Target file not found; cannot move.",
   fileNotFoundForOpen: "Target file not found; cannot open.",
+  fileNotFoundForCompletion: "Target file not found; cannot change completion.",
   axisNotWritable:
     "Invalid axis configuration (not note.*, or both axes use the same property); cannot move.",
   writeBackFailed: "Failed to write back. Reverting.",

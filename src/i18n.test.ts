@@ -191,6 +191,7 @@ describe("messagesFor — アダプタ Notice・件数・括弧ジョイナの i
     const noticeKeys = [
       "fileNotFoundForMove",
       "fileNotFoundForOpen",
+      "fileNotFoundForCompletion",
       "axisNotWritable",
       "writeBackFailed",
       "openFailed",

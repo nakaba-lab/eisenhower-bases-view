@@ -2,6 +2,7 @@ import { PluginSettingTab, Setting, type App } from "obsidian";
 import type EisenhowerBasesViewPlugin from "./main";
 import { QUADRANT_KEYS } from "./logic/quadrant";
 import { messagesFor, resolveLanguage } from "./i18n";
+import { MAX_BADGE_PROPERTIES } from "./bases/readBadges";
 import type { LanguageSetting } from "./settings";
 
 /**
@@ -81,6 +82,36 @@ export class EisenhowerSettingTab extends PluginSettingTab {
       .addToggle((toggle) =>
         toggle.setValue(settings.showUnclassified).onChange(async (value) => {
           settings.showUnclassified = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+    // カード追加プロパティ表示（#104 F8）: 表示する propertyId をカンマ区切りで既定指定する
+    //（ビュー options が主・ここは未設定ビューのデフォルト）。読み取り専用のため formula.*/file.* も可。
+    new Setting(containerEl)
+      .setName(messages.settings.cardBadgePropertiesName)
+      .setDesc(messages.settings.cardBadgePropertiesDesc)
+      .addText((text) =>
+        text
+          .setPlaceholder("note.due, note.tags")
+          .setValue(settings.cardBadgeProperties.join(", "))
+          .onChange(async (value) => {
+            // カンマ区切り→トリム→空除去→最大数で丸める（入口で正規化する。永続層の
+            // mergeStringArray は型フィルタのみのため、trim/空除去/丸めはここで行う）。
+            settings.cardBadgeProperties = value
+              .split(",")
+              .map((item) => item.trim())
+              .filter((item) => item.length > 0)
+              .slice(0, MAX_BADGE_PROPERTIES);
+            await this.plugin.saveSettings();
+          }),
+      );
+    // 期日強調トグル（#104 F8・AC4）: 厳格 ISO 日付が今日以前のバッジをアクセント強調する（既定オフ）。
+    new Setting(containerEl)
+      .setName(messages.settings.emphasizePastDatesName)
+      .setDesc(messages.settings.emphasizePastDatesDesc)
+      .addToggle((toggle) =>
+        toggle.setValue(settings.emphasizePastDates).onChange(async (value) => {
+          settings.emphasizePastDates = value;
           await this.plugin.saveSettings();
         }),
       );

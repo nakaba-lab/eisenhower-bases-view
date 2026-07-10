@@ -18,6 +18,7 @@ import {
   URGENT_OPTION_KEY,
   isWritableAxisProperty,
 } from "./readAxis";
+import { BADGE_OPTION_KEYS, MAX_BADGE_PROPERTIES } from "./readBadges";
 
 /**
  * `registerBasesView` の `options`（`(config) => BasesAllOptions[]`）が返す軸プロパティセレクタ配列。
@@ -46,4 +47,27 @@ export function buildAxisViewOptions(messages: Messages): BasesPropertyOption[] 
       filter: isWritableAxisProperty,
     },
   ];
+}
+
+/**
+ * `registerBasesView` の `options` が返す**カードバッジプロパティセレクタ**配列（#104 F8・読み取り専用）。
+ *
+ * カードにバッジ表示する追加プロパティを最大 {@link MAX_BADGE_PROPERTIES} 個、property セレクタとして
+ * 宣言する（`key`＝`badgeProperty1..N`＝{@link BADGE_OPTION_KEYS}。`resolveBadgePropertyIds` が読むキーと
+ * 一致させる）。軸セレクタ（`buildAxisViewOptions`）と違い**読み取り専用サーフェス**のため `filter` は
+ * `note.*` に限定せず**全プロパティを許可**する（`formula.*`／`file.*` も選べる）。`displayName` は解決済み
+ * 言語メッセージ（`messages.badgeOption(n)`）から出す（軸セレクタと同じく Configure view の i18n を及ぼす）。
+ * `count` で個数を絞れる（0〜{@link MAX_BADGE_PROPERTIES} にクランプ）。
+ */
+export function buildBadgeViewOptions(
+  messages: Messages,
+  count: number = MAX_BADGE_PROPERTIES,
+): BasesPropertyOption[] {
+  const clamped = Math.max(0, Math.min(count, MAX_BADGE_PROPERTIES));
+  return BADGE_OPTION_KEYS.slice(0, clamped).map((key, index) => ({
+    key,
+    type: "property",
+    displayName: messages.badgeOption(index + 1),
+    filter: () => true,
+  }));
 }

@@ -10,6 +10,7 @@ import {
   toFrontmatterKey,
   type AxisPropertyIds,
 } from "./readAxis";
+import { readBadges, resolveBadgePropertyIds } from "./readBadges";
 import { resolvePresentation } from "./presentation";
 import type {
   MatrixDiagnostics,
@@ -75,6 +76,9 @@ export function toViewModel(
   // messages 省略時は英語へフォールバックする（resolveLanguage の最終フォールバックが en＝
   // i18n の既定言語。実機ではアダプタが解決済みメッセージを常に渡す・レビュー指摘）。
   messages: Messages = messagesFor("en"),
+  // 今日の日付（ISO YYYY-MM-DD）。バッジの日付強調（#104 F8・AC4）に使う。アダプタが注入する
+  // （Date.now() 非依存で純度維持）。省略時は空＝日付強調しない（安全側）。
+  today: string = "",
 ): MatrixViewModel {
   // ラベル/色/言語文言を解決して UI へ渡す（#23 F6）。状態に依らず常に載せる。
   const presentation = resolvePresentation(settings, messages);
@@ -99,6 +103,8 @@ export function toViewModel(
   // 両軸が同一 note.* キー（設定ミス）だと書き戻しが必ず失敗するため、当該ビューの全カードを
   // ドラッグ不可にして「掴めるのに必ず失敗する」状態を作らない（書込前ガードと対称・レビュー指摘）。
   const sameAxisKey = diagnostics.axesShareWritableKey;
+  // カード追加プロパティ表示（#104 F8）: 表示するバッジプロパティを解決する（既定 0 個＝現状維持）。
+  const badgeIds = resolveBadgePropertyIds(config, settings);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
     const axis = readAxisValues(entry, ids);
@@ -112,6 +118,13 @@ export function toViewModel(
     // 書込可能 note.* 軸に非 boolean 値を持つカード、または両軸が同一キー設定のカードは、ドロップの
     // 両軸 true/false 上書きが破壊/必ず失敗になるためドラッグ不可にする（UI が印を付ける）。
     if (sameAxisKey || hasUnsupportedAxisValue(entry, ids)) matrixEntry.locked = true;
+    // バッジは表示プロパティが 1 つ以上あるときだけ載せる（0 個は undefined＝現状維持・AC3）。
+    if (badgeIds.length > 0) {
+      matrixEntry.badges = readBadges(entry, badgeIds, {
+        today,
+        emphasizePastDates: settings.emphasizePastDates,
+      });
+    }
     placements[quadrant].push(matrixEntry);
     return matrixEntry;
   });

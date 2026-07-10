@@ -23,6 +23,14 @@ export interface EisenhowerSettings {
   quadrantLabels: Record<QuadrantKey, string>;
   /** 象限ごとのカスタムアクセント色（hex）。空文字＝テーマ既定にフォールバック（#23 F6）。 */
   quadrantColors: Record<QuadrantKey, string>;
+  /**
+   * カードに表示する追加プロパティ（読み取り専用バッジ）の propertyId 既定（#104 F8）。
+   * ビュー options 未設定時に使うデフォルト。既定 `[]`＝表示 0 個（カード密度は現状維持）。
+   * 読み取り専用サーフェスのため `note.*` に限らず `formula.*`／`file.*` も指定できる。
+   */
+  cardBadgeProperties: string[];
+  /** 期日らしい値（厳格 ISO・今日以前）をアクセント強調するか（#104 F8・既定オフ）。 */
+  emphasizePastDates: boolean;
 }
 
 /** 全象限を空文字で初期化した Record（ラベル/色の既定＝「未カスタム」を表す）。 */
@@ -37,7 +45,14 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   language: "auto",
   quadrantLabels: emptyQuadrantRecord(),
   quadrantColors: emptyQuadrantRecord(),
+  cardBadgeProperties: [],
+  emphasizePastDates: false,
 };
+
+/** `loadData()` 由来の値を文字列だけの配列に整える（非配列は空・非文字列要素は捨てる。手編集の防御）。 */
+function mergeStringArray(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
+}
 
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];
 
@@ -84,5 +99,10 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
       : DEFAULT_SETTINGS.language,
     quadrantLabels: mergeQuadrantRecord(data.quadrantLabels),
     quadrantColors: mergeQuadrantRecord(data.quadrantColors),
+    cardBadgeProperties: mergeStringArray(data.cardBadgeProperties),
+    emphasizePastDates:
+      typeof data.emphasizePastDates === "boolean"
+        ? data.emphasizePastDates
+        : DEFAULT_SETTINGS.emphasizePastDates,
   };
 }

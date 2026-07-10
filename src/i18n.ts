@@ -105,6 +105,8 @@ export interface Messages {
   settings: SettingsMessages;
   /** Bases Configure view の軸プロパティセレクタ displayName（viewOptions）。 */
   axisOption: { urgency: string; important: string };
+  /** Bases Configure view のカードバッジセレクタ displayName（#104 F8・番号付き `badgeProperty1..N`）。 */
+  badgeOption(index: number): string;
 }
 
 /** 設定タブの i18n 文言（見出し・設定名・説明・ツールチップ）。 */
@@ -125,6 +127,14 @@ export interface SettingsMessages {
   languageDesc: string;
   /** 言語ドロップダウンの "Auto"（自動）選択肢ラベル。en/日 の endonym（English/日本語）は翻訳しない。 */
   languageAuto: string;
+  /** カード表示プロパティ設定の名前（#104 F8）。 */
+  cardBadgePropertiesName: string;
+  /** カード表示プロパティ設定の説明（#104 F8・読み取り専用＝formula/file も可を明示）。 */
+  cardBadgePropertiesDesc: string;
+  /** 期日強調トグルの名前（#104 F8）。 */
+  emphasizePastDatesName: string;
+  /** 期日強調トグルの説明（#104 F8）。 */
+  emphasizePastDatesDesc: string;
 }
 
 const JA: Messages = {
@@ -198,8 +208,15 @@ const JA: Messages = {
     languageName: "表示言語",
     languageDesc: "「自動」は Obsidian の表示言語に追従します。",
     languageAuto: "自動",
+    cardBadgePropertiesName: "カードに表示するプロパティ",
+    cardBadgePropertiesDesc:
+      "カードにバッジ表示する追加プロパティを完全な propertyId（例: note.due）でカンマ区切り入力（最大 3 個）。読み取り専用のため、軸（書き戻し）と違い formula.* / file.* も選べます（表示のみ・書き換えません）。ビュー未設定時のデフォルト。",
+    emphasizePastDatesName: "期日を強調",
+    emphasizePastDatesDesc:
+      "厳格な ISO 日付（YYYY-MM-DD）が今日以前のバッジをアクセント色で強調します。",
   },
   axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
+  badgeOption: (index) => `カード表示プロパティ ${index}`,
 };
 
 const EN: Messages = {
@@ -274,8 +291,15 @@ const EN: Messages = {
     languageName: "Display language",
     languageDesc: "\"Auto\" follows Obsidian's display language.",
     languageAuto: "Auto",
+    cardBadgePropertiesName: "Properties to show on cards",
+    cardBadgePropertiesDesc:
+      "Extra properties shown as card badges — enter full property IDs (e.g. note.due), comma-separated (up to 3). These are read-only, so unlike the axes (write-back) you may also pick formula.* / file.* (display only; never written). Default when the view has none set.",
+    emphasizePastDatesName: "Emphasize due dates",
+    emphasizePastDatesDesc:
+      "Accent badges whose strict ISO date (YYYY-MM-DD) is today or earlier.",
   },
   axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
+  badgeOption: (index) => `Card property ${index}`,
 };
 
 /** 言語別メッセージ束を返す。 */

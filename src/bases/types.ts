@@ -7,6 +7,7 @@
  */
 import type { Quadrant, QuadrantKey } from "../logic/quadrant";
 import type { Messages } from "../i18n";
+import type { Badge } from "./readBadges";
 
 /** マトリクスに並ぶ 1 ノートの表示用データ。 */
 export interface MatrixEntry {
@@ -24,6 +25,11 @@ export interface MatrixEntry {
    *（#34 の未分類化で塞げなかった手動ドラッグ経路の封鎖）。absent（欠損）のカードは付かない＝分類可。
    */
   locked?: boolean;
+  /**
+   * カード追加プロパティの読み取り専用バッジ（#104 F8）。アダプタ（`toViewModel`）が解決済みの
+   * `{ label, text, emphasized? }` を載せ、`NoteCard` が控えめに描画する。表示 0 個（既定）では省略する。
+   */
+  badges?: Badge[];
 }
 
 /** ビューの描画状態。 */

@@ -86,3 +86,41 @@ describe("mergeSettings — 既定補完（AC5 読み書き）", () => {
     expect(DEFAULT_SETTINGS.quadrantLabels.schedule).toBe("");
   });
 });
+
+describe("mergeSettings — カード追加プロパティ表示の設定（#104 F8）", () => {
+  it("DEFAULT_SETTINGS — 既定は表示 0 個・日付強調オフ（カード密度は現状維持・AC3）", () => {
+    expect(DEFAULT_SETTINGS.cardBadgeProperties).toEqual([]);
+    expect(DEFAULT_SETTINGS.emphasizePastDates).toBe(false);
+  });
+
+  it("mergeSettings — 空オブジェクトはバッジ設定も既定で埋める", () => {
+    const merged = mergeSettings({});
+    expect(merged.cardBadgeProperties).toEqual([]);
+    expect(merged.emphasizePastDates).toBe(false);
+  });
+
+  it("mergeSettings — cardBadgeProperties を保存値から復元（文字列配列）", () => {
+    const merged = mergeSettings({ cardBadgeProperties: ["note.due", "file.mtime"] });
+    expect(merged.cardBadgeProperties).toEqual(["note.due", "file.mtime"]);
+  });
+
+  it("mergeSettings — cardBadgeProperties の非文字列要素/非配列は弾いて既定へ倒す（手編集の防御）", () => {
+    // given / when / then: 配列でない・要素が非文字列は既定（空配列 or 文字列のみ）へ
+    expect(mergeSettings({ cardBadgeProperties: "note.due" }).cardBadgeProperties).toEqual([]);
+    expect(
+      mergeSettings({ cardBadgeProperties: ["note.due", 42, null, "note.tags"] })
+        .cardBadgeProperties,
+    ).toEqual(["note.due", "note.tags"]);
+  });
+
+  it("mergeSettings — emphasizePastDates を保存値から復元・不正値は既定 false", () => {
+    expect(mergeSettings({ emphasizePastDates: true }).emphasizePastDates).toBe(true);
+    expect(mergeSettings({ emphasizePastDates: "yes" }).emphasizePastDates).toBe(false);
+  });
+
+  it("mergeSettings — 返り値の cardBadgeProperties は新規配列（DEFAULT_SETTINGS を破壊しない）", () => {
+    const merged = mergeSettings({});
+    merged.cardBadgeProperties.push("note.x");
+    expect(DEFAULT_SETTINGS.cardBadgeProperties).toEqual([]);
+  });
+});

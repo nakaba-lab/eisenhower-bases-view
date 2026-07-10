@@ -257,8 +257,8 @@ interface EisenhowerSettings {
 }
 ```
 
-- 設定タブ（F6 の `settingsTab.ts`）に「表示」区分の下へ**カード表示プロパティ**（プロパティ名入力 or セレクタ・最大 3）と**期日強調トグル**を追加する。ビュー options（`buildBadgeViewOptions`）が主で、設定はデフォルト（未設定ビュー）。
-- **読み取り専用サーフェスの明示**: 設定/options の説明文に「軸（書き戻し）と違い `formula.*`／`file.*` も選べます（表示のみ・書き換えません）」と明記する（i18n で en/ja）。
+- 設定タブ（F6 の `settingsTab.ts`）の「表示」区分の下に**カード表示プロパティ**（完全な propertyId をカンマ区切りで入力・最大 3＝`cardBadgeProperties`）と**期日強調トグル**（`emphasizePastDates`）を追加した。ビュー options（`buildBadgeViewOptions`＝`badgeProperty1..N`）が主で per-view 指定でき、設定タブはそれ未設定時のデフォルト。**期日強調（AC4）はプラグイン設定のみが持つため、このトグルが唯一の有効化経路**（options には強調トグルを置かない）。`extends PluginSettingTab` は実機必須で単体対象外＝配線は手動/結合と build で担保（軸/象限の既存コントロールと同じ流儀）。
+- **読み取り専用サーフェスの明示**: 設定/options の説明文に「完全な propertyId（例 `note.due`）を入力／軸（書き戻し）と違い `formula.*`／`file.*` も選べます（表示のみ・書き換えません）」と明記する（i18n で en/ja。軸デフォルトが bare 名〔`urgent`〕なのに対しバッジは全名前空間を許すため full id を要求する非対称を文言で補う）。
 
 **i18n（`src/i18n.ts` 追加・AC6）**: バッジ設定/セレクタの `displayName`・説明・読み取り専用注記を `Messages` に追加し en/ja 両方で定義する（`i18n.test.ts` が欠けを検出）。
 

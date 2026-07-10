@@ -199,7 +199,7 @@ const JA: Messages = {
     languageAuto: "自動",
     cardBadgePropertiesName: "カードに表示するプロパティ",
     cardBadgePropertiesDesc:
-      "カードにバッジ表示する追加プロパティ（最大 3 個）。読み取り専用のため、軸（書き戻し）と違い formula.* / file.* も選べます（表示のみ・書き換えません）。ビュー未設定時のデフォルト。",
+      "カードにバッジ表示する追加プロパティを完全な propertyId（例: note.due）でカンマ区切り入力（最大 3 個）。読み取り専用のため、軸（書き戻し）と違い formula.* / file.* も選べます（表示のみ・書き換えません）。ビュー未設定時のデフォルト。",
     emphasizePastDatesName: "期日を強調",
     emphasizePastDatesDesc:
       "厳格な ISO 日付（YYYY-MM-DD）が今日以前のバッジをアクセント色で強調します。",
@@ -278,7 +278,7 @@ const EN: Messages = {
     languageAuto: "Auto",
     cardBadgePropertiesName: "Properties to show on cards",
     cardBadgePropertiesDesc:
-      "Extra properties shown as card badges (up to 3). These are read-only, so unlike the axes (write-back) you may also pick formula.* / file.* (display only; never written). Default when the view has none set.",
+      "Extra properties shown as card badges — enter full property IDs (e.g. note.due), comma-separated (up to 3). These are read-only, so unlike the axes (write-back) you may also pick formula.* / file.* (display only; never written). Default when the view has none set.",
     emphasizePastDatesName: "Emphasize due dates",
     emphasizePastDatesDesc:
       "Accent badges whose strict ISO date (YYYY-MM-DD) is today or earlier.",

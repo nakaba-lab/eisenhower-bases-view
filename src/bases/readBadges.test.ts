@@ -165,6 +165,23 @@ describe("readBadges — Value→表示文字列の正規化と境界防御（AC
     expect(badges.every((b) => b.text === "")).toBe(true);
   });
 
+  it("readBadges — Value.toString() が throw しても空表示へ退避（境界防御を getValue の外＝正規化まで及ぼす・AC2）", () => {
+    // given: getValue は成功するが toString() が throw する Value（churn した Bases の未知型を模す）
+    const badValue = {
+      toString() {
+        throw new Error("toString boom");
+      },
+      isTruthy() {
+        return false;
+      },
+    } as unknown as Value;
+    const entry = mockEntry({ "note.x": badValue });
+    // when / then: 正規化（toString）まで境界で握り、ビューを壊さず空表示にする
+    const badges = readBadges(entry, ["note.x"] as BasesPropertyId[], READ_OPTS);
+    expect(badges).toHaveLength(1);
+    expect(badges[0].text).toBe("");
+  });
+
   it("readBadges — ids が空なら空配列（表示 0 個・AC3）", () => {
     expect(readBadges(mockEntry({}), [], READ_OPTS)).toEqual([]);
   });

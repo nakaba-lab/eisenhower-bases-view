@@ -96,25 +96,20 @@ export function resolveBadgePropertyIds(
 }
 
 /**
- * 1 バッジの Value を表示文字列へ正規化する。`null`・absent（`NullValue`）は空文字へ退避し
- * （`NullValue.toString()` は文字列 "null" を返すため型で弾く）、それ以外は `toString()` で文字列化する
- * （型別分岐は最小限＝churn 耐性）。
+ * 1 バッジの値を読み、表示文字列へ正規化する（`readAxis.readAxisValueSafely` と対称の境界防御）。
+ *
+ * **`getValue` だけでなく正規化の `toString()` まで**同じ try/catch で包む（churn した Bases の未知型で
+ * `toString()` が throw しても、`readBadges.map`→`toViewModel`→`onDataUpdated` へ伝播してビュー全体を
+ * 壊さないよう空文字へ退避する＝AC2）。`null`・absent（`NullValue`）は空文字（`NullValue.toString()` は
+ * 文字列 "null" を返すため型で弾く）、それ以外は `toString()` で文字列化する（型別分岐は最小限＝churn 耐性）。
  */
-function normalizeBadgeText(value: Value | null): string {
-  if (value == null) return "";
-  if (value instanceof NullValue) return "";
-  return value.toString();
-}
-
-/**
- * `entry.getValue(id)` を **throw させない**境界防御でくるむ（`readAxis.readAxisValueSafely` と対称）。
- * 1 バッジの読み取り例外がビュー全体の再描画を壊さないよう握り、空表示へ退避する（AC2）。
- */
-function readBadgeValueSafely(entry: BasesEntry, id: BasesPropertyId): Value | null {
+function readBadgeText(entry: BasesEntry, id: BasesPropertyId): string {
   try {
-    return entry.getValue(id);
+    const value: Value | null = entry.getValue(id);
+    if (value == null || value instanceof NullValue) return "";
+    return value.toString();
   } catch {
-    return null;
+    return "";
   }
 }
 
@@ -129,7 +124,7 @@ export function readBadges(
   options: ReadBadgesOptions,
 ): Badge[] {
   return ids.map((id) => {
-    const text = normalizeBadgeText(readBadgeValueSafely(entry, id));
+    const text = readBadgeText(entry, id);
     const badge: Badge = { label: badgeLabel(id), text };
     if (options.emphasizePastDates && isEmphasizedDate(text, options.today)) {
       badge.emphasized = true;

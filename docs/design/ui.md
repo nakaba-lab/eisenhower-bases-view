@@ -2,7 +2,7 @@
 title: UI 設計
 area: ui
 status: active
-relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44, 103, 104, 106]
+relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44, 103, 104, 105, 106]
 updated: 2026-07-10
 kind: ui
 ---
@@ -323,6 +323,65 @@ interface EisenhowerSettings {
 **テスト方針**: 単体で ① `toViewModel` が `badges` を解決（2 個設定→2 件・0 個→空・例外/absent→空退避＝`toViewModel.test.ts`）、② `NoteCard` がバッジをタイトル下に描画・強調バッジのアクセント・空バッジ非描画（`NoteCard.test.tsx`）、③ `buildBadgeViewOptions` のキー/型/全プロパティ許可（`viewOptions.test.ts`）、④ `isEmphasizedDate` の厳格 ISO×今日以前（`dateEmphasis.test.ts`）、⑤ `readBadges` の正規化・境界防御（`readBadges.test.ts`）、⑥ i18n 欠け検出（`i18n.test.ts`）を赤→緑で固める。実描画のコントラスト・レスポンシブ・SR は Green 後に `frontend-reviewer`＋スクショで担保した。
 
 **スクリーンショット（frontend-reviewer 確認済み・#104）**: `scripts/preview`（`?badges=1`）でブラウザ描画して取得＝`docs/screenshots/104-badges-{desktop-light,mobile-light,desktop-dark}-after.png`（過期日 `2026-07-01` の強調＋未来日/プロジェクト/タグの弱色バッジ・空値バッジは非描画）・`104-matrix-desktop-light-before.png`（バッジ 0 個の基線＝タイトルのみ・AC3）。frontend-reviewer の must（強調バッジの AA）を `--text-accent` 化で解消し、should（色のみ強調＝1.4.1／空ラベルバッジ）を semibold・空値非描画で反映済み。
+
+### カード上の完了トグル（#105 F10・実装前 draft）
+
+> **status: draft（#105 実装前設計・人間承認済み・実装完了後の「ドキュメント更新」タスクで `status: active` に確定）**。完了プロパティ解決・単一キー書き戻し・undo 一般化・3 キー衝突ガード・非 boolean ガードの機構は `bases.md` の同名節が正。本節は UI／操作／a11y／レイアウトを扱う。
+
+Do のタスクを終えたとき、カード上のチェック 1 つで完了プロパティ（boolean の `note.*`・既定は空＝opt-in・例 `done`）へ `done: true` を書く。完了ノートを消す/残すは**自前フィルタせず Bases に委譲**する（Base 側に `done != true` を張れば書込→再クエリ→`onDataUpdated` でカードが自然に消える＝README 推奨フィルタ）。フィルタを張らない利用者向けに「完了ノートを淡色表示」オプションのみ持つ。
+
+**チェックボタンの配置（採択案＝末尾アイコンボタン・2 案比較で選択・人間承認済み）**: タイトル行の右端・滞留バッジの隣にチェックアイコンを置き、**hover/focus で出現**する（完了時は常時可視＋カード淡色）。既存の右側アフォーダンス（滞留バッジ）と群化しレイアウトが安定する。**却下: 先頭チェックボックス（タイトル左・常時可視）** — 全カードに常時チェックが出て密度が増し（F8 の「カード密度は現状維持」ethos と競合）、先頭の対話要素がドラッグ開始と干渉して `stopPropagation` 依存が増える。
+
+```
+通常（完了プロパティ設定あり・未完了）:
++-----------------------------------------------+
+| ノートのタイトル ........... 🕐21d      [ ✓ ] |   ← hover/focus で ✓ 出現・右寄せ
+|   due: 2026-07-15                              |
++-----------------------------------------------+
+
+完了（done:true・淡色表示オプション on）:
++-----------------------------------------------+
+| ノートのタイトル ........... 🕐21d      [ ☑ ] |   ← ☑ 常時可視・カードは弱色トークンで淡色
++-----------------------------------------------+
+```
+
+**状態遷移（トグルは双方向・`delete` しない＝AC4）**:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unchecked: done 未定義 / done:false
+    Unchecked --> Done: クリック / x キー → done:true 書き込み
+    Done --> Unchecked: クリック / x キー → done:false 書き込み（明示・delete しない）
+    Done --> [*]: Base に done!=true フィルタ → 再クエリで消える
+    note right of Done
+      淡色表示 on: カード淡色 ＋ ☑ 常時可視
+      非 boolean done（日付型）: ボタン無効 ＋ Notice（元値を破壊しない＝AC2）
+    end note
+```
+
+**キーボード / a11y（フロア＝キーボードパリティ）**:
+- チェックボタンは本物の `<button>`。**hover だけでなく focus 時にも可視**（`:focus-within` / ボタンの `:focus-visible`）にしてキーボード利用者に露出する（#84 が明示した a11y 要件）。`aria-label` は状態別 i18n（未完了「完了にする」／完了「未完了に戻す」）。押下結果は既存 `.eisenhower-matrix__sr-status`（`role="status" aria-live="polite"`）で SR にアナウンス（`completionSucceeded`／失敗は `completionFailed`）。
+- **`x` キー**（カードにフォーカス中）でトグルを発火する。既存キー割当（**Space=掴む／Enter=開く**）と**非衝突**（`NoteCard.handleKeyDown` に `x` 分岐を追加し、**非ドラッグ中のみ**発火。ロックカードの `handleLockedKeyDown` にも足す）。
+- ボタンの `onClick`／`onPointerDown`／`onKeyDown` は **click-to-open と `PointerSensor(distance:5)` に対し `stopPropagation`** してカードの「開く／掴む」と衝突させない（AC5）。フォーカスリングは明示 `outline: 2px solid var(--interactive-accent)`（`UndoToast`／`NoteCard` と同方針）。
+- 淡色は**カード全体 `opacity` ではなくテーマ弱色トークンで色だけ落とす**（#34／#103 の locked と同じ理由＝`opacity` では可視テキストの実効コントラストが AA を割る）。
+
+**非 boolean done のガード表示**: 完了プロパティに非 boolean 値（`completed: 2026-07-06` 等）を持つカードは、チェックボタンを**無効化**して押下時に破壊しない（`bases.md` の `isUnsupportedAxisValue` 流用・per-card 判定＝`entry.completionUnsupported`）。既存の軸 `locked`（ドラッグ不可）とは別軸（完了はトグル不可）。
+
+**設定タブ行の追加（`▸ 表示` 区分）**:
+
+```
+▸ 表示
+  欠損ノートを未分類に表示   [ ●── ON ]
+  滞留とみなす日数（0=オフ） [ 14 ]
+  完了プロパティ（空=無効）  [ done ]        ← #105。boolean note.* のみ。placeholder "done"
+  完了ノートを淡色表示       [ ──○ OFF ]     ← #105。Base に done!=true を張らない人向け
+```
+
+**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle`／`completionToggleDone`＝「完了にする」/「未完了に戻す」）・押下結果アナウンス（`completionSucceeded(title)`／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・軸同一キー弾き（`completionSharesAxis`・診断バナー流用）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。
+
+**ViewModel 追加（契約の正は `bases.md`）**: `MatrixEntry.completed?`（`done:true`＝淡色＋☑ 状態）・`MatrixEntry.completionUnsupported?`（非 boolean done＝ボタン無効）、`MatrixViewModel.completionEnabled?`（完了プロパティが有効に解決＝チェックボタンを描画）・`dimCompleted?`（淡色オプション）。`MatrixCallbacks.onToggleCompletion?(entryId, done)`。
+
+**スクリーンショット（実装後・ビジュアル/UX 確認タスクで保存）**: `docs/screenshots/105-completion-{desktop,mobile}-{light,dark}-{before,after}.png`（未完了 hover/focus・完了淡色・非 boolean 無効・en）を `frontend-reviewer` が確認する。
 
 ### undo（直前1手の元に戻す・最小実装）
 

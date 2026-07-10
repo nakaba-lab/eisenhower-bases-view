@@ -9,6 +9,11 @@ type DivProps = ComponentProps<"div">;
 type DivMouseEvent = Parameters<NonNullable<DivProps["onClick"]>>[0];
 type DivKeyboardEvent = Parameters<NonNullable<DivProps["onKeyDown"]>>[0];
 
+/** カードフォーカス中に完了トグルを起動するキー（`x`/`X`＝CapsLock/Shift の大文字も受け大小無反応の silent no-op を避ける・#105 F10）。 */
+function isCompletionToggleKey(event: DivKeyboardEvent): boolean {
+  return event.key === "x" || event.key === "X";
+}
+
 /**
  * 1 ノートのカード。dnd-kit の `useDraggable` でドラッグ可能にする（#20 F3）。
  *
@@ -190,9 +195,11 @@ export function NoteCard({
     />
   ) : null;
   // 完了カードは --completed（CSS が ☑ を常時可視にする）、淡色オプション on なら --dimmed（弱色トークン）。
+  // 両クラスの共通条件（完了かつボタン表示中）を一度で組む。
+  const completedVisible = completed && showCompletion;
   const completionClass =
-    (completed && showCompletion ? " eisenhower-note-card--completed" : "") +
-    (completed && showCompletion && dimCompleted ? " eisenhower-note-card--dimmed" : "");
+    (completedVisible ? " eisenhower-note-card--completed" : "") +
+    (completedVisible && dimCompleted ? " eisenhower-note-card--dimmed" : "");
   // 滞留バッジ（#106）: 滞留カードにのみ時計＋経過日数を控えめ（--text-muted）に付ける。
   // 時計は装飾（aria-hidden）で、バッジ全体に aria-label を付けて経過日数を SR に読み上げる。
   const stagnantDays = stagnantDaysOf(entry);
@@ -256,8 +263,7 @@ export function NoteCard({
       return;
     }
     // x キーで完了トグル（#105 F10）。Space=掴む/Enter=開く と非衝突（掴み中は発火しない）。
-    // CapsLock/Shift の "X" も受ける（大小無反応の silent no-op を避ける・frontend-reviewer nit）。
-    if ((event.key === "x" || event.key === "X") && showCompletion && !isDragging) {
+    if (isCompletionToggleKey(event) && showCompletion && !isDragging) {
       event.preventDefault();
       toggleCompletion();
       return;
@@ -268,8 +274,8 @@ export function NoteCard({
   // role=button の標準操作（Enter/Space で活性化）に揃え、preventDefault で Space によるペインのスクロールを
   // 防ぐ（Space が無反応かつスクロールする壊れた挙動の是正・レビュー指摘）。
   const handleLockedKeyDown = (event: DivKeyboardEvent) => {
-    // x キーで完了トグル（軸ロックでも完了プロパティが有効なら切り替えられる・#105 F10）。CapsLock/Shift も受ける。
-    if ((event.key === "x" || event.key === "X") && showCompletion) {
+    // x キーで完了トグル（軸ロックでも完了プロパティが有効なら切り替えられる・#105 F10）。
+    if (isCompletionToggleKey(event) && showCompletion) {
       event.preventDefault();
       toggleCompletion();
       return;

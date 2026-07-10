@@ -12,6 +12,8 @@ kind: api
 > Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項」に接地する。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。** **#33 で absent 判定を `toString()===null`（スパイク #16 の誤観測）から `instanceof NullValue`（型同一性）へ是正した（実機 `scripts/e2e` プローブで確定）。** **#21（F4）で軸プロパティ設定 UI（ビュー options＝主・プラグイン設定＝デフォルトのハイブリッド）を本領域に積み増した: `registerBasesView` の `options` に `note.*` のみ選択可の軸プロパティセレクタを 2 つ宣言し、選択時（`filter`）・読み取り時・書き戻し時の 3 面で「書き戻せる `note.*` 軸」を単一述語 `isWritableAxisProperty` で判定する。** **#22（F5）でカード操作（開く/新タブ/プレビュー）を本領域に積み増した: `MatrixCallbacks` に `onOpenCard`/`onHoverCard` を追加し、アダプタが `workspace.getLeaf(...).openFile` と `workspace.trigger("hover-link", …)` を実装する（UI は修飾キー→`newLeaf` の plain データを渡すだけ＝AC5 維持。UI 側の相互作用設計は `ui.md`）。** **#34（fix）で軸値正規化を v1 の boolean 軸限定まで狭めた: `note.*` 接頭辞ガード（書き戻し可能性）に加え、値の型が `BooleanValue` の軸だけを 4 象限に分類し、非 boolean（数値 `NumberValue`／文字列 `StringValue` 等）や absent（`NullValue`）は未分類へ退避する（正の許可リスト `instanceof BooleanValue`）。これで非 boolean `note.*` 軸が 4 象限へ自動配置されてドラッグ露出する（無操作で上書き可能になる）経路を断つ。未分類からの手動ドラッグ書き戻しの無効化（書き戻し側の boolean ガード）は F4/#21 の範囲として残す（読み取り側のみ boolean に狭めた非対称）。**
 >
 > **#104（F8 カード追加プロパティ表示）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示する。書き戻し軸（`note.*` 限定）と違い**別サーフェス（読み取り専用）**のため `formula.*`／`file.*` も選択可。境界契約 `MatrixEntry.badges`（`{ label; text; emphasized? }[]` の plain データ＝`readBadges.ts` の `Badge`）を追加し、アダプタ（`toViewModel`）が `entry.getValue` で読み Value→表示文字列へ正規化して載せ、`NoteCard` が控えめに描画する（UI は Bases 非依存を維持＝AC5）。値の正規化・例外退避は軸読み取り（`readAxisValueSafely`）と**同型の境界防御を `readBadges.ts` に独立して**敷く（`readAxis` とは共有しない＝軸/バッジのサーフェスを結合させない）。日付強調（AC4）は純ロジック `isEmphasizedDate(text, today)`（`src/logic/dateEmphasis.ts`）で判定し、`today`（ローカル日付 ISO）はアダプタ `EisenhowerBasesView.todayIso()` が注入する（`Date.now()` を純ロジックに持ち込まない）。**選択 UI は独自セレクタ方式（案 a）を採用**（下記「主要な設計判断」に案 b＝Bases ネイティブ Properties の却下理由）。
+>
+> **#105（F10 カード上の完了トグル）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: 完了は **boolean 単一プロパティ書き戻し**で v1 の boolean 軸限定制約と同じ型面に収まり、既存の書き戻し（`writeCompletion`）・locked 機構・境界防御を流用する。**undo 記録を 2 軸固定形からキーリスト形（`UndoRecord.entries[]`）へ一般化**（設計オプション比較で本 Issue 内実施に決定・基盤 Issue を切り出さない）＝ドラッグ書き戻し＝2 要素・完了トグル＝1 要素が同じ「直前 1 手」機構を共有する（挙動不変の内部リファクタ）。3 キー衝突ガードは `axesShareWritableKey` を N キー版 `firstSharedWritableKey` へ一般化。完了ノートの表示/非表示は **Bases 委譲**（`done != true` フィルタ）で自前フィルタしない。詳細は下記「カード上の完了トグル」節。
 
 Obsidian Bases のカスタムビューとして Eisenhower マトリクスを登録し、Bases API（`registerBasesView`／`BasesView`／`QueryController`／`BasesEntry.getValue`／ビュー設定）への接触を 1 領域に集約する。各エントリを **Bases 非依存の ViewModel** に変換して UI（`src/ui`）へ渡し、UI・純ロジック（`src/logic`）が Bases 型へ直接依存しないようにする（疎結合化＝AC5）。
 
@@ -173,9 +175,9 @@ sequenceDiagram
   - **バッジの SR 読み上げは「ラベル＋値」（AC・人間承認済み）**: カードのアクセシブル名はノート名（title）を保ち、バッジはその後に**補足として読み上げる**（`aria-hidden` にしない）。Do↔Schedule 判断材料（期日）を SR 利用者にも届ける。UI 詳細（描画・コントラスト・レスポンシブ）は `ui.md`。
   - **新規/変更モジュール（#104）**: `viewOptions.ts`（`buildBadgeViewOptions` 追加）・`readAxis.ts` 隣に `readBadges.ts`（バッジ解決・読み取り・正規化。`readBadgeValueSafely` の境界防御）・`toViewModel.ts`（`badges` 算出を載せる）・`src/logic/`（`isEmphasizedDate` 純関数）・`settings.ts`（`cardBadgeProperties: string[]`・`emphasizePastDates: boolean` を追加＋`mergeSettings` の既定補完）・`i18n.ts`（バッジ設定/セレクタ文言を en/ja に追加）・`types.ts`（`MatrixEntry.badges` 契約）。
 
-## カード上の完了トグル（#105 F10・実装前 draft）
+## カード上の完了トグル（#105 F10・`status: active`）
 
-> **status: draft（#105 実装前設計・人間承認済み・実装後の「ドキュメント更新」タスクで `active` 確定）**。UI／操作／a11y は `ui.md` の同名節が正。本節は完了プロパティ解決・単一キー書き戻し・undo 一般化・衝突/非 boolean ガード・Bases 委譲を扱う。
+> **#105 を実装し `status: active` に確定した（2026-07-10・人間承認済み）**。UI／操作／a11y は `ui.md` の同名節が正。本節は完了プロパティ解決・単一キー書き戻し・undo 一般化・衝突/非 boolean ガード・Bases 委譲を扱う。**実装で確定した点**: 非 boolean ガードは 2 面で二重化する — 読み取り側は `readCompletionState`（`isUnsupportedAxisValue` 流用で `completionUnsupported` を UI に伝えボタンを disabled 化）、**書き込み側は `writeCompletion` が `processFrontMatter` 内で生値の `typeof !== "boolean"` を確認して上書きせず Notice**（UI disabled と独立した最後の砦・元値破壊を断つ）。
 
 Do のライフサイクル（分類→着手→完了）をビュー内で閉じる。完了は **boolean 単一プロパティ書き込み**で v1 の「boolean 軸限定」制約と同じ型面に収まり、既存の書き戻し（`writeBackAxes`）・locked 機構・境界防御をそのまま流用する。
 

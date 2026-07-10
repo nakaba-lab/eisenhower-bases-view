@@ -130,6 +130,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
         this.config,
         this.getSettings(),
         this.getMessages(),
+        Date.now(),
         todayIso(),
       ),
       this.callbacks,

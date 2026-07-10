@@ -89,6 +89,10 @@ export interface Messages {
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
   cardLockedLabel: (title: string) => string;
+  /** 滞留カードの経過日数バッジ本文（例 英 "21d"／日 "21日"・#106）。 */
+  stagnantBadge: (days: number) => string;
+  /** 滞留バッジの aria-label（SR 読み上げ・経過日数を含む・#106）。 */
+  stagnantLabel: (days: number) => string;
   /** アダプタ層 Notice: 対象ファイルが見つからず移動できない。 */
   fileNotFoundForMove: string;
   /** アダプタ層 Notice: 対象ファイルが見つからず開けない。 */
@@ -122,6 +126,10 @@ export interface SettingsMessages {
   quadrantHeading: string;
   quadrantRowDesc: string;
   resetTooltip: string;
+  /** 滞留しきい値（日数）設定の名前（#106）。 */
+  stagnationName: string;
+  /** 滞留しきい値設定の説明（mtime 近似の明示を含む・#106）。 */
+  stagnationDesc: string;
   languageHeading: string;
   languageName: string;
   languageDesc: string;
@@ -185,6 +193,8 @@ const JA: Messages = {
     `緊急度: ${urgentAxis} ／ 重要度: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
   cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
+  stagnantBadge: (days) => `${days}日`,
+  stagnantLabel: (days) => `滞留: ${days}日更新なし`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
   fileNotFoundForOpen: "対象ファイルが見つからないため開けません。",
   axisNotWritable:
@@ -201,6 +211,9 @@ const JA: Messages = {
     displayHeading: "表示",
     showUnclassifiedName: "欠損ノートを未分類に表示",
     showUnclassifiedDesc: "軸プロパティを持たないノートを未分類ゾーンに表示する。",
+    stagnationName: "滞留とみなす日数",
+    stagnationDesc:
+      "最終更新からこの日数を超えたカードに滞留マークを付ける（0 で無効）。編集だけでなく Linter・Templater・同期などの自動処理でも更新日時はリセットされる点に注意。",
     quadrantHeading: "象限ラベル・色",
     quadrantRowDesc: "象限のラベルとアクセント色（色未設定時はテーマのアクセント色を使用）。",
     resetTooltip: "既定に戻す（ラベル・色）",
@@ -267,6 +280,8 @@ const EN: Messages = {
     `Urgency: ${urgentAxis} · Importance: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
+  stagnantBadge: (days) => `${days}d`,
+  stagnantLabel: (days) => `Stale: not updated for ${days} days`,
   fileNotFoundForMove: "Target file not found; cannot move.",
   fileNotFoundForOpen: "Target file not found; cannot open.",
   axisNotWritable:
@@ -283,6 +298,9 @@ const EN: Messages = {
     displayHeading: "Display",
     showUnclassifiedName: "Show notes with missing axes as unclassified",
     showUnclassifiedDesc: "Show notes without axis properties in the unclassified zone.",
+    stagnationName: "Days until stale",
+    stagnationDesc:
+      "Mark cards not updated for more than this many days (0 disables). Note that automated processes (Linter, Templater, sync) also reset the modified time, not just manual edits.",
     quadrantHeading: "Quadrant labels & colors",
     quadrantRowDesc:
       "Label and accent color for the quadrant (uses the theme accent color when unset).",

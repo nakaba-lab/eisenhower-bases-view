@@ -500,6 +500,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               regionLabel={messages.labelWithAxis(quadrantLabels[key], messages.axisLabels[key])}
               itemCountLabel={messages.itemCount}
               lockedLabel={messages.cardLockedLabel}
+              stagnantBadge={messages.stagnantBadge}
+              stagnantLabel={messages.stagnantLabel}
               accentColor={quadrantColors?.[key]}
               entries={placements[key]}
               emptyText={messages.emptyQuadrant}
@@ -532,6 +534,8 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             )}
             itemCountLabel={messages.itemCount}
             lockedLabel={messages.cardLockedLabel}
+            stagnantBadge={messages.stagnantBadge}
+            stagnantLabel={messages.stagnantLabel}
             entries={placements.unclassified}
             emptyText={messages.emptyQuadrant}
             variant="unclassified"
@@ -587,7 +591,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         <DragOverlay modifiers={[compensatePortalOrigin]}>
           {activeId ? (
             <div class="eisenhower-note-card eisenhower-note-card--overlay">
-              {titleOf(activeId)}
+              <span class="eisenhower-note-card__title">{titleOf(activeId)}</span>
             </div>
           ) : null}
         </DragOverlay>,

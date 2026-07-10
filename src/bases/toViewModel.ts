@@ -12,12 +12,31 @@ import {
 } from "./readAxis";
 import { readBadges, resolveBadgePropertyIds } from "./readBadges";
 import { resolvePresentation } from "./presentation";
+import { resolveStagnationThresholdDays } from "./stagnationThreshold";
+import { evaluateStagnation } from "../logic/stagnation";
 import type {
   MatrixDiagnostics,
   MatrixEntry,
   MatrixViewModel,
   QuadrantPlacements,
 } from "./types";
+
+/**
+ * `toViewModel` が受け取る config の最小形（軸解決 `getAsPropertyId` + 滞留しきい値解決 `get`）。
+ * `get` は任意（既存呼び出し・軸のみの config／テストモックが `getAsPropertyId` だけでも通る）。
+ */
+type ViewConfigLike = Pick<BasesViewConfig, "getAsPropertyId"> &
+  Partial<Pick<BasesViewConfig, "get">>;
+
+/**
+ * `entry.file.stat.mtime`（`TFile.stat.mtime`＝スパイク #16 で確定した安定コア API）を読む。
+ * Bases 境界から `file`/`stat` 欠落・非数値が来ても throw せず `undefined`（滞留判定なし）へ倒す
+ *（`isPlaceableNote` と同じ churn 耐性の境界防御）。
+ */
+function readMtime(entry: BasesEntry): number | undefined {
+  const mtime = entry?.file?.stat?.mtime;
+  return typeof mtime === "number" && Number.isFinite(mtime) ? mtime : undefined;
+}
 
 /**
  * Bases の entries を Bases 非依存の {@link MatrixViewModel} へ変換する純関数。
@@ -71,11 +90,15 @@ function isPlaceableNote(entry: BasesEntry): boolean {
 
 export function toViewModel(
   entries: readonly BasesEntry[] | undefined | null,
-  config?: Pick<BasesViewConfig, "getAsPropertyId"> | null,
+  config?: ViewConfigLike | null,
   settings: EisenhowerSettings = DEFAULT_SETTINGS,
   // messages 省略時は英語へフォールバックする（resolveLanguage の最終フォールバックが en＝
   // i18n の既定言語。実機ではアダプタが解決済みメッセージを常に渡す・レビュー指摘）。
   messages: Messages = messagesFor("en"),
+  // 滞留判定の「今日」（epoch ms）。テストは固定値を注入、実機はデフォルト `Date.now()`（#106 F9）。
+  // 再計算は toViewModel 実行時のみ（開きっぱなしで日付境界を跨いでも次の再描画まで更新されない
+  // ＝日単位粒度の割り切り。設計は docs/design/bases.md「滞留インジケータ」節）。
+  now: number = Date.now(),
   // 今日の日付（ISO YYYY-MM-DD）。バッジの日付強調（#104 F8・AC4）に使う。アダプタが注入する
   // （Date.now() 非依存で純度維持）。省略時は空＝日付強調しない（安全側）。
   today: string = "",
@@ -105,6 +128,9 @@ export function toViewModel(
   const sameAxisKey = diagnostics.axesShareWritableKey;
   // カード追加プロパティ表示（#104 F8）: 表示するバッジプロパティを解決する（既定 0 個＝現状維持）。
   const badgeIds = resolveBadgePropertyIds(config, settings);
+  // 滞留しきい値を解決する（ビュー options 主・設定既定フォールバック＝ハイブリッド・#106 F9）。
+  // 全カードで共通のため map の外で 1 度だけ解決する（0 は機能オフ）。
+  const stagnationThresholdDays = resolveStagnationThresholdDays(config, settings);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
     const axis = readAxisValues(entry, ids);
@@ -118,7 +144,17 @@ export function toViewModel(
     // 書込可能 note.* 軸に非 boolean 値を持つカード、または両軸が同一キー設定のカードは、ドロップの
     // 両軸 true/false 上書きが破壊/必ず失敗になるためドラッグ不可にする（UI が印を付ける）。
     if (sameAxisKey || hasUnsupportedAxisValue(entry, ids)) matrixEntry.locked = true;
-    // バッジは表示プロパティが 1 つ以上あるときだけ載せる（0 個は undefined＝現状維持・AC3）。
+    // 滞留判定（#106 F9・読み取り専用）: mtime が読め、しきい値超過なら滞留フラグと経過日数を載せる。
+    // 非滞留・mtime 欠落は付けない（`locked?` と同じ optional 流儀）。
+    const mtime = readMtime(entry);
+    if (mtime !== undefined) {
+      const stagnation = evaluateStagnation(mtime, now, stagnationThresholdDays);
+      if (stagnation.stagnant) {
+        matrixEntry.stagnant = true;
+        matrixEntry.stagnantDays = stagnation.days;
+      }
+    }
+    // バッジは表示プロパティが 1 つ以上あるときだけ載せる（0 個は undefined＝現状維持・#104 F8・AC3）。
     if (badgeIds.length > 0) {
       matrixEntry.badges = readBadges(entry, badgeIds, {
         today,

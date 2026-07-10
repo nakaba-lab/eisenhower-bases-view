@@ -2,7 +2,7 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104]
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 106]
 updated: 2026-07-10
 kind: api
 ---
@@ -172,6 +172,50 @@ sequenceDiagram
   - **日付強調は純ロジックに隔離（`src/logic`・AC4）**: 「厳格 ISO（`YYYY-MM-DD`）かつ今日以前」を純関数 `isEmphasizedDate(text, today)`（`today` は ISO 文字列で注入＝`Date.now()` 非依存で単体テスト可能）で判定し、`toString()`／ロケール依存の緩いパースはしない。**Bases の filter/formula の再実装には踏み込まない**（将来これを条件付き書式 DSL に育てない＝v1 は厳格 ISO 判定 1 種のみ。線引きを設計書に固定）。強調トグル（`emphasizePastDates`）は**既定オフ**。
   - **バッジの SR 読み上げは「ラベル＋値」（AC・人間承認済み）**: カードのアクセシブル名はノート名（title）を保ち、バッジはその後に**補足として読み上げる**（`aria-hidden` にしない）。Do↔Schedule 判断材料（期日）を SR 利用者にも届ける。UI 詳細（描画・コントラスト・レスポンシブ）は `ui.md`。
   - **新規/変更モジュール（#104）**: `viewOptions.ts`（`buildBadgeViewOptions` 追加）・`readAxis.ts` 隣に `readBadges.ts`（バッジ解決・読み取り・正規化。`readBadgeValueSafely` の境界防御）・`toViewModel.ts`（`badges` 算出を載せる）・`src/logic/`（`isEmphasizedDate` 純関数）・`settings.ts`（`cardBadgeProperties: string[]`・`emphasizePastDates: boolean` を追加＋`mergeSettings` の既定補完）・`i18n.ts`（バッジ設定/セレクタ文言を en/ja に追加）・`types.ts`（`MatrixEntry.badges` 契約）。
+
+## 滞留インジケータ（mtime ヒューリスティック・#106 F9）
+
+> #106 で実装した現状を反映（`status: active`）。着手前の設計合意（設計オプション比較・人間承認）を実装の現状に合わせて確定した。
+
+Schedule / Delegate は「置いたきり忘れる」象限で、古いカードの沈殿がマトリクス運用崩壊の典型。全カードが同じ見た目だと「どれを見直すべきか」の手がかりが無いため、**最終更新から N 日を超えたカードに控えめな滞留マーク**（時計 + 経過日数バッジ）を付ける。読み取り専用ヒューリスティックで、**書き込みゼロ・ネットワークゼロ**（v1 の「boolean のみ書く」原則を守り、分類日時のタイムスタンプ書き戻しはしない）。
+
+### 責務分担（純ロジック / アダプタ / UI）
+
+- **純ロジック（`src/logic/stagnation.ts`・新規・単体 TDD 対象）**: 「今日 − mtime」から滞留の有無と経過日数を求める純関数。Obsidian 非依存で `now` を注入する。
+
+  ```ts
+  export interface StagnationResult {
+    /** しきい値超過で滞留とみなすか（thresholdDays<=0 のときは常に false）。 */
+    stagnant: boolean;
+    /** 経過日数（Math.floor((now - mtime) / 1 日)）。バッジ表示に使う。 */
+    days: number;
+  }
+  // 境界: stagnant = thresholdDays > 0 && days > thresholdDays（超過のみ滞留＝ちょうど N 日はセーフ）。
+  export function evaluateStagnation(
+    mtime: number, now: number, thresholdDays: number,
+  ): StagnationResult;
+  ```
+
+- **アダプタ（`toViewModel` / `readAxis` 近傍）**: `entry.file.stat.mtime`（`TFile.stat.mtime`＝スパイク #16 で確定した安定コア API）を読み、`resolveStagnationThresholdDays(config, settings)` で解決したしきい値と注入した `now` で `evaluateStagnation` を呼び、結果を `MatrixEntry.stagnant` / `MatrixEntry.stagnantDays`（**滞留時のみ設定**＝`locked?` と同じ optional 流儀）に載せる。`entry.file`/`stat` 欠落は境界防御（`isPlaceableNote` と同流儀）で滞留なし（false）へ倒す。
+- **UI（`NoteCard`）**: `stagnant` のカードにのみ時計 + 経過日数バッジを `--text-muted` で描画する（レイアウトは `ui.md`）。
+
+### しきい値の解決（ビュー options 主 + グローバル既定＝ハイブリッド・#106 で選択）
+
+軸プロパティ（F4/#21）と同じ**ハイブリッド**を採る（`resolveStagnationThresholdDays`・`src/bases/stagnationThreshold.ts`）: ビュー設定（`config.get(STAGNATION_OPTION_KEY)`）を主とし、未設定・不正ならプラグイン設定 `stagnationThresholdDays`（既定 14）にフォールバックする。Base ごとに性質が違う（例: Someday 用の Base はしきい値を長く）ため Base 単位で上書きできる設計。`config.get` は軸解決の `getAsPropertyId` と並ぶ churn 対象の接触点のため、`safeGetOption`（try/catch）で throw を境界退避し、ビュー全体の再描画を壊さず設定既定へ倒す。options 値は「有限・0 以上・floor」に正規化し（`toThresholdDays`。負・非数値は null＝フォールバック要求）、`0` は機能オフ（滞留判定を常に false）。
+
+> **v1 の実装状況（Configure view の UI コントロールは未提供）**: 解決ロジックはビュー設定値を主に読むが、**しきい値を Configure view から編集する専用 UI コントロール（数値/slider オプション）は `buildAxisViewOptions` に未登録**。したがって v1 の主動線は**設定タブのグローバル値**で、Base 単位の上書きは `.base` の view config に本キーを手で置いたときに効く。GUI コントロールの登録は Bases options round-trip の実機スパイク（CLAUDE.md「着手前スパイク必須」の Bases UI 方針）を経てから別 Issue で行う。`resolveStagnationThresholdDays` は当該オプション登録時に無改修で GUI 値を主に採れる前方互換にしてある。
+
+### 再計算タイミング（`toViewModel` 実行時のみ・#106 で選択）
+
+滞留判定は **`toViewModel` 実行時にのみ**再計算する（`now` はアダプタが実行時に注入）。ビューを開きっぱなしのまま日付境界を跨いでもバッジは次の `onDataUpdated`／再描画まで更新されない。**日単位粒度のため実害は小さい**と判断し、日次タイマー（`setInterval`＋`onunload` クリーンアップ）は持たない（複雑さとライフサイクル管理の増加を避ける）。この制約は既知の割り切りとして本節に明記する。
+
+### mtime 近似の明示（#106 論点①）
+
+mtime は「分類した日」ではなく「最後に**更新**された日」の近似で、Linter / Templater / 同期などの**自動処理でも滞留がリセット**される。設定タブの説明文と README で「編集」だけでなく「自動処理でも更新される」旨を明示する。ドラッグ再分類も mtime を更新するが「触った＝レビュー済み」として妥当。
+
+### テスト方針（TDD 対象）
+
+単体（`npm test`）で ① `evaluateStagnation` の 超過/境界ちょうど/しきい値0オフ/経過日数（`now` 注入のテーブル駆動）、② `toViewModel` が `stat.mtime` から `stagnant`/`stagnantDays` を載せること（file スタブに `stat.mtime` を足す）、③ しきい値解決のハイブリッド（options 主・設定既定フォールバック・0 オフ）を赤→緑で固める。実機の mtime 反映は `docs/test/` の手動チェックリストで確認する。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

@@ -175,6 +175,46 @@ describe("NoteCard — 非 boolean 軸カードのロック（ドラッグ不可
   });
 });
 
+describe("NoteCard — 滞留バッジ（mtime ヒューリスティック・#106 F9 AC4）", () => {
+  /** 滞留フラグ付きカード（toViewModel が stagnant/stagnantDays を付与）。 */
+  function stagnantEntry(days = 21): MatrixEntry {
+    return { id: "old.md", title: "古いタスク", urgent: true, important: true, stagnant: true, stagnantDays: days };
+  }
+  const badge = (days: number) => `${days}d`;
+  const label = (days: number) => `Stale: not updated for ${days} days`;
+
+  it("NoteCard_滞留カード_時計と経過日数バッジを表示する（AC4）", () => {
+    // given / when
+    render(<NoteCard entry={stagnantEntry(21)} stagnantBadge={badge} stagnantLabel={label} />);
+    // then: 経過日数のテキストがカード内に出る
+    expect(screen.getByText("21d")).toBeTruthy();
+  });
+
+  it("NoteCard_滞留バッジ_経過日数を aria-label で読み上げる（時計は装飾＝aria-hidden）", () => {
+    // given / when
+    render(<NoteCard entry={stagnantEntry(21)} stagnantBadge={badge} stagnantLabel={label} />);
+    // then: SR には経過日数付きの滞留ラベルが伝わる（img ロール＋aria-label）
+    expect(
+      screen.getByRole("img", { name: "Stale: not updated for 21 days" }),
+    ).toBeTruthy();
+  });
+
+  it("NoteCard_滞留バッジ_--text-muted のクラスで控えめに描画する", () => {
+    // given / when
+    render(<NoteCard entry={stagnantEntry(21)} stagnantBadge={badge} stagnantLabel={label} />);
+    // then: 専用クラスを持つ（styles.css が --text-muted を当てる）
+    const el = screen.getByText("21d");
+    expect(el.classList.contains("eisenhower-note-card__stagnation")).toBe(true);
+  });
+
+  it("NoteCard_非滞留カード_滞留バッジを出さない", () => {
+    // given: stagnant を持たない通常カード
+    render(<NoteCard entry={entry()} stagnantBadge={badge} stagnantLabel={label} />);
+    // then: バッジは描画されない
+    expect(screen.queryByText(/\d+d/)).toBeNull();
+  });
+});
+
 describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F8 AC5）", () => {
   /** バッジ付き entry。 */
   function badgedEntry(

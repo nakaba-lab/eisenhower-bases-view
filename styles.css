@@ -192,8 +192,10 @@
 }
 
 /* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。
- * #104（F8）でタイトル下にバッジ行を持てるよう縦積み（flex column）にする。タイトルの 1 行省略は
- * __title へ移し、バッジは折返し可能な別行として並べる。min-width:0 は flex 子の省略成立に必要。 */
+ * #104（F8）でタイトル下にバッジ行を持てるよう縦積み（flex column）にする。#106（F9）でタイトル行に
+ * 滞留バッジを横並べする __title-row を持つ（title＝truncate・滞留バッジ＝右端固定）。
+ * タイトルの 1 行省略は __title へ移し、追加プロパティバッジは折返し可能な別行として並べる。
+ * min-width:0 は flex 子の省略成立に必要。 */
 .eisenhower-note-card {
   display: flex;
   flex-direction: column;
@@ -208,13 +210,43 @@
   touch-action: none;
 }
 
-/* カードのタイトル行（1 行省略）。バッジ行と縦に積む（#104）。 */
-.eisenhower-note-card__title {
-  display: block;
+/* タイトルと滞留バッジ（#106 F9）を横並びにする行。タイトルは truncate し、滞留バッジは右端に固定する。 */
+.eisenhower-note-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1, 4px);
   min-width: 0;
-  white-space: nowrap;
+}
+
+/* カードのタイトル。__title-row 内で滞留バッジに場所を譲りつつ長いタイトルは truncate する（#106 F9）。
+ * flex 子として縮み（flex:1 1 auto・min-width:0）、追加プロパティバッジ行とは縦に積む（#104）。 */
+.eisenhower-note-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 滞留バッジ（最終更新から N 日超過・#106 F9）。時計＋経過日数を --text-muted で控えめに、
+ * タイトル行の右端へ固定する（一覧の視線移動を最小化）。数字は等幅で桁揺れを抑える。 */
+.eisenhower-note-card__stagnation {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.75em);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 時計アイコン（装飾＝aria-hidden）。currentColor で --text-muted を継ぎ、文字と一体の控えめさにする。 */
+.eisenhower-note-card__stagnation-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
 }
 
 /* カード追加プロパティのバッジ行（#104 F8・読み取り専用）。タイトル下に控えめに折返し表示する。 */

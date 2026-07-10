@@ -26,6 +26,17 @@ export interface MatrixEntry {
    */
   locked?: boolean;
   /**
+   * 滞留（最終更新から N 日超過）を表す（`true` のときのみ設定・#106 F9）。読み取り専用ヒューリスティック
+   *（`file.stat.mtime` と設定/ビュー options のしきい値から `toViewModel` が判定）。非滞留カードには
+   * 付かない（`locked?` と同じ optional 流儀）。UI（`NoteCard`）はこのフラグで滞留バッジを描画する。
+   */
+  stagnant?: boolean;
+  /**
+   * 滞留カードの経過日数（`stagnant` が `true` のときのみ設定・#106 F9）。バッジ表示（例 `21d`）と
+   * SR 読み上げ（`aria-label`）に使う。日単位粒度（`floor`）。
+   */
+  stagnantDays?: number;
+  /**
    * カード追加プロパティの読み取り専用バッジ（#104 F8）。アダプタ（`toViewModel`）が解決済みの
    * `{ label, text, emphasized? }` を載せ、`NoteCard` が控えめに描画する。表示 0 個（既定）では省略する。
    */

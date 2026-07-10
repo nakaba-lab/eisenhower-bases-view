@@ -44,8 +44,15 @@ const useF6 = params.get("f6") === "1";
 // 期日（過去日＝強調）・プロジェクト・空表示（absent 退避）・未来日（非強調）を混ぜて目視する。
 const useBadges = params.get("badges") === "1";
 const lang: Language = params.get("lang") === "en" ? "en" : "ja";
+// #106 F9: `?stagnant=1` で滞留バッジ（時計＋経過日数）を一部カードに写す（before＝無指定・after＝指定）。
+const useStagnant = params.get("stagnant") === "1";
 // #103 F7: 診断表示の確認。?diag=warn（両軸同一キー＝全ロック＋警告バナー）／?diag=empty（空状態＋軸名）。
 const diag = params.get("diag");
+
+/** 滞留（#106 F9）を付与する。`useStagnant` のときだけフラグを載せ、それ以外は現行どおり（before）。 */
+function stale(base: MatrixEntry, days: number): MatrixEntry {
+  return useStagnant ? { ...base, stagnant: true, stagnantDays: days } : base;
+}
 
 /** #23 F6: 象限ごとのカスタムアクセント色＋`do` のカスタムラベル上書きを施した設定。 */
 const f6Settings = {
@@ -83,12 +90,17 @@ const placements: QuadrantPlacements = {
     entry("a.md", "請求書を今日中に送る", false, useBadges ? pastDueBadges : undefined),
     entry("b.md", "障害の一次対応"),
   ],
+  // Schedule / Delegate は「置いたきり忘れる」象限。滞留カード（#106 F9）を混ぜて長タイトルの
+  // truncate ＋滞留バッジ右寄せ＋#104 追加プロパティバッジの共存を frontend-reviewer が目視できるようにする。
   schedule: [
-    entry("c.md", "四半期計画のドラフト", false, useBadges ? futureDueBadges : undefined),
+    stale(
+      entry("c.md", "四半期計画のドラフトを書き上げて共有する", false, useBadges ? futureDueBadges : undefined),
+      21,
+    ),
     entry("d.md", "資格試験の勉強"),
   ],
   delegate: [
-    entry("e.md", "議事録の清書を依頼", false, useBadges ? gracefulBadges : undefined),
+    stale(entry("e.md", "議事録の清書を依頼", false, useBadges ? gracefulBadges : undefined), 45),
   ],
   delete: [], // 空セル（象限別プレースホルダの確認）
   unclassified: [

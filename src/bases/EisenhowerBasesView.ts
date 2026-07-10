@@ -35,6 +35,21 @@ import type { Messages } from "../i18n";
  * `extends BasesView` のため obsidian ランタイムが必要で、単体テストの対象外。
  * 登録・描画・書き戻しの往復は手動/結合で担保する（DoD・スパイク #16 で実機確認済み）。
  */
+
+/**
+ * 今日の**ローカル日付**を ISO `YYYY-MM-DD` で返す（#104 F8 バッジの日付強調 AC4 用）。
+ * 期日は利用者のローカル日付で「今日以前」を判定するため UTC ではなくローカル日付成分を使う。
+ * `new Date()` に触れる不純関数のためアダプタ層に隔離し、純ロジック（`isEmphasizedDate`）へは
+ * 解決済み文字列を注入する（`toViewModel` 経由）。
+ */
+function todayIso(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export class EisenhowerBasesView extends BasesView implements HoverParent {
   type = VIEW_ID;
 
@@ -110,7 +125,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
   private renderCurrent(): void {
     render(
       this.viewContainerEl,
-      toViewModel(this.data?.data, this.config, this.getSettings(), this.getMessages()),
+      toViewModel(
+        this.data?.data,
+        this.config,
+        this.getSettings(),
+        this.getMessages(),
+        Date.now(),
+        todayIso(),
+      ),
       this.callbacks,
     );
   }

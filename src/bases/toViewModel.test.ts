@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, TFile, Value } from "obsidian";
-import { BooleanValue, NullValue, NumberValue } from "obsidian";
+import { BooleanValue, NullValue, NumberValue, StringValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor } from "../i18n";
 import { toViewModel } from "./toViewModel";
@@ -426,7 +426,7 @@ describe("toViewModel — presentation（ラベル/色/言語文言の解決・#
   });
 });
 
-describe("toViewModel — 滞留インジケータ（mtime ヒューリスティック・#106）", () => {
+describe("toViewModel — 滞留インジケータ（mtime ヒューリスティック・#106 F9）", () => {
   const MS_PER_DAY = 86_400_000;
   /** 固定の「今日」（決定性のためアダプタから注入する。実機は Date.now()）。 */
   const NOW = 1_700_000_000_000;
@@ -556,5 +556,175 @@ describe("toViewModel — 滞留インジケータ（mtime ヒューリスティ
     );
     // then: mtime が読めないカードは滞留させない（throw もしない）
     expect(mapped[0].stagnant).toBeUndefined();
+  });
+});
+
+describe("toViewModel — カード追加プロパティ表示（バッジ・#104 F8）", () => {
+  /** 任意プロパティ ID→Value を持つ md entry（バッジ検証用。両軸は boolean で Do に載る）。 */
+  function badgeEntry(path: string, values: Record<string, Value | null>): BasesEntry {
+    const merged: Record<string, Value | null> = {
+      "note.urgent": TRUE,
+      "note.important": TRUE,
+      ...values,
+    };
+    return {
+      file: fileStub(path),
+      getValue: (id: BasesPropertyId) => merged[id] ?? null,
+    } as unknown as BasesEntry;
+  }
+  /** ビュー options（config.getAsPropertyId）のモック。 */
+  function mockConfig(
+    map: Record<string, BasesPropertyId | null>,
+  ): { getAsPropertyId: (key: string) => BasesPropertyId | null } {
+    return { getAsPropertyId: (key: string) => map[key] ?? null };
+  }
+
+  it("toViewModel — カード表示プロパティ 2 個設定で各 MatrixEntry.badges に 2 件載る（AC1）", () => {
+    // given: options で badgeProperty1/2 に note.due / note.project、ノートは両プロパティを持つ
+    const entries = [
+      badgeEntry("t.md", {
+        "note.due": new StringValue("2026-07-01"),
+        "note.project": new StringValue("仕事"),
+      }),
+    ];
+    const config = mockConfig({
+      badgeProperty1: "note.due" as BasesPropertyId,
+      badgeProperty2: "note.project" as BasesPropertyId,
+    });
+    // when
+    const { placements } = toViewModel(entries, config, DEFAULT_SETTINGS, messagesFor("en"), 1_700_000_000_000, "2026-07-09");
+    // then: Do 象限のカードに badges が 2 件（解決済み {label,text}）
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges).toHaveLength(2);
+    expect(card?.badges?.[0]).toMatchObject({ label: "due", text: "2026-07-01" });
+    expect(card?.badges?.[1]).toMatchObject({ label: "project", text: "仕事" });
+  });
+
+  it("toViewModel — 表示プロパティ 0 個（既定）なら badges は空（現状維持・AC3）", () => {
+    // given / when: config 無し・設定 cardBadgeProperties=[]（既定）
+    const entries = [badgeEntry("t.md", {})];
+    const { placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: badges は付かない（undefined・現状のカード密度）
+    expect(placements.do[0].badges).toBeUndefined();
+    expect(mapped[0].badges).toBeUndefined();
+  });
+
+  it("toViewModel — getValue が throw する軸のバッジは空表示へ退避しビュー全体は壊れない（AC2）", () => {
+    // given: badge プロパティの getValue が throw（他プロパティは正常）
+    const entry = {
+      file: fileStub("t.md"),
+      getValue: (id: BasesPropertyId) => {
+        if (id === "note.urgent" || id === "note.important") return TRUE;
+        throw new Error("boom");
+      },
+    } as unknown as BasesEntry;
+    const config = mockConfig({ badgeProperty1: "note.due" as BasesPropertyId });
+    // when
+    const { state, placements } = toViewModel(entry ? [entry] : [], config, DEFAULT_SETTINGS, messagesFor("en"), 1_700_000_000_000, "2026-07-09");
+    // then: ビューは ready のまま・カードは残り・バッジは空表示
+    expect(state).toBe("ready");
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges).toHaveLength(1);
+    expect(card?.badges?.[0].text).toBe("");
+  });
+
+  it("toViewModel — 厳格 ISO 日付が今日以前 × 強調 on のバッジは emphasized=true（AC4）", () => {
+    // given: note.due=2026-07-01（今日 2026-07-09 より前）・emphasizePastDates on
+    const entries = [badgeEntry("t.md", { "note.due": new StringValue("2026-07-01") })];
+    const config = mockConfig({ badgeProperty1: "note.due" as BasesPropertyId });
+    const settings = { ...DEFAULT_SETTINGS, emphasizePastDates: true };
+    // when
+    const { placements } = toViewModel(entries, config, settings, messagesFor("en"), 1_700_000_000_000, "2026-07-09");
+    // then
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges?.[0].emphasized).toBe(true);
+  });
+
+  it("toViewModel — 設定 cardBadgeProperties をデフォルトに使う（options 未設定時）", () => {
+    // given: options 無し・設定に note.due
+    const entries = [badgeEntry("t.md", { "note.due": new StringValue("2026-07-01") })];
+    const settings = { ...DEFAULT_SETTINGS, cardBadgeProperties: ["note.due"] };
+    // when
+    const { placements } = toViewModel(entries, null, settings, messagesFor("en"), 1_700_000_000_000, "2026-07-09");
+    // then: 設定デフォルトのプロパティでバッジが載る
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges).toHaveLength(1);
+    expect(card?.badges?.[0]).toMatchObject({ label: "due", text: "2026-07-01" });
+  });
+});
+
+describe("toViewModel — 診断情報（設定ミス診断・軸可視化・#103 F7）", () => {
+  /** 緊急・重要の両方に同じ note.urgent を割り当てる設定ミス config。 */
+  const sameKeyConfig = {
+    getAsPropertyId: (key: string): BasesPropertyId | null =>
+      key === "urgentProperty" || key === "importantProperty"
+        ? ("note.urgent" as BasesPropertyId)
+        : null,
+  };
+  /** 任意の軸プロパティ id を両軸に割り当てる config。 */
+  function axisConfig(
+    urgent: BasesPropertyId | null,
+    important: BasesPropertyId | null,
+  ): { getAsPropertyId: (key: string) => BasesPropertyId | null } {
+    return {
+      getAsPropertyId: (key: string) =>
+        key === "urgentProperty" ? urgent : key === "importantProperty" ? important : null,
+    };
+  }
+
+  it("toViewModel — 両軸が同一の書き戻し可能 note.* キーなら axesShareWritableKey=true・sharedAxisKey に共有キー（AC）", () => {
+    // given: 緊急・重要の両方に note.urgent を割り当てた設定ミス
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { diagnostics } = toViewModel(entries, sameKeyConfig, DEFAULT_SETTINGS);
+    // then: 設定ミス確定＋共有キー（frontmatter キー表記）が載る
+    expect(diagnostics?.axesShareWritableKey).toBe(true);
+    expect(diagnostics?.sharedAxisKey).toBe("urgent");
+  });
+
+  it("toViewModel — 両軸が異なる note.* キーなら axesShareWritableKey=false・urgentAxis/importantAxis に解決済み軸名（frontmatter キー・AC）", () => {
+    // given: config=null → 設定デフォルト（urgent / important）
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { diagnostics } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then
+    expect(diagnostics?.axesShareWritableKey).toBe(false);
+    expect(diagnostics?.urgentAxis).toBe("urgent");
+    expect(diagnostics?.importantAxis).toBe("important");
+    expect(diagnostics?.sharedAxisKey).toBeUndefined();
+  });
+
+  it("toViewModel — 空状態（entries 0 件）でも diagnostics に解決済み軸名が載る（空でも軸を提示・AC）", () => {
+    // given / when: notes 0 件でも軸解決を行う（empty 分岐でも診断を計算する）
+    const viewModel = toViewModel([], null, DEFAULT_SETTINGS);
+    // then
+    expect(viewModel.state).toBe("empty");
+    expect(viewModel.diagnostics?.urgentAxis).toBe("urgent");
+    expect(viewModel.diagnostics?.importantAxis).toBe("important");
+    expect(viewModel.diagnostics?.axesShareWritableKey).toBe(false);
+  });
+
+  it("toViewModel — 空状態でも両軸同一キー設定ミスを検出する（バナーは empty でも出しうる）", () => {
+    // given / when: notes 0 件 × 両軸同一キー
+    const viewModel = toViewModel([], sameKeyConfig, DEFAULT_SETTINGS);
+    // then
+    expect(viewModel.state).toBe("empty");
+    expect(viewModel.diagnostics?.axesShareWritableKey).toBe(true);
+    expect(viewModel.diagnostics?.sharedAxisKey).toBe("urgent");
+  });
+
+  it('toViewModel — 非 note.*（formula.*）軸は生の property id をフォールバック表示する（"null" を出さない）', () => {
+    // given: 緊急軸を formula.* に（書き戻し不可＝toFrontmatterKey は null）、重要軸は note.important
+    const entries = [mockEntry("a.md", "a", TRUE, TRUE)];
+    // when
+    const { diagnostics } = toViewModel(
+      entries,
+      axisConfig("formula.due" as BasesPropertyId, "note.important" as BasesPropertyId),
+      DEFAULT_SETTINGS,
+    );
+    // then: frontmatter キーが取れない軸は生 id を出す（"null" 文字列にしない）
+    expect(diagnostics?.urgentAxis).toBe("formula.due");
+    expect(diagnostics?.importantAxis).toBe("important");
+    expect(diagnostics?.axesShareWritableKey).toBe(false);
   });
 });

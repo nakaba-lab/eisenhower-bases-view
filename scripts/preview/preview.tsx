@@ -20,25 +20,36 @@ import { UndoToast } from "../../src/ui/UndoToast";
 import { resolvePresentation } from "../../src/bases/presentation";
 import { messagesFor, type Language } from "../../src/i18n";
 import { DEFAULT_SETTINGS } from "../../src/settings";
-import type { MatrixEntry, MatrixViewModel } from "../../src/bases/types";
+import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../../src/bases/types";
 
-function entry(id: string, title: string, locked?: boolean): MatrixEntry {
+function entry(
+  id: string,
+  title: string,
+  locked?: boolean,
+  badges?: MatrixEntry["badges"],
+): MatrixEntry {
   return {
     id,
     title,
     urgent: undefined,
     important: undefined,
     ...(locked ? { locked: true } : {}),
+    ...(badges ? { badges } : {}),
   };
 }
 
 const params = new URLSearchParams(location.search);
 const useF6 = params.get("f6") === "1";
+// #104 F8: ?badges=1 でカード追加プロパティ表示（読み取り専用バッジ）を写す。
+// 期日（過去日＝強調）・プロジェクト・空表示（absent 退避）・未来日（非強調）を混ぜて目視する。
+const useBadges = params.get("badges") === "1";
 const lang: Language = params.get("lang") === "en" ? "en" : "ja";
-// #106: `?stagnant=1` で滞留バッジ（時計＋経過日数）を一部カードに写す（before＝無指定・after＝指定）。
+// #106 F9: `?stagnant=1` で滞留バッジ（時計＋経過日数）を一部カードに写す（before＝無指定・after＝指定）。
 const useStagnant = params.get("stagnant") === "1";
+// #103 F7: 診断表示の確認。?diag=warn（両軸同一キー＝全ロック＋警告バナー）／?diag=empty（空状態＋軸名）。
+const diag = params.get("diag");
 
-/** 滞留（#106）を付与する。`useStagnant` のときだけフラグを載せ、それ以外は現行どおり（before）。 */
+/** 滞留（#106 F9）を付与する。`useStagnant` のときだけフラグを載せ、それ以外は現行どおり（before）。 */
 function stale(base: MatrixEntry, days: number): MatrixEntry {
   return useStagnant ? { ...base, stagnant: true, stagnantDays: days } : base;
 }
@@ -59,15 +70,38 @@ const f6Settings = {
   },
 };
 
-const placements = {
-  do: [entry("a.md", "請求書を今日中に送る"), entry("b.md", "障害の一次対応")],
-  // Schedule / Delegate は「置いたきり忘れる」象限。滞留カード（#106）を混ぜて長タイトルの
-  // truncate ＋バッジ右寄せの両立と、非滞留カードとの対照を frontend-reviewer が目視できるようにする。
+/** #104 F8: バッジ検証用のサンプル（過去日=強調・プロジェクト・空表示・未来日=非強調）。ラベルは
+ * プロパティ名（言語非依存）、値だけ言語で出し分ける。 */
+const pastDueBadges: MatrixEntry["badges"] = [
+  { label: "due", text: "2026-07-01", emphasized: true }, // 今日以前＝アクセント強調（AC4）
+  { label: "project", text: lang === "ja" ? "経理" : "Finance" },
+];
+const futureDueBadges: MatrixEntry["badges"] = [
+  { label: "due", text: "2026-08-01" }, // 未来日＝非強調
+  { label: "tags", text: lang === "ja" ? "計画" : "planning" },
+];
+const gracefulBadges: MatrixEntry["badges"] = [
+  { label: "due", text: "" }, // absent/例外の空表示退避（AC2・ラベルのみ）
+  { label: "project", text: lang === "ja" ? "議事録" : "Minutes" },
+];
+
+const placements: QuadrantPlacements = {
+  do: [
+    entry("a.md", "請求書を今日中に送る", false, useBadges ? pastDueBadges : undefined),
+    entry("b.md", "障害の一次対応"),
+  ],
+  // Schedule / Delegate は「置いたきり忘れる」象限。滞留カード（#106 F9）を混ぜて長タイトルの
+  // truncate ＋滞留バッジ右寄せ＋#104 追加プロパティバッジの共存を frontend-reviewer が目視できるようにする。
   schedule: [
-    stale(entry("c.md", "四半期計画のドラフトを書き上げて共有する"), 21),
+    stale(
+      entry("c.md", "四半期計画のドラフトを書き上げて共有する", false, useBadges ? futureDueBadges : undefined),
+      21,
+    ),
     entry("d.md", "資格試験の勉強"),
   ],
-  delegate: [stale(entry("e.md", "議事録の清書を依頼"), 45)],
+  delegate: [
+    stale(entry("e.md", "議事録の清書を依頼", false, useBadges ? gracefulBadges : undefined), 45),
+  ],
   delete: [], // 空セル（象限別プレースホルダの確認）
   unclassified: [
     entry("x.md", "軸プロパティ未設定のノート"),
@@ -77,17 +111,90 @@ const placements = {
   ],
 };
 
-const viewModel: MatrixViewModel = {
-  state: "ready",
-  // entries は placements 由来にする（空だと MatrixView の titleOf が overlay/SR アナウンスの
-  // タイトル逆引きに失敗して id にフォールバックするため。#43 の DragOverlay 検証で顕在化）。
-  entries: Object.values(placements).flat(),
-  placements,
-  // f6 のときだけ presentation を載せる（未指定＝before＝現行のフォールバック挙動）。
-  ...(useF6
-    ? { presentation: resolvePresentation(f6Settings, messagesFor(lang)) }
-    : {}),
+// #103 F7 の診断情報（frontmatter キー表記）。
+const normalDiagnostics = {
+  axesShareWritableKey: false,
+  urgentAxis: "urgent",
+  importantAxis: "important",
 };
+const sharedKeyDiagnostics = {
+  axesShareWritableKey: true,
+  sharedAxisKey: "urgent",
+  urgentAxis: "urgent",
+  importantAxis: "urgent",
+};
+
+// ?diag=warn は両軸同一キー設定ミス＝全カードロック（🔒）＋警告バナーの状態を写す。
+const warnPlacements = {
+  do: placements.do.map((card) => ({ ...card, locked: true })),
+  schedule: placements.schedule.map((card) => ({ ...card, locked: true })),
+  delegate: placements.delegate.map((card) => ({ ...card, locked: true })),
+  delete: placements.delete.map((card) => ({ ...card, locked: true })),
+  unclassified: placements.unclassified.map((card) => ({ ...card, locked: true })),
+};
+
+// diag 表示時は文言解決のため presentation を載せる（言語は ?lang で切替）。
+const diagPresentation = resolvePresentation(
+  { ...(useF6 ? f6Settings : DEFAULT_SETTINGS), language: lang },
+  messagesFor(lang),
+);
+
+const emptyPl = { do: [], schedule: [], delegate: [], delete: [], unclassified: [] };
+
+let viewModel: MatrixViewModel;
+if (diag === "empty") {
+  // 空状態＋解決済み軸名（--text-muted の 1 行）。
+  viewModel = {
+    state: "empty",
+    entries: [],
+    placements: emptyPl,
+    diagnostics: normalDiagnostics,
+    presentation: diagPresentation,
+  };
+} else if (diag === "empty-warn") {
+  // 空状態 × 設定ミス（バナーが全幅トップで出るか＝align-self:stretch の確認）。
+  viewModel = {
+    state: "empty",
+    entries: [],
+    placements: emptyPl,
+    diagnostics: sharedKeyDiagnostics,
+    presentation: diagPresentation,
+  };
+} else if (diag === "hint") {
+  // 未分類ゾーン非表示 × 全ノート未分類 → unclassifiedHidden ヒント＋軸名行。
+  const hintPl = { ...emptyPl, unclassified: placements.unclassified };
+  viewModel = {
+    state: "ready",
+    entries: hintPl.unclassified,
+    placements: hintPl,
+    showUnclassified: false,
+    diagnostics: normalDiagnostics,
+    presentation: diagPresentation,
+  };
+} else if (diag === "warn") {
+  // 全カードロック＋グリッド上部の警告バナー。
+  viewModel = {
+    state: "ready",
+    entries: Object.values(warnPlacements).flat(),
+    placements: warnPlacements,
+    diagnostics: sharedKeyDiagnostics,
+    presentation: diagPresentation,
+  };
+} else {
+  viewModel = {
+    state: "ready",
+    // entries は placements 由来にする（空だと MatrixView の titleOf が overlay/SR アナウンスの
+    // タイトル逆引きに失敗して id にフォールバックするため。#43 の DragOverlay 検証で顕在化）。
+    entries: Object.values(placements).flat(),
+    placements,
+    // 正常時の診断（バナーは出ない＝抑制の確認）。
+    diagnostics: normalDiagnostics,
+    // f6 のときだけ presentation を載せる（未指定＝before＝現行のフォールバック挙動）。
+    ...(useF6
+      ? { presentation: resolvePresentation(f6Settings, messagesFor(lang)) }
+      : {}),
+  };
+}
 
 const root = document.getElementById("root");
 if (root) {

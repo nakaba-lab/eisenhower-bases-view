@@ -2,7 +2,7 @@
 title: UI 設計
 area: ui
 status: active
-relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44, 106]
+relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44, 103, 104, 106]
 updated: 2026-07-10
 kind: ui
 ---
@@ -10,6 +10,8 @@ kind: ui
 # UI 設計
 
 > 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。** **#22（F5）のカード操作（開く/新タブ/プレビュー/キーボード）を実装し `status: active` に確定した。** **#23（F6）の設定タブ（デフォルト軸・象限ラベル/色・欠損表示・i18n 言語）を実装し `status: active` に確定した。**
+>
+> **#104（F8 カード追加プロパティ表示）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示し、ホバープレビューを開かずに Do↔Schedule の振り分け材料（期日の近さ）をカード上で確認できるようにする。表示プロパティの選択 UI は**独自セレクタ方式（案 a）を採用**（案 b＝Bases ネイティブ Properties は `config` からの取得可否が実機スパイク未実施で未確認のため却下・将来余地は `bases.md`）。**バッジの SR 読み上げは「ラベル＋値」**（カードのアクセシブル名＝ノート名を基本に保ち、バッジはその後に補足として読み上げる＝`aria-hidden` にしない・人間承認済み）。**日付強調トグルは既定オフ**・**厳格 ISO（`YYYY-MM-DD`）が今日以前**のときだけアクセント色（AC4。将来これを条件付き書式 DSL に育てない＝`bases.md` の線引き）。**既定は表示 0 個**でカード密度は現状維持（AC3）。データフローは既存 F6 と同じ ViewModel 拡張（`MatrixEntry.badges` の解決済み plain データを `NoteCard` が描画・UI は Bases 非依存を維持＝AC5）。**実装時に frontend-reviewer 指摘を反映**: バッジは塗り背景ではなく**細い枠線＋カード背景上のテキスト**にして小さい弱色テキストの WCAG AA を確保し、強調バッジは塗り用 `--interactive-accent` ではなく**アクセント色テキスト用トークン `--text-accent`**＋**semibold**（色のみに依存しない＝WCAG 1.4.1）で表す。値が空（absent/例外退避＝AC2）のバッジは**ラベルだけの“壊れて見える”チップを避けるため UI では描画しない**（データ側は件数を保つ＝AC1）。詳細な描画・a11y・状態は下記「カード追加プロパティ表示」節、境界契約と正規化は `bases.md`。
 >
 > **undo（直前1手の元に戻す・最小実装）を実装し `status: active` に確定した（2026-07-02）**: ドラッグ書き戻しは破壊的（両軸を `true/false` 上書き）なため、**直前 1 手だけ**を元に戻す最小の undo を足した。トリガーは **(a) Obsidian コマンド（ホットキー割当可・パレット表示）と (b) 移動直後にビュー内へ出すトースト**の**両方**（人間承認済み）。いずれも **Obsidian ネイティブの Ctrl+Z とは非統合**（独自コマンドとして登録し、ネイティブ undo をフックしない）。復元は **完全復元**＝移動前の frontmatter 値を捕捉し、present は値を代入、**absent はキーを delete して未分類へ戻す**（人間承認済み。`delete` はこの undo 経路のみで、分類ドラッグは引き続き delete しない＝v1 boolean 軸限定の制約を崩さない）。トーストは分離コンポーネント `UndoToast`（`role="group"`＋aria-label＝二重読み上げ回避・明示 focus-visible）で、frontend-reviewer 指摘を反映済み。詳細な捕捉/復元の配線（`UndoRecord`・`UndoManager`・`runUndo`・コマンド登録）は `bases.md`。
 >
@@ -72,7 +74,7 @@ flowchart LR
 
 > 軸の向き（緊急を左右どちらに置くか）・ラベル文言・色は設定可能（向き反転は v2）。未決事項は `docs/要件定義書.md`「未決事項」。
 
-### 滞留バッジ（mtime ヒューリスティック・#106）
+### 滞留バッジ（mtime ヒューリスティック・#106 F9）
 
 > #106 で実装した現状を反映（`status: active`）。ロジック/しきい値解決/再計算タイミングは `bases.md` の「滞留インジケータ」節が正。
 
@@ -102,6 +104,33 @@ flowchart LR
 ```
 
 **アクセシビリティ / レスポンシブ**: バッジ色は `--text-muted`（テーマのミュートテキスト＝背景に対し AA を満たすトークン。独自 hex を持たない）。モバイル幅でもタイトル truncate + バッジ固定でカードが崩れない（`docs/screenshots/106-matrix-{desktop,mobile}-*-after.png` を frontend-reviewer が確認）。
+
+#### 診断バナー配置（#103 F7・ワイヤーフレーム。案 A＝グリッド上部を採択・人間承認済み）
+
+`diagnostics.axesShareWritableKey===true`（両軸同一 `note.*` キー＝全カードロック）のとき、**section 冒頭・2×2 グリッドの前**に警告バナーを出す。全ロックの原因を、ロックされたカードを見る**前に**提示する（案 B＝グリッド下・未分類ゾーン付近は原因が下部に埋もれるため却下）。
+
+```
++-----------------------------------------------------------+
+| ⚠ 両軸が同じプロパティ（urgent）を指しています。            |  ← role="note"・非 aria-live
+|   ビュー options かプラグイン設定で 2 軸に別プロパティを      |     --text-warning アクセント（控えめ）
+|   指定してください。                                        |
++-----------------------------+-----------------------------+
+| 重要 × 緊急   [Do] 🔒       | 重要 × 非緊急 [Schedule] 🔒 |
++-----------------------------+-----------------------------+
+| 非重要 × 緊急 [Delegate] 🔒 | 非重要 × 非緊急 [Delete] 🔒 |
++-----------------------------------------------------------+
+| 未分類ゾーン …                                            |
++-----------------------------------------------------------+
+```
+
+空状態（`state:"empty"`）・未分類非表示ヒントには解決済み軸名（frontmatter キー表記・`--text-muted`）を 1 行添える:
+
+```
++-----------------------------------------------------------+
+| 表示するノートがありません                                 |
+| 緊急度: urgent ／ 重要度: important                        |  ← --text-muted（控えめ・軸の気づき）
++-----------------------------------------------------------+
+```
 
 ### 設定タブ設計（F6/#23）
 
@@ -241,6 +270,60 @@ sequenceDiagram
     end
 ```
 
+### カード追加プロパティ表示（バッジ・#104 F8・`status: active`）
+
+カードにタイトルの下へ**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示する。表示可否・対象プロパティはビュー options（主）＋プラグイン設定（デフォルト）で選ぶ（F4/F6 と同じハイブリッド）。バッジは解決済み plain データ `MatrixEntry.badges`（`bases.md` の境界契約）として届き、`NoteCard` は Bases 非依存のまま描画する。
+
+**レイアウト（ワイヤーフレーム・採択案）**: タイトル 1 行の**下**にバッジ行（横並び・折返し可）を控えめに置く（案 A＝下段バッジ行）。カード高さは可変で、バッジ 0 個（既定）ならタイトルのみ＝現状レイアウトと同一（AC3）。
+
+```
+案 A（採択・下段バッジ行）           案 B（却下・タイトル右インライン）
++-----------------------------+     +-----------------------------+
+| タスク名                     |     | タスク名   [📅2026-07-01][仕事]|  ← 右が詰まり長title と競合
+| [📅 2026-07-01] [仕事]       |     +-----------------------------+
++-----------------------------+
+```
+
+> **却下: 案 B（タイトル右へインライン）** — 横幅を食い、省略済みの長いタイトルとバッジが同一行で競合してどちらも読みにくい（狭ペイン 375px で崩れる）。下段行なら折返しで縦に伸びるだけで横スクロールを出さない（AC「375px で崩れない」）。
+
+**描画（控えめ・テーマ変数・実装済み）**:
+- バッジは小サイズ・`--text-muted`。**塗り背景は使わず細い枠線（`1px solid var(--background-modifier-border)`）でグルーピング**し、テキストはカード背景（`--background-primary`）の上に置く（塗り背景は弱色小テキストの実効コントラストを AA 未満へ落とすため＝frontend-reviewer must 対応）。独自色はハードコードしない（テーマ追従）。ラベルは小さめ大文字・字間で値と差をつける（`opacity` で色を落とすと AA を割るため使わない）。値が長ければ `text-overflow: ellipsis` で省略する。
+- **日付強調（AC4）**: `MatrixEntry.badges[].emphasized === true`（アダプタが厳格 ISO かつ今日以前 × トグル on で算出）のバッジだけ、**テキスト色を `--text-accent`（アクセント色テキスト用トークン＝塗り用 `--interactive-accent` は前景に使うと AA を割るため不可）・枠線を `--interactive-accent`・字を semibold** にする。semibold は**色のみに依存しない**強調（WCAG 1.4.1）＝色覚特性のある利用者にも過期日が伝わる。既定オフ（`emphasizePastDates:false`）では常に `false` ＝ 弱色のまま。
+- ラベルは短く（プロパティ表示名＝`readBadges.badgeLabel` が名前空間接頭辞を落とす）、値は正規化済み文字列（`bases.md`。例外・absent は空文字でアダプタが退避済み）。**値が空のバッジは UI で描画しない**（ラベルだけの“壊れて見える”チップを避ける＝frontend-reviewer should 対応。データ側は件数を保つ＝AC1／UI で空を省く＝AC2 の空表示退避）。
+
+**a11y（人間承認済み＝ラベル＋値を読み上げ）**:
+- カードのアクセシブル名は**基本ノート名（title）**。バッジ行は title と同じ**操作可能要素（`role="button"` のカード）内の可視テキスト**として置き、ラベル・値がそのまま読み上げ対象に入る（`aria-hidden` にしない）。**カード全体をドラッグ元/開く対象にする既定（#20/#22）ため、バッジは操作要素の内側に置く必要があり**、非ロックカードでは名がタイトル＋バッジ text の連結になる（バッジ情報は失われない）。ロックカード（`aria-label` で名を固定）ではバッジが名に含まれない非対称が残る＝**「名＝タイトル＋バッジを補足読み」の理想形にするには操作要素外へバッジを出す DOM 再構成が要り、全カード操作の既定と競合する**ため v1 では見送り、`aria-describedby` 等での是正は将来課題（frontend-reviewer should・code-review で記録）。
+- コントラスト: 弱色バッジは枠線＋カード背景上テキストで WCAG AA を確保（`--text-muted` on `--background-primary`）。強調バッジのテキストは `--text-accent`（テーマが AA 調整済み前提）＋枠線＋semibold。
+- レスポンシブ: 375px でバッジ行は折返し（`flex-wrap`）、横スクロールを出さない（`104-badges-mobile-light-after.png` で確認）。
+
+**状態（バッジ関連の追加行）**:
+
+| 状態 | 表示 |
+|------|------|
+| 表示プロパティ 0 個（既定） | バッジ行なし＝タイトルのみ（現状維持・AC3） |
+| バッジ値あり | タイトル下に控えめな枠線バッジ（`--text-muted`・小サイズ・AC5） |
+| バッジ値が absent／`getValue` 例外 | アダプタが空文字へ退避し、UI は当該バッジを**描画しない**（カード・ビューは壊れない・AC2） |
+| 厳格 ISO 日付が今日以前 × 強調 on | 当該バッジを `--text-accent`＋semibold で強調（AC4） |
+
+**設定（`src/settings.ts` 拡張・#104）**:
+
+```ts
+interface EisenhowerSettings {
+  // …既存（F4/F6）…
+  cardBadgeProperties: string[];   // #104: カードに表示する追加プロパティ名（既定 [] ＝表示 0 個）。最大 3 個。
+  emphasizePastDates: boolean;     // #104: 厳格 ISO 日付が今日以前ならアクセント強調（既定 false）
+}
+```
+
+- 設定タブ（F6 の `settingsTab.ts`）の「表示」区分の下に**カード表示プロパティ**（完全な propertyId をカンマ区切りで入力・最大 3＝`cardBadgeProperties`）と**期日強調トグル**（`emphasizePastDates`）を追加した。ビュー options（`buildBadgeViewOptions`＝`badgeProperty1..N`）が主で per-view 指定でき、設定タブはそれ未設定時のデフォルト。**期日強調（AC4）はプラグイン設定のみが持つため、このトグルが唯一の有効化経路**（options には強調トグルを置かない）。`extends PluginSettingTab` は実機必須で単体対象外＝配線は手動/結合と build で担保（軸/象限の既存コントロールと同じ流儀）。
+- **読み取り専用サーフェスの明示**: 設定/options の説明文に「完全な propertyId（例 `note.due`）を入力／軸（書き戻し）と違い `formula.*`／`file.*` も選べます（表示のみ・書き換えません）」と明記する（i18n で en/ja。軸デフォルトが bare 名〔`urgent`〕なのに対しバッジは全名前空間を許すため full id を要求する非対称を文言で補う）。
+
+**i18n（`src/i18n.ts` 追加・AC6）**: バッジ設定/セレクタの `displayName`・説明・読み取り専用注記を `Messages` に追加し en/ja 両方で定義する（`i18n.test.ts` が欠けを検出）。
+
+**テスト方針**: 単体で ① `toViewModel` が `badges` を解決（2 個設定→2 件・0 個→空・例外/absent→空退避＝`toViewModel.test.ts`）、② `NoteCard` がバッジをタイトル下に描画・強調バッジのアクセント・空バッジ非描画（`NoteCard.test.tsx`）、③ `buildBadgeViewOptions` のキー/型/全プロパティ許可（`viewOptions.test.ts`）、④ `isEmphasizedDate` の厳格 ISO×今日以前（`dateEmphasis.test.ts`）、⑤ `readBadges` の正規化・境界防御（`readBadges.test.ts`）、⑥ i18n 欠け検出（`i18n.test.ts`）を赤→緑で固める。実描画のコントラスト・レスポンシブ・SR は Green 後に `frontend-reviewer`＋スクショで担保した。
+
+**スクリーンショット（frontend-reviewer 確認済み・#104）**: `scripts/preview`（`?badges=1`）でブラウザ描画して取得＝`docs/screenshots/104-badges-{desktop-light,mobile-light,desktop-dark}-after.png`（過期日 `2026-07-01` の強調＋未来日/プロジェクト/タグの弱色バッジ・空値バッジは非描画）・`104-matrix-desktop-light-before.png`（バッジ 0 個の基線＝タイトルのみ・AC3）。frontend-reviewer の must（強調バッジの AA）を `--text-accent` 化で解消し、should（色のみ強調＝1.4.1／空ラベルバッジ）を semibold・空値非描画で反映済み。
+
 ### undo（直前1手の元に戻す・最小実装）
 
 ドラッグ書き戻し（#20）は両軸を `true/false` で上書きする破壊的操作のため、**直前 1 手だけ**を元に戻す最小の undo を足す。UI 側の責務は **(a) 移動成功直後にトーストを出す・(b) トーストの「元に戻す」ボタン／コマンドから `MatrixCallbacks.onUndoMove()` を呼ぶ**の 2 点で、実際の frontmatter 復元（値の代入／absent の delete）と「直前 1 手」の保持はアダプタ層（`bases.md` の `UndoManager`／`runUndo`）に隔離する（`onMoveCard` と同じ疎結合＝AC5 維持。UI は `obsidian` 型に触れない）。
@@ -278,6 +361,8 @@ sequenceDiagram
 | 軸欠損ノートあり | 既定では未分類ゾーンに表示（ドロップ不可）。**`settings.showUnclassified=false` で未分類ゾーンを描画しない**（`toViewModel` が ViewModel に flag を載せ `MatrixView` が条件描画＝レビュー指摘で配線。切替 UI は設定タブ〔F6/#23〕の「欠損ノートを未分類に表示」トグルで提供済み） |
 | 非 boolean 軸値のノート／両軸同一キー設定 | 弱色（`--text-muted`）＋鍵アイコン（`--locked`・`🔒`）で表示し**ドラッグ不可**（`entry.locked`）。非 boolean 値はドロップの両軸 `true/false` 上書きで数値/文字列を破壊するため、両軸が同一 `note.*` キーの設定ミス（`axesShareWritableKey`）は書き戻しが毎回失敗するため、いずれも掴ませない（後者は象限に載るカードも含め全カードをロック）。クリックで開いて値/設定を直せる（**カード全体を `opacity` で薄くすると、まだ開けるタイトル文字の実効コントラストが AA を割るため、opacity ではなく AA を満たすテーマ弱色トークンで色だけ落とす**・レビュー指摘／詳細は下記「主要な設計判断」／`bases.md`） |
 | 未分類非表示×全象限空 | `showUnclassified=false` で 4 象限が全て空・未分類にカードあり の構成は「ready なのに無言」になるため、件数入りヒント（`messages.unclassifiedHidden`・`.eisenhower-matrix__unclassified-hint`）を表示する（レビュー指摘・無言の空表示を避ける） |
+| 両軸同一キー設定ミス（#103 F7） | `diagnostics.axesShareWritableKey===true` のとき、**section 冒頭（グリッドの前）**に `role="note"` の警告バナー（`.eisenhower-matrix__diag-warning`）を**原因（同一プロパティ名）＋直し方（ビュー options かプラグイン設定で 2 軸に別プロパティを指定）**付きで描画する（`ready`／`empty` の両状態で出しうる・`loading` シェルでは出さない）。**`aria-live` を持たない**（既存 `.eisenhower-matrix__sr-status`〔`role="status" aria-live="polite"`〕との二重読み上げを避ける＝視覚補助の位置づけ。全ロック時の各カード理由は `cardLockedLabel` が SR に届く）。トーンは**控えめな警告**（`--text-warning` 相当のアクセント＋⚠アイコン・テーマ変数追従・本文 `--text-normal` で AA・ハードコード配色なし）。正常時（`axesShareWritableKey===false`）は**非表示**（ノイズ抑制） |
+| 解決済み軸名の可視化（#103 F7・控えめ） | 空状態（`state:"empty"`）と未分類非表示ヒント（上記「未分類非表示×全象限空」）に、解決済みの緊急度／重要度軸名（`diagnostics.urgentAxis`／`importantAxis`＝**frontmatter キー表記**・例「urgent／important」）を 1 行添える（`--text-muted` 相当の控えめなトーン）。空状態でも「いまどの軸で分類しているか」を提示でき、typo（軸名誤り→全ノート未分類）の気づきになる。表示範囲は AC どおり**この 2 箇所のみ**（`showUnclassified=true`×全未分類での新規ヒントは持たない＝正常運用のノイズを避ける・人間承認済み） |
 | 狭ペイン（サイドバー/縦分割） | 2×2 グリッドの単列化を**コンテナクエリ**（`.eisenhower-matrix { container-type: inline-size }` ＋ `@container (max-width:600px)`）でこのビューのペイン幅に追従させる。ビューポート幅依存の `@media` では広ウィンドウ内の狭ペインに反応しなかった（レビュー指摘） |
 | ドラッグ中 | ドラッグ元/ドロップ可象限を視覚フィードバック（#20）。ドロップで楽観的にカードを移動（書き込み確定前＝`applyPendingMoves`） |
 | 書き戻し成功 | `onDataUpdated` 自動再発火で再描画し `reconcilePendingMoves` が保留を解除して整合（keyed 差分でちらつき/スクロール維持＝#20） |
@@ -306,6 +391,7 @@ Obsidian 実機ロードを前提とするビュー本体は Storybook での再
 
 ## 主要な設計判断（現行の理由）
 
+- **ビュー内診断バナー＋解決済み軸の可視化（#103 F7・設計オプション比較で選択・人間承認済み）**: 2 大「無言の壊れ方」（両軸同一 `note.*` キー→全ロック／軸名 typo→全未分類）を、アダプタ層が既に持つ情報（`axesShareWritableKey`・`resolveAxisPropertyIds` の結果）を `MatrixViewModel.diagnostics` へ**転送するだけ**の薄い実装で説明する（Bases API 新規接触なし＝`bases.md` の「主要な設計判断」と対）。確定した設計判断: ① **警告バナーは設定ミス確定時（`axesShareWritableKey===true`）のみ**描画し、正常時は非表示にしてノイズを抑える。② **`role="note"`・非 `aria-live`**＝既存 `.eisenhower-matrix__sr-status`（`role="status" aria-live="polite"`）との二重読み上げを避け、バナーは視覚補助に徹する（全ロック時の各カード理由は `cardLockedLabel` が SR に届く）。③ **配置はグリッド上部（section 冒頭）**（却下案 B＝グリッド下・未分類ゾーン付近は原因が下部に埋もれる。ワイヤーフレーム 2 案比較で A を採択）。④ **視覚トーンは控えめな警告**（`--text-warning` 相当のアクセント＋⚠・テーマ変数追従・本文 AA。却下: muted 情報トーン＝実害のある設定ミスの深刻さが伝わりにくい／却下: 強い警告色＝主張しすぎ・既存カード群を圧倒）。⑤ **軸名の表記は frontmatter キー**（`urgent`・却下: `note.urgent` 名前空間込み＝利用者が編集するキーとずれる）。⑥ **軸名の表示範囲は空状態＋既存の未分類非表示ヒントの 2 箇所のみ**（却下: `showUnclassified=true`×全未分類での新規ヒント＝typo 検出は上がるが正常運用のノイズ・AC 外スコープ）。⑦ **バナーは `ready`／`empty` の両状態で出しうる**（`loading` シェルでは出さない）＝設定ミスはノート有無に依らず存在するため、`toViewModel` の empty 分岐でも `diagnostics` を計算する（既存関数の再利用）。
 - **ViewModel 事前グルーピング（#19 設計オプション比較で選択）**: `toViewModel` が象限ごとに entries を振り分け件数まで組む（`placements`）。配置・absent 区別・件数・空状態を Bases 非依存の純関数で単体テストでき、UI は描画に専念する。却下「フラット＋`quadrant` フィールド」: 型変更は最小だがグルーピング/件数判定が UI に漏れテストしにくい。
 - **未分類ゾーンを独立領域にする**: absent（未定義）と `false`（最低象限 Delete）を視覚的に区別するため。欠損はドロップ不可（書き戻しは両軸明示が前提）。レイアウトは 2×2 グリッドの下にフル幅で常時表示（#19 で「下部フル幅 vs 折りたたみ」を比較し、常時表示の単純さ・縦積みのレスポンシブ性で前者を採択）。
 - **非 md（`.base` 自身・`.canvas`・画像）は配置対象から除外＝`file.extension === "md"` の正の許可リスト**: v1 は boolean **frontmatter** 軸のみ扱うため、`toViewModel` の入口 `isPlaceableNote` で md ノートだけを配置対象とし、非 md は象限にも未分類にも出さない（md 0 件は `state: "empty"`）。当初は「両軸 absent → 未分類に落ちるので特別なフィルタは持たない」としていたが、`.base` 自身がドロップ不可の未分類カードとして現れる混乱を避けるため明示除外に改めた（却下案＝`.base` だけ名指し除外／除外せず未分類に残す、は `bases.md`「主要な設計判断」）。軸無し（両軸 absent）の **md ノート**は従来どおり未分類ゾーンに表示（AC6）。

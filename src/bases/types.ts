@@ -7,6 +7,7 @@
  */
 import type { Quadrant, QuadrantKey } from "../logic/quadrant";
 import type { Messages } from "../i18n";
+import type { Badge } from "./readBadges";
 
 /** マトリクスに並ぶ 1 ノートの表示用データ。 */
 export interface MatrixEntry {
@@ -25,16 +26,21 @@ export interface MatrixEntry {
    */
   locked?: boolean;
   /**
-   * 滞留（最終更新から N 日超過）を表す（`true` のときのみ設定・#106）。読み取り専用ヒューリスティック
+   * 滞留（最終更新から N 日超過）を表す（`true` のときのみ設定・#106 F9）。読み取り専用ヒューリスティック
    *（`file.stat.mtime` と設定/ビュー options のしきい値から `toViewModel` が判定）。非滞留カードには
    * 付かない（`locked?` と同じ optional 流儀）。UI（`NoteCard`）はこのフラグで滞留バッジを描画する。
    */
   stagnant?: boolean;
   /**
-   * 滞留カードの経過日数（`stagnant` が `true` のときのみ設定・#106）。バッジ表示（例 `21d`）と
+   * 滞留カードの経過日数（`stagnant` が `true` のときのみ設定・#106 F9）。バッジ表示（例 `21d`）と
    * SR 読み上げ（`aria-label`）に使う。日単位粒度（`floor`）。
    */
   stagnantDays?: number;
+  /**
+   * カード追加プロパティの読み取り専用バッジ（#104 F8）。アダプタ（`toViewModel`）が解決済みの
+   * `{ label, text, emphasized? }` を載せ、`NoteCard` が控えめに描画する。表示 0 個（既定）では省略する。
+   */
+  badges?: Badge[];
 }
 
 /** ビューの描画状態。 */
@@ -60,6 +66,22 @@ export interface MatrixPresentation {
   quadrantColors: Record<QuadrantKey, string>;
 }
 
+/**
+ * ビュー内診断情報（設定ミス診断・解決済み軸の可視化＝#103 F7）。
+ * アダプタ層が既に計算している `resolveAxisPropertyIds`／`axesShareWritableKey` の結果を
+ * 転送するだけの plain データ（Bases API への新規接触は増えない）。UI はこれを描画する。
+ */
+export interface MatrixDiagnostics {
+  /** 両軸が同一の書き戻し可能 `note.*` キーを指すか（設定ミス確定＝全カードロック）。 */
+  axesShareWritableKey: boolean;
+  /** 上が `true` のときの共有キー（frontmatter キー表記・例 "urgent"）。 */
+  sharedAxisKey?: string;
+  /** 解決済みの緊急度軸名（frontmatter キー表記。非 `note.*` は生 propertyId をフォールバック）。 */
+  urgentAxis: string;
+  /** 解決済みの重要度軸名（同上）。 */
+  importantAxis: string;
+}
+
 /** UI へ渡す ViewModel（アダプタ層が entries から組む）。 */
 export interface MatrixViewModel {
   state: MatrixState;
@@ -77,6 +99,11 @@ export interface MatrixViewModel {
    * フォールバックする（後方互換）。アダプタは常に載せる。
    */
   presentation?: MatrixPresentation;
+  /**
+   * ビュー内診断情報（#103 F7）。既存の軸解決結果を転送するだけ。省略時は UI が診断表示を出さない
+   *（後方互換・loading シェル）。アダプタは ready/empty で常に載せる。
+   */
+  diagnostics?: MatrixDiagnostics;
 }
 
 /** ドラッグ書き戻しで UI からアダプタへ渡す目的両軸値（両軸とも明示 boolean）。 */

@@ -18,7 +18,11 @@
         --text-normal: #1f2328;
         --text-muted: #5c6066;
         --text-faint: #8a8f98;
+        --text-warning: #9a6a00;
         --interactive-accent: #7b6cd9;
+        /* Obsidian の“アクセント色テキスト”用トークン（リンク等）。ライトでは塗り用アクセントより
+           暗めで AA を満たす（#104 の強調バッジ文字色が使う）。 */
+        --text-accent: #5a49c0;
         --size-4-1: 4px;
         --size-4-2: 8px;
         --size-4-3: 12px;
@@ -36,7 +40,10 @@
         --text-normal: #dadada;
         --text-muted: #9a9a9a;
         --text-faint: #6b6b6b;
+        --text-warning: #e0b34d;
         --interactive-accent: #8b7ff0;
+        /* ダークでは塗り用アクセントより明るめでコントラストを確保する。 */
+        --text-accent: #a99cf7;
       }
       html,
       body {
@@ -58,10 +65,12 @@
   <body>
     <div id="root"></div>
     <script>
-      // Obsidian ランタイムが注入するグローバル `activeDocument`（#44 のポップアウト対応で
-      // MatrixView が DragOverlay の portal 先フォールバックに使う）を、実 Obsidian 非依存の
-      // 本ハーネスでは素の document で近似する（テーマ CSS 変数の近似と同じ趣旨のシム）。
-      window.activeDocument = window.activeDocument || document;
+      // Obsidian が実行時に注入するグローバル（activeWindow/activeDocument）を供給する。
+      // 実機は Obsidian が正しい realm を注入するが、素のブラウザ・プレビューには無いため
+      // メイン window/document へ束ねる（src/test-support/setup.ts・measure-shifted.mjs と対応。
+      // MatrixView の DragOverlay portal 先〔#43〕が bare activeDocument を参照するため必須）。
+      window.activeWindow = window;
+      window.activeDocument = document;
       // ?theme=dark でダークテーマを適用。
       const params = new URLSearchParams(location.search);
       document.body.classList.add(

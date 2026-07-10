@@ -175,7 +175,7 @@ describe("NoteCard — 非 boolean 軸カードのロック（ドラッグ不可
   });
 });
 
-describe("NoteCard — 滞留バッジ（mtime ヒューリスティック・#106 AC4）", () => {
+describe("NoteCard — 滞留バッジ（mtime ヒューリスティック・#106 F9 AC4）", () => {
   /** 滞留フラグ付きカード（toViewModel が stagnant/stagnantDays を付与）。 */
   function stagnantEntry(days = 21): MatrixEntry {
     return { id: "old.md", title: "古いタスク", urgent: true, important: true, stagnant: true, stagnantDays: days };
@@ -212,5 +212,72 @@ describe("NoteCard — 滞留バッジ（mtime ヒューリスティック・#10
     render(<NoteCard entry={entry()} stagnantBadge={badge} stagnantLabel={label} />);
     // then: バッジは描画されない
     expect(screen.queryByText(/\d+d/)).toBeNull();
+  });
+});
+
+describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F8 AC5）", () => {
+  /** バッジ付き entry。 */
+  function badgedEntry(
+    badges: MatrixEntry["badges"],
+    id = "a.md",
+    title = "タスクA",
+  ): MatrixEntry {
+    return { id, title, urgent: undefined, important: undefined, badges };
+  }
+
+  it("NoteCard_バッジをタイトル下に控えめに表示する（label と value を描画・AC5）", () => {
+    // given: 期日・プロジェクトの 2 バッジ
+    const entry = badgedEntry([
+      { label: "due", text: "2026-07-01" },
+      { label: "project", text: "仕事" },
+    ]);
+    // when
+    const { container } = render(<NoteCard entry={entry} />);
+    // then: タイトルとバッジのラベル・値が描画される
+    expect(screen.getByText("タスクA")).toBeTruthy();
+    expect(screen.getByText("2026-07-01")).toBeTruthy();
+    expect(screen.getByText("仕事")).toBeTruthy();
+    const badges = container.querySelectorAll(".eisenhower-note-card__badge");
+    expect(badges).toHaveLength(2);
+  });
+
+  it("NoteCard_バッジのラベルと値を両方描画する（SR はラベル+値を読み上げ・人間承認）", () => {
+    // given
+    const entry = badgedEntry([{ label: "due", text: "2026-07-01" }]);
+    // when
+    render(<NoteCard entry={entry} />);
+    // then: アクセシブル名はノート名を保ちつつ、ラベル・値の両方が可視テキストとして読み上げ対象に含まれる
+    expect(screen.getByText("due")).toBeTruthy();
+    expect(screen.getByText("2026-07-01")).toBeTruthy();
+  });
+
+  it("NoteCard_emphasized バッジは強調クラスを持つ（アクセント色・AC4）", () => {
+    // given: 過去日で強調フラグ付き
+    const entry = badgedEntry([{ label: "due", text: "2026-07-01", emphasized: true }]);
+    // when
+    const { container } = render(<NoteCard entry={entry} />);
+    // then: 強調バッジに --emphasized 修飾クラスが付く（styles.css がアクセント色を当てる）
+    const emphasized = container.querySelector(".eisenhower-note-card__badge--emphasized");
+    expect(emphasized).toBeTruthy();
+    expect(emphasized?.textContent).toContain("2026-07-01");
+  });
+
+  it("NoteCard_emphasized でないバッジは強調クラスを持たない（既定オフ）", () => {
+    const entry = badgedEntry([{ label: "due", text: "2026-07-10" }]);
+    const { container } = render(<NoteCard entry={entry} />);
+    expect(container.querySelector(".eisenhower-note-card__badge--emphasized")).toBeNull();
+  });
+
+  it("NoteCard_バッジが無ければバッジ領域を描画しない（表示 0 個は現状維持・AC3）", () => {
+    // given: badges undefined（既定）
+    const { container } = render(<NoteCard entry={badgedEntry(undefined)} />);
+    // then: バッジコンテナ自体が無い＝タイトルのみのカード密度
+    expect(container.querySelector(".eisenhower-note-card__badges")).toBeNull();
+    expect(screen.getByText("タスクA")).toBeTruthy();
+  });
+
+  it("NoteCard_空配列のバッジも領域を描画しない", () => {
+    const { container } = render(<NoteCard entry={badgedEntry([])} />);
+    expect(container.querySelector(".eisenhower-note-card__badges")).toBeNull();
   });
 });

@@ -11,7 +11,7 @@ kind: ui
 
 > 起点は `docs/要件定義書.md`「UI/UX 方針」節。F1（#18）のシェル＋状態表示に続き、#19（F2）で 2×2 グリッド＋未分類ゾーンの配置を実装し `status: active` に確定した。**#20（F3）のドラッグ書き戻しを実装し `status: active` に確定した。** **#22（F5）のカード操作（開く/新タブ/プレビュー/キーボード）を実装し `status: active` に確定した。** **#23（F6）の設定タブ（デフォルト軸・象限ラベル/色・欠損表示・i18n 言語）を実装し `status: active` に確定した。**
 >
-> **#104（F7 カード追加プロパティ表示・`status: draft`／実装前設計 2026-07-09・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示し、ホバープレビューを開かずに Do↔Schedule の振り分け材料（期日の近さ）をカード上で確認できるようにする。表示プロパティの選択 UI は**独自セレクタ方式（案 a）を採用**（案 b＝Bases ネイティブ Properties は `config` からの取得可否が実機スパイク未実施で未確認のため却下・将来余地は `bases.md`）。**バッジの SR 読み上げは「ラベル＋値」**（カードのアクセシブル名＝ノート名は保ち、バッジはその後に補足として読み上げる＝`aria-hidden` にしない・人間承認済み）。**日付強調トグルは既定オフ**・**厳格 ISO（`YYYY-MM-DD`）が今日以前**のときだけアクセント色（AC4。将来これを条件付き書式 DSL に育てない＝`bases.md` の線引き）。**既定は表示 0 個**でカード密度は現状維持（AC3）。データフローは既存 F6 と同じ ViewModel 拡張（`MatrixEntry.badges` の解決済み plain データを `NoteCard` が描画・UI は Bases 非依存を維持＝AC5）。詳細な描画・a11y・状態は下記「カード追加プロパティ表示」節、境界契約と正規化は `bases.md`。
+> **#104（F7 カード追加プロパティ表示）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示し、ホバープレビューを開かずに Do↔Schedule の振り分け材料（期日の近さ）をカード上で確認できるようにする。表示プロパティの選択 UI は**独自セレクタ方式（案 a）を採用**（案 b＝Bases ネイティブ Properties は `config` からの取得可否が実機スパイク未実施で未確認のため却下・将来余地は `bases.md`）。**バッジの SR 読み上げは「ラベル＋値」**（カードのアクセシブル名＝ノート名を基本に保ち、バッジはその後に補足として読み上げる＝`aria-hidden` にしない・人間承認済み）。**日付強調トグルは既定オフ**・**厳格 ISO（`YYYY-MM-DD`）が今日以前**のときだけアクセント色（AC4。将来これを条件付き書式 DSL に育てない＝`bases.md` の線引き）。**既定は表示 0 個**でカード密度は現状維持（AC3）。データフローは既存 F6 と同じ ViewModel 拡張（`MatrixEntry.badges` の解決済み plain データを `NoteCard` が描画・UI は Bases 非依存を維持＝AC5）。**実装時に frontend-reviewer 指摘を反映**: バッジは塗り背景ではなく**細い枠線＋カード背景上のテキスト**にして小さい弱色テキストの WCAG AA を確保し、強調バッジは塗り用 `--interactive-accent` ではなく**アクセント色テキスト用トークン `--text-accent`**＋**semibold**（色のみに依存しない＝WCAG 1.4.1）で表す。値が空（absent/例外退避＝AC2）のバッジは**ラベルだけの“壊れて見える”チップを避けるため UI では描画しない**（データ側は件数を保つ＝AC1）。詳細な描画・a11y・状態は下記「カード追加プロパティ表示」節、境界契約と正規化は `bases.md`。
 >
 > **undo（直前1手の元に戻す・最小実装）を実装し `status: active` に確定した（2026-07-02）**: ドラッグ書き戻しは破壊的（両軸を `true/false` 上書き）なため、**直前 1 手だけ**を元に戻す最小の undo を足した。トリガーは **(a) Obsidian コマンド（ホットキー割当可・パレット表示）と (b) 移動直後にビュー内へ出すトースト**の**両方**（人間承認済み）。いずれも **Obsidian ネイティブの Ctrl+Z とは非統合**（独自コマンドとして登録し、ネイティブ undo をフックしない）。復元は **完全復元**＝移動前の frontmatter 値を捕捉し、present は値を代入、**absent はキーを delete して未分類へ戻す**（人間承認済み。`delete` はこの undo 経路のみで、分類ドラッグは引き続き delete しない＝v1 boolean 軸限定の制約を崩さない）。トーストは分離コンポーネント `UndoToast`（`role="group"`＋aria-label＝二重読み上げ回避・明示 focus-visible）で、frontend-reviewer 指摘を反映済み。詳細な捕捉/復元の配線（`UndoRecord`・`UndoManager`・`runUndo`・コマンド登録）は `bases.md`。
 >
@@ -212,7 +212,7 @@ sequenceDiagram
     end
 ```
 
-### カード追加プロパティ表示（バッジ・#104 F7・`status: draft`）
+### カード追加プロパティ表示（バッジ・#104 F7・`status: active`）
 
 カードにタイトルの下へ**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示する。表示可否・対象プロパティはビュー options（主）＋プラグイン設定（デフォルト）で選ぶ（F4/F6 と同じハイブリッド）。バッジは解決済み plain データ `MatrixEntry.badges`（`bases.md` の境界契約）として届き、`NoteCard` は Bases 非依存のまま描画する。
 
@@ -228,24 +228,24 @@ sequenceDiagram
 
 > **却下: 案 B（タイトル右へインライン）** — 横幅を食い、省略済みの長いタイトルとバッジが同一行で競合してどちらも読みにくい（狭ペイン 375px で崩れる）。下段行なら折返しで縦に伸びるだけで横スクロールを出さない（AC「375px で崩れない」）。
 
-**描画（控えめ・テーマ変数）**:
-- バッジは小サイズ・`--text-muted`（AA を満たす弱色トークン）・`--background-modifier-*` の淡い背景 or 枠。独自色はハードコードしない（テーマ追従＝既存方針）。
-- **日付強調（AC4）**: `MatrixEntry.badges[].emphasized === true`（アダプタが厳格 ISO かつ今日以前 × トグル on で算出）のバッジだけ、テキスト/枠を `--interactive-accent` に上げる。既定オフ（`emphasizePastDates:false`）では常に `false` ＝ 弱色のまま。
-- ラベルは短く（プロパティ表示名）、値は正規化済み文字列（`bases.md`。例外・absent は空文字でアダプタが退避済み＝UI は `text===""` のバッジを描画しないか空表示にする＝AC2 でビューは壊れない）。
+**描画（控えめ・テーマ変数・実装済み）**:
+- バッジは小サイズ・`--text-muted`。**塗り背景は使わず細い枠線（`1px solid var(--background-modifier-border)`）でグルーピング**し、テキストはカード背景（`--background-primary`）の上に置く（塗り背景は弱色小テキストの実効コントラストを AA 未満へ落とすため＝frontend-reviewer must 対応）。独自色はハードコードしない（テーマ追従）。ラベルは小さめ大文字・字間で値と差をつける（`opacity` で色を落とすと AA を割るため使わない）。値が長ければ `text-overflow: ellipsis` で省略する。
+- **日付強調（AC4）**: `MatrixEntry.badges[].emphasized === true`（アダプタが厳格 ISO かつ今日以前 × トグル on で算出）のバッジだけ、**テキスト色を `--text-accent`（アクセント色テキスト用トークン＝塗り用 `--interactive-accent` は前景に使うと AA を割るため不可）・枠線を `--interactive-accent`・字を semibold** にする。semibold は**色のみに依存しない**強調（WCAG 1.4.1）＝色覚特性のある利用者にも過期日が伝わる。既定オフ（`emphasizePastDates:false`）では常に `false` ＝ 弱色のまま。
+- ラベルは短く（プロパティ表示名＝`readBadges.badgeLabel` が名前空間接頭辞を落とす）、値は正規化済み文字列（`bases.md`。例外・absent は空文字でアダプタが退避済み）。**値が空のバッジは UI で描画しない**（ラベルだけの“壊れて見える”チップを避ける＝frontend-reviewer should 対応。データ側は件数を保つ＝AC1／UI で空を省く＝AC2 の空表示退避）。
 
 **a11y（人間承認済み＝ラベル＋値を読み上げ）**:
-- カードのアクセシブル名は**ノート名（title）を保つ**（ランドマーク/リスト移動で読み上げるのはノート名）。バッジはその**後に補足として読み上げる**（`aria-hidden` にしない）。実装: バッジ行を title と同じアクセシブル要素内の可視テキストとして置き、ラベルと値の間に区切り（例 SR 用に「ラベル 値」）を持たせる。ロックカード（`aria-label` で名を明示指定）でもバッジ情報が名の後に続くよう `aria-describedby` かバッジ可視テキストで補う（二重読み上げは避ける）。
-- コントラスト: 弱色バッジ・強調バッジとも WCAG AA をテーマ変数で満たす（`--text-muted`／`--interactive-accent` はテーマが AA 前提）。
-- レスポンシブ: 375px でバッジ行は折返し、横スクロールを出さない。
+- カードのアクセシブル名は**基本ノート名（title）**。バッジ行は title と同じ**操作可能要素（`role="button"` のカード）内の可視テキスト**として置き、ラベル・値がそのまま読み上げ対象に入る（`aria-hidden` にしない）。**カード全体をドラッグ元/開く対象にする既定（#20/#22）ため、バッジは操作要素の内側に置く必要があり**、非ロックカードでは名がタイトル＋バッジ text の連結になる（バッジ情報は失われない）。ロックカード（`aria-label` で名を固定）ではバッジが名に含まれない非対称が残る＝**「名＝タイトル＋バッジを補足読み」の理想形にするには操作要素外へバッジを出す DOM 再構成が要り、全カード操作の既定と競合する**ため v1 では見送り、`aria-describedby` 等での是正は将来課題（frontend-reviewer should・code-review で記録）。
+- コントラスト: 弱色バッジは枠線＋カード背景上テキストで WCAG AA を確保（`--text-muted` on `--background-primary`）。強調バッジのテキストは `--text-accent`（テーマが AA 調整済み前提）＋枠線＋semibold。
+- レスポンシブ: 375px でバッジ行は折返し（`flex-wrap`）、横スクロールを出さない（`104-badges-mobile-light-after.png` で確認）。
 
 **状態（バッジ関連の追加行）**:
 
 | 状態 | 表示 |
 |------|------|
 | 表示プロパティ 0 個（既定） | バッジ行なし＝タイトルのみ（現状維持・AC3） |
-| バッジ値あり | タイトル下に控えめなバッジ（`--text-muted`・小サイズ・AC5） |
-| バッジ値が absent／`getValue` 例外 | そのバッジは空表示へ退避（カード・ビューは壊れない・AC2） |
-| 厳格 ISO 日付が今日以前 × 強調 on | 当該バッジをアクセント色で強調（AC4） |
+| バッジ値あり | タイトル下に控えめな枠線バッジ（`--text-muted`・小サイズ・AC5） |
+| バッジ値が absent／`getValue` 例外 | アダプタが空文字へ退避し、UI は当該バッジを**描画しない**（カード・ビューは壊れない・AC2） |
+| 厳格 ISO 日付が今日以前 × 強調 on | 当該バッジを `--text-accent`＋semibold で強調（AC4） |
 
 **設定（`src/settings.ts` 拡張・#104）**:
 
@@ -262,7 +262,9 @@ interface EisenhowerSettings {
 
 **i18n（`src/i18n.ts` 追加・AC6）**: バッジ設定/セレクタの `displayName`・説明・読み取り専用注記を `Messages` に追加し en/ja 両方で定義する（`i18n.test.ts` が欠けを検出）。
 
-**テスト方針**: 単体で ① `toViewModel` が `badges` を解決（2 個設定→2 件・0 個→空・例外/absent→空退避＝`toViewModel.test.ts`）、② `NoteCard` がバッジをタイトル下に描画・強調バッジのアクセント（`NoteCard.test.tsx`）、③ `buildBadgeViewOptions` のキー/型/全プロパティ許可（`viewOptions.test.ts`）、④ `isEmphasizedDate` の厳格 ISO×今日以前（`src/logic` の純関数テスト）、⑤ i18n 欠け検出（`i18n.test.ts`）を赤→緑で固める。実描画のコントラスト・レスポンシブ・SR は Green 後に `frontend-reviewer`＋スクショで担保。
+**テスト方針**: 単体で ① `toViewModel` が `badges` を解決（2 個設定→2 件・0 個→空・例外/absent→空退避＝`toViewModel.test.ts`）、② `NoteCard` がバッジをタイトル下に描画・強調バッジのアクセント・空バッジ非描画（`NoteCard.test.tsx`）、③ `buildBadgeViewOptions` のキー/型/全プロパティ許可（`viewOptions.test.ts`）、④ `isEmphasizedDate` の厳格 ISO×今日以前（`dateEmphasis.test.ts`）、⑤ `readBadges` の正規化・境界防御（`readBadges.test.ts`）、⑥ i18n 欠け検出（`i18n.test.ts`）を赤→緑で固める。実描画のコントラスト・レスポンシブ・SR は Green 後に `frontend-reviewer`＋スクショで担保した。
+
+**スクリーンショット（frontend-reviewer 確認済み・#104）**: `scripts/preview`（`?badges=1`）でブラウザ描画して取得＝`docs/screenshots/104-badges-{desktop-light,mobile-light,desktop-dark}-after.png`（過期日 `2026-07-01` の強調＋未来日/プロジェクト/タグの弱色バッジ・空値バッジは非描画）・`104-matrix-desktop-light-before.png`（バッジ 0 個の基線＝タイトルのみ・AC3）。frontend-reviewer の must（強調バッジの AA）を `--text-accent` 化で解消し、should（色のみ強調＝1.4.1／空ラベルバッジ）を semibold・空値非描画で反映済み。
 
 ### undo（直前1手の元に戻す・最小実装）
 

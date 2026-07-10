@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, TFile, Value } from "obsidian";
-import { BooleanValue, NullValue, NumberValue } from "obsidian";
+import { BooleanValue, NullValue, NumberValue, StringValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import { messagesFor } from "../i18n";
 import { toViewModel } from "./toViewModel";
@@ -423,5 +423,99 @@ describe("toViewModel — presentation（ラベル/色/言語文言の解決・#
     // then: presentation は存在し全象限ラベルが埋まる
     expect(viewModel.presentation).toBeDefined();
     expect(viewModel.presentation?.quadrantLabels.delete.length).toBeGreaterThan(0);
+  });
+});
+
+describe("toViewModel — カード追加プロパティ表示（バッジ・#104 F7）", () => {
+  /** 任意プロパティ ID→Value を持つ md entry（バッジ検証用。両軸は boolean で Do に載る）。 */
+  function badgeEntry(path: string, values: Record<string, Value | null>): BasesEntry {
+    const merged: Record<string, Value | null> = {
+      "note.urgent": TRUE,
+      "note.important": TRUE,
+      ...values,
+    };
+    return {
+      file: fileStub(path),
+      getValue: (id: BasesPropertyId) => merged[id] ?? null,
+    } as unknown as BasesEntry;
+  }
+  /** ビュー options（config.getAsPropertyId）のモック。 */
+  function mockConfig(
+    map: Record<string, BasesPropertyId | null>,
+  ): { getAsPropertyId: (key: string) => BasesPropertyId | null } {
+    return { getAsPropertyId: (key: string) => map[key] ?? null };
+  }
+
+  it("toViewModel — カード表示プロパティ 2 個設定で各 MatrixEntry.badges に 2 件載る（AC1）", () => {
+    // given: options で badgeProperty1/2 に note.due / note.project、ノートは両プロパティを持つ
+    const entries = [
+      badgeEntry("t.md", {
+        "note.due": new StringValue("2026-07-01"),
+        "note.project": new StringValue("仕事"),
+      }),
+    ];
+    const config = mockConfig({
+      badgeProperty1: "note.due" as BasesPropertyId,
+      badgeProperty2: "note.project" as BasesPropertyId,
+    });
+    // when
+    const { placements } = toViewModel(entries, config, DEFAULT_SETTINGS, messagesFor("en"), "2026-07-09");
+    // then: Do 象限のカードに badges が 2 件（解決済み {label,text}）
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges).toHaveLength(2);
+    expect(card?.badges?.[0]).toMatchObject({ label: "due", text: "2026-07-01" });
+    expect(card?.badges?.[1]).toMatchObject({ label: "project", text: "仕事" });
+  });
+
+  it("toViewModel — 表示プロパティ 0 個（既定）なら badges は空（現状維持・AC3）", () => {
+    // given / when: config 無し・設定 cardBadgeProperties=[]（既定）
+    const entries = [badgeEntry("t.md", {})];
+    const { placements, entries: mapped } = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: badges は付かない（undefined・現状のカード密度）
+    expect(placements.do[0].badges).toBeUndefined();
+    expect(mapped[0].badges).toBeUndefined();
+  });
+
+  it("toViewModel — getValue が throw する軸のバッジは空表示へ退避しビュー全体は壊れない（AC2）", () => {
+    // given: badge プロパティの getValue が throw（他プロパティは正常）
+    const entry = {
+      file: fileStub("t.md"),
+      getValue: (id: BasesPropertyId) => {
+        if (id === "note.urgent" || id === "note.important") return TRUE;
+        throw new Error("boom");
+      },
+    } as unknown as BasesEntry;
+    const config = mockConfig({ badgeProperty1: "note.due" as BasesPropertyId });
+    // when
+    const { state, placements } = toViewModel(entry ? [entry] : [], config, DEFAULT_SETTINGS, messagesFor("en"), "2026-07-09");
+    // then: ビューは ready のまま・カードは残り・バッジは空表示
+    expect(state).toBe("ready");
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges).toHaveLength(1);
+    expect(card?.badges?.[0].text).toBe("");
+  });
+
+  it("toViewModel — 厳格 ISO 日付が今日以前 × 強調 on のバッジは emphasized=true（AC4）", () => {
+    // given: note.due=2026-07-01（今日 2026-07-09 より前）・emphasizePastDates on
+    const entries = [badgeEntry("t.md", { "note.due": new StringValue("2026-07-01") })];
+    const config = mockConfig({ badgeProperty1: "note.due" as BasesPropertyId });
+    const settings = { ...DEFAULT_SETTINGS, emphasizePastDates: true };
+    // when
+    const { placements } = toViewModel(entries, config, settings, messagesFor("en"), "2026-07-09");
+    // then
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges?.[0].emphasized).toBe(true);
+  });
+
+  it("toViewModel — 設定 cardBadgeProperties をデフォルトに使う（options 未設定時）", () => {
+    // given: options 無し・設定に note.due
+    const entries = [badgeEntry("t.md", { "note.due": new StringValue("2026-07-01") })];
+    const settings = { ...DEFAULT_SETTINGS, cardBadgeProperties: ["note.due"] };
+    // when
+    const { placements } = toViewModel(entries, null, settings, messagesFor("en"), "2026-07-09");
+    // then: 設定デフォルトのプロパティでバッジが載る
+    const card = placements.do.find((e) => e.id === "t.md");
+    expect(card?.badges).toHaveLength(1);
+    expect(card?.badges?.[0]).toMatchObject({ label: "due", text: "2026-07-01" });
   });
 });

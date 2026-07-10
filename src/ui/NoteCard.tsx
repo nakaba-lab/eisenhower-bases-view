@@ -22,6 +22,35 @@ type DivKeyboardEvent = Parameters<NonNullable<DivProps["onKeyDown"]>>[0];
  * Enter を「開く」に解放する（`MatrixView` で `KeyboardSensor` の起動キーを Space のみに remap）。
  * native `title` は撤去し、ホバーはコアプレビューへ一本化する。開く/preview の実処理はアダプタへ委譲（AC5）。
  */
+/**
+ * カード追加プロパティの読み取り専用バッジ（#104 F7）。タイトルの下に控えめに並べる。
+ * 表示 0 個（`badges` が空/未定義）なら何も描画しない（カード密度は現状維持＝AC3）。
+ * ラベルと値を可視テキストとして描画し、SR にはラベル＋値が読み上げられる（人間承認済み）。
+ * 期日らしい値（`emphasized`）はアクセント色で強調する（AC4）。
+ */
+function NoteBadges({ badges }: { badges: MatrixEntry["badges"] }) {
+  // 値が空（absent／例外で退避＝AC2）のバッジはラベルだけの“壊れて見える”チップになるため描画しない
+  //（データ側は件数を保つ＝AC1・UI 側で空を省く＝frontend-reviewer should）。
+  const visible = badges?.filter((badge) => badge.text !== "");
+  if (!visible || visible.length === 0) return null;
+  return (
+    <div class="eisenhower-note-card__badges">
+      {visible.map((badge, index) => (
+        <span
+          key={index}
+          class={
+            "eisenhower-note-card__badge" +
+            (badge.emphasized ? " eisenhower-note-card__badge--emphasized" : "")
+          }
+        >
+          <span class="eisenhower-note-card__badge-label">{badge.label}</span>
+          <span class="eisenhower-note-card__badge-text">{badge.text}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export interface NoteCardProps {
   entry: MatrixEntry;
   /** クリック/Enter で開く（#22 F5）。UI は修飾キーから `newLeaf` を算出して渡す。 */
@@ -96,10 +125,13 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
           onKeyDown={handleLockedKeyDown}
           onMouseEnter={handleMouseEnter}
         >
-          <span class="eisenhower-note-card__lock" aria-hidden="true">
-            🔒
+          <span class="eisenhower-note-card__title">
+            <span class="eisenhower-note-card__lock" aria-hidden="true">
+              🔒
+            </span>
+            {entry.title}
           </span>
-          {entry.title}
+          <NoteBadges badges={entry.badges} />
         </div>
       </li>
     );
@@ -120,7 +152,8 @@ export function NoteCard({ entry, onOpenCard, onHoverCard, lockedLabel }: NoteCa
         onKeyDown={handleKeyDown}
         onMouseEnter={handleMouseEnter}
       >
-        {entry.title}
+        <span class="eisenhower-note-card__title">{entry.title}</span>
+        <NoteBadges badges={entry.badges} />
       </div>
     </li>
   );

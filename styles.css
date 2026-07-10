@@ -159,19 +159,84 @@
   min-width: 0;
 }
 
-/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。 */
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。
+ * #104（F7）でタイトル下にバッジ行を持てるよう縦積み（flex column）にする。タイトルの 1 行省略は
+ * __title へ移し、バッジは折返し可能な別行として並べる。min-width:0 は flex 子の省略成立に必要。 */
 .eisenhower-note-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
   border-radius: var(--radius-s, 4px);
   background-color: var(--background-primary);
   color: var(--text-normal);
   font-size: var(--font-ui-small, 0.8em);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   /* ドラッグ可能であることを示す（#20）。開く導線（#22）は role=button で伝わる。 */
   cursor: grab;
   touch-action: none;
+}
+
+/* カードのタイトル行（1 行省略）。バッジ行と縦に積む（#104）。 */
+.eisenhower-note-card__title {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* カード追加プロパティのバッジ行（#104 F7・読み取り専用）。タイトル下に控えめに折返し表示する。 */
+.eisenhower-note-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1, 4px);
+  margin-block-start: var(--size-4-1, 4px);
+  min-width: 0;
+}
+
+/* 1 バッジ。テーマの弱色トークン（AA を満たす --text-muted）で控えめに。値が長ければ省略する。
+ * 背景は塗らず**細い枠線**でグルーピングする: 塗り背景（--background-modifier-border）は弱色の小さいテキストの
+ * 実効コントラストを AA 未満へ落とすため、テキストはカード背景の上に置いて AA を確保する（枠線は
+ * コントラストに影響しない）。 */
+.eisenhower-note-card__badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  max-width: 100%;
+  padding: 0 var(--size-4-1, 4px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+  color: var(--text-muted);
+  font-size: var(--font-smallest, 0.75em);
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+/* ラベル（プロパティ名）は値と区別できるよう小さめ大文字。opacity で色を落とすと AA を割るため
+ * 色は --text-muted のまま、字形（大文字・字間・やや小）だけで差をつける。 */
+.eisenhower-note-card__badge-label {
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.9em;
+}
+
+/* 値は長ければ省略（バッジ行が横に溢れないようにする＝375px でも崩れない）。 */
+.eisenhower-note-card__badge-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 期日らしい値（厳格 ISO・今日以前）× 強調トグル on の 1 バッジをアクセント色で強調する（#104 AC4）。
+ * テキスト色は **--text-accent**（リンク等の“アクセント色テキスト”用で AA 調整済みトークン）を使う。
+ * 塗り用の --interactive-accent を小さいテキストの前景に使うと AA を割るため（frontend-reviewer must）、
+ * テキストは --text-accent・枠線は --interactive-accent に分ける。さらに**色のみに依存しない**よう
+ *（WCAG 1.4.1）字の太さも上げ、色覚特性のある利用者にも「過期日」が伝わるようにする。 */
+.eisenhower-note-card__badge--emphasized {
+  color: var(--text-accent, var(--interactive-accent));
+  border-color: var(--interactive-accent);
+  font-weight: var(--font-semibold, 600);
 }
 
 /* クリックで開けることを示すホバー（#22 F5）。ドラッグ affordance（grab）は保ちつつ、

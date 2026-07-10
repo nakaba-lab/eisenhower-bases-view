@@ -22,18 +22,27 @@ import { messagesFor, type Language } from "../../src/i18n";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import type { MatrixEntry, MatrixViewModel } from "../../src/bases/types";
 
-function entry(id: string, title: string, locked?: boolean): MatrixEntry {
+function entry(
+  id: string,
+  title: string,
+  locked?: boolean,
+  badges?: MatrixEntry["badges"],
+): MatrixEntry {
   return {
     id,
     title,
     urgent: undefined,
     important: undefined,
     ...(locked ? { locked: true } : {}),
+    ...(badges ? { badges } : {}),
   };
 }
 
 const params = new URLSearchParams(location.search);
 const useF6 = params.get("f6") === "1";
+// #104 F7: ?badges=1 でカード追加プロパティ表示（読み取り専用バッジ）を写す。
+// 期日（過去日＝強調）・プロジェクト・空表示（absent 退避）・未来日（非強調）を混ぜて目視する。
+const useBadges = params.get("badges") === "1";
 const lang: Language = params.get("lang") === "en" ? "en" : "ja";
 
 /** #23 F6: 象限ごとのカスタムアクセント色＋`do` のカスタムラベル上書きを施した設定。 */
@@ -52,10 +61,34 @@ const f6Settings = {
   },
 };
 
+/** #104 F7: バッジ検証用のサンプル（過去日=強調・プロジェクト・空表示・未来日=非強調）。 */
+const dueLabel = lang === "ja" ? "due" : "due";
+const projectLabel = lang === "ja" ? "project" : "project";
+const pastDueBadges: MatrixEntry["badges"] = [
+  { label: dueLabel, text: "2026-07-01", emphasized: true }, // 今日以前＝アクセント強調（AC4）
+  { label: projectLabel, text: lang === "ja" ? "経理" : "Finance" },
+];
+const futureDueBadges: MatrixEntry["badges"] = [
+  { label: dueLabel, text: "2026-08-01" }, // 未来日＝非強調
+  { label: "tags", text: lang === "ja" ? "計画" : "planning" },
+];
+const gracefulBadges: MatrixEntry["badges"] = [
+  { label: dueLabel, text: "" }, // absent/例外の空表示退避（AC2・ラベルのみ）
+  { label: projectLabel, text: lang === "ja" ? "議事録" : "Minutes" },
+];
+
 const placements = {
-  do: [entry("a.md", "請求書を今日中に送る"), entry("b.md", "障害の一次対応")],
-  schedule: [entry("c.md", "四半期計画のドラフト"), entry("d.md", "資格試験の勉強")],
-  delegate: [entry("e.md", "議事録の清書を依頼")],
+  do: [
+    entry("a.md", "請求書を今日中に送る", false, useBadges ? pastDueBadges : undefined),
+    entry("b.md", "障害の一次対応"),
+  ],
+  schedule: [
+    entry("c.md", "四半期計画のドラフト", false, useBadges ? futureDueBadges : undefined),
+    entry("d.md", "資格試験の勉強"),
+  ],
+  delegate: [
+    entry("e.md", "議事録の清書を依頼", false, useBadges ? gracefulBadges : undefined),
+  ],
   delete: [], // 空セル（象限別プレースホルダの確認）
   unclassified: [
     entry("x.md", "軸プロパティ未設定のノート"),

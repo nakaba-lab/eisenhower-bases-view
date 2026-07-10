@@ -7,7 +7,7 @@ import {
   VIEW_NAME,
   safeRegisterBasesView,
 } from "./bases/registerView";
-import { buildAxisViewOptions } from "./bases/viewOptions";
+import { buildAxisViewOptions, buildBadgeViewOptions } from "./bases/viewOptions";
 import { runUndo } from "./bases/undoWriteBack";
 import { EisenhowerSettingTab } from "./settingsTab";
 import { UndoManager } from "./logic/undo";
@@ -74,8 +74,12 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
             ),
           // 軸プロパティ選択 UI（#21 F4）: note.* のみ選択可の property セレクタを
           // Configure view へ宣言する（filter は書き戻し可能な note.* 判定・AC1）。
-          // displayName は評価時点の解決言語に追従する（#23 F6 の i18n・AC4）。
-          options: () => buildAxisViewOptions(this.resolveMessages()),
+          // カード追加プロパティ表示（#104 F7）: 読み取り専用バッジのセレクタ（全プロパティ許可）も
+          // 併せて宣言する。displayName は評価時点の解決言語に追従する（#23 F6 の i18n・AC4）。
+          options: () => [
+            ...buildAxisViewOptions(this.resolveMessages()),
+            ...buildBadgeViewOptions(this.resolveMessages()),
+          ],
         }),
       () => {
         console.warn(

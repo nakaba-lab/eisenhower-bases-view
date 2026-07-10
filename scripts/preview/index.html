@@ -19,6 +19,9 @@
         --text-muted: #5c6066;
         --text-faint: #8a8f98;
         --interactive-accent: #7b6cd9;
+        /* Obsidian の“アクセント色テキスト”用トークン（リンク等）。ライトでは塗り用アクセントより
+           暗めで AA を満たす（#104 の強調バッジ文字色が使う）。 */
+        --text-accent: #5a49c0;
         --size-4-1: 4px;
         --size-4-2: 8px;
         --size-4-3: 12px;
@@ -37,6 +40,8 @@
         --text-muted: #9a9a9a;
         --text-faint: #6b6b6b;
         --interactive-accent: #8b7ff0;
+        /* ダークでは塗り用アクセントより明るめでコントラストを確保する。 */
+        --text-accent: #a99cf7;
       }
       html,
       body {
@@ -58,6 +63,11 @@
   <body>
     <div id="root"></div>
     <script>
+      // Obsidian のグローバル（実行時に供給される activeWindow/activeDocument＝
+      // メイン window では document/window と同一）を近似する。MatrixView の DragOverlay portal
+      // 先（#43）が bare `activeDocument` を参照するため、テーマ変数と同様に harness が供給する。
+      window.activeDocument = document;
+      window.activeWindow = window;
       // ?theme=dark でダークテーマを適用。
       const params = new URLSearchParams(location.search);
       document.body.classList.add(

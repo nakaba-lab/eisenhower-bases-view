@@ -256,7 +256,8 @@ export function NoteCard({
       return;
     }
     // x キーで完了トグル（#105 F10）。Space=掴む/Enter=開く と非衝突（掴み中は発火しない）。
-    if (event.key === "x" && showCompletion && !isDragging) {
+    // CapsLock/Shift の "X" も受ける（大小無反応の silent no-op を避ける・frontend-reviewer nit）。
+    if ((event.key === "x" || event.key === "X") && showCompletion && !isDragging) {
       event.preventDefault();
       toggleCompletion();
       return;
@@ -267,8 +268,8 @@ export function NoteCard({
   // role=button の標準操作（Enter/Space で活性化）に揃え、preventDefault で Space によるペインのスクロールを
   // 防ぐ（Space が無反応かつスクロールする壊れた挙動の是正・レビュー指摘）。
   const handleLockedKeyDown = (event: DivKeyboardEvent) => {
-    // x キーで完了トグル（軸ロックでも完了プロパティが有効なら切り替えられる・#105 F10）。
-    if (event.key === "x" && showCompletion) {
+    // x キーで完了トグル（軸ロックでも完了プロパティが有効なら切り替えられる・#105 F10）。CapsLock/Shift も受ける。
+    if ((event.key === "x" || event.key === "X") && showCompletion) {
       event.preventDefault();
       toggleCompletion();
       return;

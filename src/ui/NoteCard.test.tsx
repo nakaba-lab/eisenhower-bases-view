@@ -450,6 +450,20 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
     expect(onOpenCard).toHaveBeenCalledTimes(1);
   });
 
+  it("NoteCard_大文字 X（CapsLock/Shift）でもトグルする（大小無反応の silent no-op を避ける）", () => {
+    const onToggleCompletion = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "タスクA" }), { key: "X" });
+    expect(onToggleCompletion).toHaveBeenCalledWith("a.md", true);
+  });
+
   it("NoteCard_完了プロパティ無効時_x キーはトグルしない（機能オフ）", () => {
     const onToggleCompletion = vi.fn();
     render(

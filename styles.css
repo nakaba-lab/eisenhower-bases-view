@@ -270,8 +270,12 @@
   transition: opacity 120ms ease, color 120ms ease;
 }
 
-/* カード hover・ボタン focus で出現（マウスにもキーボードにも露出＝a11y フロア）。 */
-.eisenhower-note-card:hover .eisenhower-note-card__complete,
+/* カード hover・カード focus・ボタン focus で出現（マウスにもキーボードにも露出＝a11y フロア）。
+ * カード hover/focus のリビールは **:not(:disabled)** に限る: 非対応（disabled）ボタンまで
+ * opacity:1 にすると下の :disabled{opacity:.4} を詳細度で上書きし、押せる「未完了」ボタンと
+ * 見分けがつかなくなる（frontend-reviewer should）。カード focus でもリビールして x キーの発見性を上げる。 */
+.eisenhower-note-card:hover .eisenhower-note-card__complete:not(:disabled),
+.eisenhower-note-card:focus-visible .eisenhower-note-card__complete:not(:disabled),
 .eisenhower-note-card__complete:focus-visible {
   opacity: 1;
 }

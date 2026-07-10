@@ -50,7 +50,7 @@ export function buildAxisViewOptions(messages: Messages): BasesPropertyOption[] 
 }
 
 /**
- * `registerBasesView` の `options` が返す**カードバッジプロパティセレクタ**配列（#104 F7・読み取り専用）。
+ * `registerBasesView` の `options` が返す**カードバッジプロパティセレクタ**配列（#104 F8・読み取り専用）。
  *
  * カードにバッジ表示する追加プロパティを最大 {@link MAX_BADGE_PROPERTIES} 個、property セレクタとして
  * 宣言する（`key`＝`badgeProperty1..N`＝{@link BADGE_OPTION_KEYS}。`resolveBadgePropertyIds` が読むキーと

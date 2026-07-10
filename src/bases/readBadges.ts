@@ -1,5 +1,5 @@
 /**
- * readBadges — カード追加プロパティ表示（バッジ）の解決・読み取り・正規化（#104 F7・読み取り専用）。
+ * readBadges — カード追加プロパティ表示（バッジ）の解決・読み取り・正規化（#104 F8・読み取り専用）。
  *
  * 書き戻し軸（`note.*` 限定＝{@link isWritableAxisProperty}）と違い、バッジは**読み取り専用の別サーフェス**
  * のため `formula.*`／`file.*` も選択できる。`entry.getValue` の Value を表示文字列へ正規化し、例外・absent は
@@ -74,7 +74,7 @@ function safeGetAsPropertyId(
 }
 
 /**
- * 表示するバッジプロパティ ID を解決する（#104 F7）。ビュー options（`badgeProperty1..N`）を主とし、
+ * 表示するバッジプロパティ ID を解決する（#104 F8）。ビュー options（`badgeProperty1..N`）を主とし、
  * 1 つでも設定されていればそれを使う。未設定ならプラグイン設定 `cardBadgeProperties` をデフォルトに使う。
  * 読み取り専用サーフェスのため `note.*` に限定せず、`formula.*`／`file.*` も通す（軸の書き戻し制約とは別）。
  * 既定（options 無し・設定 `[]`）は空配列＝**表示 0 個**（カード密度は現状維持・AC3）。最大 {@link MAX_BADGE_PROPERTIES} 個。
@@ -114,7 +114,7 @@ function readBadgeText(entry: BasesEntry, id: BasesPropertyId): string {
 }
 
 /**
- * エントリの各バッジプロパティを読み、解決済みの {@link Badge} 配列を返す（#104 F7・AC1/AC2/AC4）。
+ * エントリの各バッジプロパティを読み、解決済みの {@link Badge} 配列を返す（#104 F8・AC1/AC2/AC4）。
  * プロパティ 1 つにつき 1 バッジを必ず返し（AC1 の件数）、例外・absent は `text:""` へ退避する（AC2）。
  * `emphasizePastDates` on かつ値が厳格 ISO 日付で今日以前なら `emphasized:true` を付ける（AC4）。
  */

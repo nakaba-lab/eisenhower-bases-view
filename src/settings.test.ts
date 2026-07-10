@@ -87,7 +87,7 @@ describe("mergeSettings — 既定補完（AC5 読み書き）", () => {
   });
 });
 
-describe("mergeSettings — カード追加プロパティ表示の設定（#104 F7）", () => {
+describe("mergeSettings — カード追加プロパティ表示の設定（#104 F8）", () => {
   it("DEFAULT_SETTINGS — 既定は表示 0 個・日付強調オフ（カード密度は現状維持・AC3）", () => {
     expect(DEFAULT_SETTINGS.cardBadgeProperties).toEqual([]);
     expect(DEFAULT_SETTINGS.emphasizePastDates).toBe(false);

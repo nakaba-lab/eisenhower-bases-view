@@ -87,7 +87,7 @@ describe("buildAxisViewOptions（AC1: note.* のみ選択肢）", () => {
   });
 });
 
-describe("buildBadgeViewOptions（#104 F7: カード表示プロパティ・読み取り専用）", () => {
+describe("buildBadgeViewOptions（#104 F8: カード表示プロパティ・読み取り専用）", () => {
   it("buildBadgeViewOptions — 既定で最大 3 個の property セレクタを返す（badgeProperty1..3）", () => {
     // when
     const options = buildBadgeViewOptions(messagesFor("ja"));

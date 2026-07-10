@@ -20,7 +20,7 @@ import { UndoToast } from "../../src/ui/UndoToast";
 import { resolvePresentation } from "../../src/bases/presentation";
 import { messagesFor, type Language } from "../../src/i18n";
 import { DEFAULT_SETTINGS } from "../../src/settings";
-import type { MatrixEntry, MatrixViewModel } from "../../src/bases/types";
+import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "../../src/bases/types";
 
 function entry(
   id: string,
@@ -40,10 +40,12 @@ function entry(
 
 const params = new URLSearchParams(location.search);
 const useF6 = params.get("f6") === "1";
-// #104 F7: ?badges=1 でカード追加プロパティ表示（読み取り専用バッジ）を写す。
+// #104 F8: ?badges=1 でカード追加プロパティ表示（読み取り専用バッジ）を写す。
 // 期日（過去日＝強調）・プロジェクト・空表示（absent 退避）・未来日（非強調）を混ぜて目視する。
 const useBadges = params.get("badges") === "1";
 const lang: Language = params.get("lang") === "en" ? "en" : "ja";
+// #103 F7: 診断表示の確認。?diag=warn（両軸同一キー＝全ロック＋警告バナー）／?diag=empty（空状態＋軸名）。
+const diag = params.get("diag");
 
 /** #23 F6: 象限ごとのカスタムアクセント色＋`do` のカスタムラベル上書きを施した設定。 */
 const f6Settings = {
@@ -61,23 +63,22 @@ const f6Settings = {
   },
 };
 
-/** #104 F7: バッジ検証用のサンプル（過去日=強調・プロジェクト・空表示・未来日=非強調）。 */
-const dueLabel = lang === "ja" ? "due" : "due";
-const projectLabel = lang === "ja" ? "project" : "project";
+/** #104 F8: バッジ検証用のサンプル（過去日=強調・プロジェクト・空表示・未来日=非強調）。ラベルは
+ * プロパティ名（言語非依存）、値だけ言語で出し分ける。 */
 const pastDueBadges: MatrixEntry["badges"] = [
-  { label: dueLabel, text: "2026-07-01", emphasized: true }, // 今日以前＝アクセント強調（AC4）
-  { label: projectLabel, text: lang === "ja" ? "経理" : "Finance" },
+  { label: "due", text: "2026-07-01", emphasized: true }, // 今日以前＝アクセント強調（AC4）
+  { label: "project", text: lang === "ja" ? "経理" : "Finance" },
 ];
 const futureDueBadges: MatrixEntry["badges"] = [
-  { label: dueLabel, text: "2026-08-01" }, // 未来日＝非強調
+  { label: "due", text: "2026-08-01" }, // 未来日＝非強調
   { label: "tags", text: lang === "ja" ? "計画" : "planning" },
 ];
 const gracefulBadges: MatrixEntry["badges"] = [
-  { label: dueLabel, text: "" }, // absent/例外の空表示退避（AC2・ラベルのみ）
-  { label: projectLabel, text: lang === "ja" ? "議事録" : "Minutes" },
+  { label: "due", text: "" }, // absent/例外の空表示退避（AC2・ラベルのみ）
+  { label: "project", text: lang === "ja" ? "議事録" : "Minutes" },
 ];
 
-const placements = {
+const placements: QuadrantPlacements = {
   do: [
     entry("a.md", "請求書を今日中に送る", false, useBadges ? pastDueBadges : undefined),
     entry("b.md", "障害の一次対応"),
@@ -98,17 +99,90 @@ const placements = {
   ],
 };
 
-const viewModel: MatrixViewModel = {
-  state: "ready",
-  // entries は placements 由来にする（空だと MatrixView の titleOf が overlay/SR アナウンスの
-  // タイトル逆引きに失敗して id にフォールバックするため。#43 の DragOverlay 検証で顕在化）。
-  entries: Object.values(placements).flat(),
-  placements,
-  // f6 のときだけ presentation を載せる（未指定＝before＝現行のフォールバック挙動）。
-  ...(useF6
-    ? { presentation: resolvePresentation(f6Settings, messagesFor(lang)) }
-    : {}),
+// #103 F7 の診断情報（frontmatter キー表記）。
+const normalDiagnostics = {
+  axesShareWritableKey: false,
+  urgentAxis: "urgent",
+  importantAxis: "important",
 };
+const sharedKeyDiagnostics = {
+  axesShareWritableKey: true,
+  sharedAxisKey: "urgent",
+  urgentAxis: "urgent",
+  importantAxis: "urgent",
+};
+
+// ?diag=warn は両軸同一キー設定ミス＝全カードロック（🔒）＋警告バナーの状態を写す。
+const warnPlacements = {
+  do: placements.do.map((card) => ({ ...card, locked: true })),
+  schedule: placements.schedule.map((card) => ({ ...card, locked: true })),
+  delegate: placements.delegate.map((card) => ({ ...card, locked: true })),
+  delete: placements.delete.map((card) => ({ ...card, locked: true })),
+  unclassified: placements.unclassified.map((card) => ({ ...card, locked: true })),
+};
+
+// diag 表示時は文言解決のため presentation を載せる（言語は ?lang で切替）。
+const diagPresentation = resolvePresentation(
+  { ...(useF6 ? f6Settings : DEFAULT_SETTINGS), language: lang },
+  messagesFor(lang),
+);
+
+const emptyPl = { do: [], schedule: [], delegate: [], delete: [], unclassified: [] };
+
+let viewModel: MatrixViewModel;
+if (diag === "empty") {
+  // 空状態＋解決済み軸名（--text-muted の 1 行）。
+  viewModel = {
+    state: "empty",
+    entries: [],
+    placements: emptyPl,
+    diagnostics: normalDiagnostics,
+    presentation: diagPresentation,
+  };
+} else if (diag === "empty-warn") {
+  // 空状態 × 設定ミス（バナーが全幅トップで出るか＝align-self:stretch の確認）。
+  viewModel = {
+    state: "empty",
+    entries: [],
+    placements: emptyPl,
+    diagnostics: sharedKeyDiagnostics,
+    presentation: diagPresentation,
+  };
+} else if (diag === "hint") {
+  // 未分類ゾーン非表示 × 全ノート未分類 → unclassifiedHidden ヒント＋軸名行。
+  const hintPl = { ...emptyPl, unclassified: placements.unclassified };
+  viewModel = {
+    state: "ready",
+    entries: hintPl.unclassified,
+    placements: hintPl,
+    showUnclassified: false,
+    diagnostics: normalDiagnostics,
+    presentation: diagPresentation,
+  };
+} else if (diag === "warn") {
+  // 全カードロック＋グリッド上部の警告バナー。
+  viewModel = {
+    state: "ready",
+    entries: Object.values(warnPlacements).flat(),
+    placements: warnPlacements,
+    diagnostics: sharedKeyDiagnostics,
+    presentation: diagPresentation,
+  };
+} else {
+  viewModel = {
+    state: "ready",
+    // entries は placements 由来にする（空だと MatrixView の titleOf が overlay/SR アナウンスの
+    // タイトル逆引きに失敗して id にフォールバックするため。#43 の DragOverlay 検証で顕在化）。
+    entries: Object.values(placements).flat(),
+    placements,
+    // 正常時の診断（バナーは出ない＝抑制の確認）。
+    diagnostics: normalDiagnostics,
+    // f6 のときだけ presentation を載せる（未指定＝before＝現行のフォールバック挙動）。
+    ...(useF6
+      ? { presentation: resolvePresentation(f6Settings, messagesFor(lang)) }
+      : {}),
+  };
+}
 
 const root = document.getElementById("root");
 if (root) {

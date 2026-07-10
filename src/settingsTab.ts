@@ -85,7 +85,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
-    // カード追加プロパティ表示（#104 F7）: 表示する propertyId をカンマ区切りで既定指定する
+    // カード追加プロパティ表示（#104 F8）: 表示する propertyId をカンマ区切りで既定指定する
     //（ビュー options が主・ここは未設定ビューのデフォルト）。読み取り専用のため formula.*/file.* も可。
     new Setting(containerEl)
       .setName(messages.settings.cardBadgePropertiesName)
@@ -105,7 +105,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
-    // 期日強調トグル（#104 F7・AC4）: 厳格 ISO 日付が今日以前のバッジをアクセント強調する（既定オフ）。
+    // 期日強調トグル（#104 F8・AC4）: 厳格 ISO 日付が今日以前のバッジをアクセント強調する（既定オフ）。
     new Setting(containerEl)
       .setName(messages.settings.emphasizePastDatesName)
       .setDesc(messages.settings.emphasizePastDatesDesc)

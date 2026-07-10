@@ -78,6 +78,13 @@ export interface Messages {
    * 無言の空表示を避ける（レビュー指摘）。
    */
   unclassifiedHidden(count: number): string;
+  /**
+   * 両軸が同一の書き戻し可能プロパティを指す設定ミスの警告バナー文言（#103 F7）。
+   * 原因（同一プロパティ名を名指し）＋直し方（別々のプロパティを指定）を平文で伝える。
+   */
+  diagSharedAxisWarning(sharedAxisKey: string): string;
+  /** 解決済みの緊急度／重要度軸名を控えめに提示する 1 行（空状態・未分類ヒント用・#103 F7）。 */
+  diagAxisNames(urgentAxis: string, importantAxis: string): string;
   /** 「ラベル（軸ラベル）」の言語別ジョイナ（英=半角括弧・日=全角括弧）。象限領域名・設定行名で共有。 */
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
@@ -98,7 +105,7 @@ export interface Messages {
   settings: SettingsMessages;
   /** Bases Configure view の軸プロパティセレクタ displayName（viewOptions）。 */
   axisOption: { urgency: string; important: string };
-  /** Bases Configure view のカードバッジセレクタ displayName（#104 F7・番号付き `badgeProperty1..N`）。 */
+  /** Bases Configure view のカードバッジセレクタ displayName（#104 F8・番号付き `badgeProperty1..N`）。 */
   badgeOption(index: number): string;
 }
 
@@ -120,13 +127,13 @@ export interface SettingsMessages {
   languageDesc: string;
   /** 言語ドロップダウンの "Auto"（自動）選択肢ラベル。en/日 の endonym（English/日本語）は翻訳しない。 */
   languageAuto: string;
-  /** カード表示プロパティ設定の名前（#104 F7）。 */
+  /** カード表示プロパティ設定の名前（#104 F8）。 */
   cardBadgePropertiesName: string;
-  /** カード表示プロパティ設定の説明（#104 F7・読み取り専用＝formula/file も可を明示）。 */
+  /** カード表示プロパティ設定の説明（#104 F8・読み取り専用＝formula/file も可を明示）。 */
   cardBadgePropertiesDesc: string;
-  /** 期日強調トグルの名前（#104 F7）。 */
+  /** 期日強調トグルの名前（#104 F8）。 */
   emphasizePastDatesName: string;
-  /** 期日強調トグルの説明（#104 F7）。 */
+  /** 期日強調トグルの説明（#104 F8）。 */
   emphasizePastDatesDesc: string;
 }
 
@@ -172,6 +179,10 @@ const JA: Messages = {
   itemCount: (count) => `${count} 件`,
   unclassifiedHidden: (count) =>
     `${count} 件のノートが未分類です（未分類ゾーンは非表示設定です。設定で表示にするか、軸プロパティを確認してください）。`,
+  diagSharedAxisWarning: (sharedAxisKey) =>
+    `緊急度軸と重要度軸が同じプロパティ（${sharedAxisKey}）を指しています。ビュー options かプラグイン設定で、2 つの軸に別々のプロパティを指定してください。`,
+  diagAxisNames: (urgentAxis, importantAxis) =>
+    `緊急度: ${urgentAxis} ／ 重要度: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
   cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
@@ -250,6 +261,10 @@ const EN: Messages = {
   itemCount: (count) => `${count} ${count === 1 ? "item" : "items"}`,
   unclassifiedHidden: (count) =>
     `${count} ${count === 1 ? "note is" : "notes are"} unclassified (the unclassified zone is hidden). Enable it in settings, or check the axis properties.`,
+  diagSharedAxisWarning: (sharedAxisKey) =>
+    `The urgency and importance axes both point to the same property (${sharedAxisKey}). Set different properties for the two axes in the view options or plugin settings.`,
+  diagAxisNames: (urgentAxis, importantAxis) =>
+    `Urgency: ${urgentAxis} · Importance: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
   fileNotFoundForMove: "Target file not found; cannot move.",

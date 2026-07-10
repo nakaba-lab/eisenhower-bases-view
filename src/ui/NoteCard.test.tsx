@@ -175,7 +175,7 @@ describe("NoteCard — 非 boolean 軸カードのロック（ドラッグ不可
   });
 });
 
-describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F7 AC5）", () => {
+describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F8 AC5）", () => {
   /** バッジ付き entry。 */
   function badgedEntry(
     badges: MatrixEntry["badges"],

@@ -2,8 +2,8 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 104]
-updated: 2026-07-09
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104]
+updated: 2026-07-10
 kind: api
 ---
 
@@ -11,7 +11,7 @@ kind: api
 
 > Issue #18（F1）・#19（F2）で実装した現状を反映。churn しやすい Bases API 接触面を本領域（`src/bases/`）に隔離する設計の真実源。API 事実は要件定義書「9. 未決事項」に接地する。**#20（F3）でドラッグ書き戻し（`MatrixCallbacks.onMoveCard` ＋ `processFrontMatter`）を実装し `status: active` に確定した。** **#33 で absent 判定を `toString()===null`（スパイク #16 の誤観測）から `instanceof NullValue`（型同一性）へ是正した（実機 `scripts/e2e` プローブで確定）。** **#21（F4）で軸プロパティ設定 UI（ビュー options＝主・プラグイン設定＝デフォルトのハイブリッド）を本領域に積み増した: `registerBasesView` の `options` に `note.*` のみ選択可の軸プロパティセレクタを 2 つ宣言し、選択時（`filter`）・読み取り時・書き戻し時の 3 面で「書き戻せる `note.*` 軸」を単一述語 `isWritableAxisProperty` で判定する。** **#22（F5）でカード操作（開く/新タブ/プレビュー）を本領域に積み増した: `MatrixCallbacks` に `onOpenCard`/`onHoverCard` を追加し、アダプタが `workspace.getLeaf(...).openFile` と `workspace.trigger("hover-link", …)` を実装する（UI は修飾キー→`newLeaf` の plain データを渡すだけ＝AC5 維持。UI 側の相互作用設計は `ui.md`）。** **#34（fix）で軸値正規化を v1 の boolean 軸限定まで狭めた: `note.*` 接頭辞ガード（書き戻し可能性）に加え、値の型が `BooleanValue` の軸だけを 4 象限に分類し、非 boolean（数値 `NumberValue`／文字列 `StringValue` 等）や absent（`NullValue`）は未分類へ退避する（正の許可リスト `instanceof BooleanValue`）。これで非 boolean `note.*` 軸が 4 象限へ自動配置されてドラッグ露出する（無操作で上書き可能になる）経路を断つ。未分類からの手動ドラッグ書き戻しの無効化（書き戻し側の boolean ガード）は F4/#21 の範囲として残す（読み取り側のみ boolean に狭めた非対称）。**
 >
-> **#104（F7 カード追加プロパティ表示）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示する。書き戻し軸（`note.*` 限定）と違い**別サーフェス（読み取り専用）**のため `formula.*`／`file.*` も選択可。境界契約 `MatrixEntry.badges`（`{ label; text; emphasized? }[]` の plain データ＝`readBadges.ts` の `Badge`）を追加し、アダプタ（`toViewModel`）が `entry.getValue` で読み Value→表示文字列へ正規化して載せ、`NoteCard` が控えめに描画する（UI は Bases 非依存を維持＝AC5）。値の正規化・例外退避は軸読み取り（`readAxisValueSafely`）と**同型の境界防御を `readBadges.ts` に独立して**敷く（`readAxis` とは共有しない＝軸/バッジのサーフェスを結合させない）。日付強調（AC4）は純ロジック `isEmphasizedDate(text, today)`（`src/logic/dateEmphasis.ts`）で判定し、`today`（ローカル日付 ISO）はアダプタ `EisenhowerBasesView.todayIso()` が注入する（`Date.now()` を純ロジックに持ち込まない）。**選択 UI は独自セレクタ方式（案 a）を採用**（下記「主要な設計判断」に案 b＝Bases ネイティブ Properties の却下理由）。
+> **#104（F8 カード追加プロパティ表示）を実装し `status: active` に確定した（2026-07-10・人間承認済み）**: カードに**読み取り専用**の追加プロパティ（期日・タグ・プロジェクト等）を最大 3 個までバッジ表示する。書き戻し軸（`note.*` 限定）と違い**別サーフェス（読み取り専用）**のため `formula.*`／`file.*` も選択可。境界契約 `MatrixEntry.badges`（`{ label; text; emphasized? }[]` の plain データ＝`readBadges.ts` の `Badge`）を追加し、アダプタ（`toViewModel`）が `entry.getValue` で読み Value→表示文字列へ正規化して載せ、`NoteCard` が控えめに描画する（UI は Bases 非依存を維持＝AC5）。値の正規化・例外退避は軸読み取り（`readAxisValueSafely`）と**同型の境界防御を `readBadges.ts` に独立して**敷く（`readAxis` とは共有しない＝軸/バッジのサーフェスを結合させない）。日付強調（AC4）は純ロジック `isEmphasizedDate(text, today)`（`src/logic/dateEmphasis.ts`）で判定し、`today`（ローカル日付 ISO）はアダプタ `EisenhowerBasesView.todayIso()` が注入する（`Date.now()` を純ロジックに持ち込まない）。**選択 UI は独自セレクタ方式（案 a）を採用**（下記「主要な設計判断」に案 b＝Bases ネイティブ Properties の却下理由）。
 
 Obsidian Bases のカスタムビューとして Eisenhower マトリクスを登録し、Bases API（`registerBasesView`／`BasesView`／`QueryController`／`BasesEntry.getValue`／ビュー設定）への接触を 1 領域に集約する。各エントリを **Bases 非依存の ViewModel** に変換して UI（`src/ui`）へ渡し、UI・純ロジック（`src/logic`）が Bases 型へ直接依存しないようにする（疎結合化＝AC5）。
 
@@ -85,7 +85,7 @@ sequenceDiagram
     title: string;     // 表示名
     // urgent/important（boolean | undefined）は #19 で追加
     // locked?（#34）: 非 boolean 軸値でドラッグ不可
-    // badges?（#104 F7）: カード追加プロパティの読み取り専用バッジ（解決済み plain データ）
+    // badges?（#104 F8）: カード追加プロパティの読み取り専用バッジ（解決済み plain データ）
     badges?: Array<{
       label: string;       // 表示ラベル（プロパティ表示名。i18n 済み or プロパティ名）
       text: string;        // 正規化済み表示文字列（例外・absent は空文字へ退避）
@@ -96,6 +96,14 @@ sequenceDiagram
   export interface MatrixViewModel {
     state: MatrixState;
     entries: MatrixEntry[];   // F1 ではシェル表示用（配置は #19）
+    diagnostics?: MatrixDiagnostics;  // #103 F7: 既存解決結果の転送（Bases 新規接触なし）
+  }
+  // #103 F7: 設定ミス診断・解決済み軸の可視化（既存の resolveAxisPropertyIds／axesShareWritableKey の結果を転送）
+  export interface MatrixDiagnostics {
+    axesShareWritableKey: boolean;  // 両軸が同一の書き戻し可能 note.* キー（設定ミス確定）
+    sharedAxisKey?: string;         // 上が true のとき共有キー（frontmatter キー表記・例 "urgent"）
+    urgentAxis: string;             // 解決済み緊急度軸名（frontmatter キー表記・非 note.* は生 id フォールバック）
+    importantAxis: string;          // 解決済み重要度軸名（同上）
   }
   export interface MatrixCallbacks {
     // F3（#20）でドラッグ書き戻し、F5（#22）で開く/プレビューを追加。いずれも UI は plain データを
@@ -129,6 +137,7 @@ sequenceDiagram
 - **解除は Preact `unmount` を明示**: ビュー破棄・`onunload` で Preact ルートを `unmount` し DOM/購読リークを防ぐ（AC4）。
 - **F1 で境界型を先に確定**（`MatrixCallbacks` は空でも置く）: F2〜F5 が同じ境界に積み増せるよう、契約面を最初に固定して後続の手戻りを避ける。
 - **手動再描画は持たない**: 書き戻し→`onDataUpdated` 自動再発火で反応ループが閉じる（スパイク #16 確定）。F1 は描画経路の確立まで。
+- **診断情報は既存解決結果の「転送」に徹する（#103 F7・churn 耐性）**: `toViewModel` が既に計算している `resolveAxisPropertyIds`（軸解決）と `axesShareWritableKey`（同一キー設定ミス）の結果を `MatrixViewModel.diagnostics`（plain string／boolean）へ載せるだけで、Bases API への**新規接触点を一切増やさない**（既存の `safeGetAsPropertyId` 経由の解決値の再利用）。UI（`MatrixView`）はこの plain データを描画するだけで `obsidian`/Bases 型に触れない（AC5 維持）。軸名は書き戻しキー（`toFrontmatterKey` の `<key>`＝利用者が設定タブ・Bases options で編集する表記）で持ち、非 `note.*`（`formula.*`/`file.*`＝`toFrontmatterKey` が `null`）は生の property id をフォールバック表示する（`"null"` を出さない）。**empty 分岐でも diagnostics を計算する**（現状 `toViewModel` は notes 0 件で `ids` 計算前に return するため、empty 分岐に `resolveAxisPropertyIds`＋`axesShareWritableKey` の算出を追加＝空状態でも軸名・設定ミスを提示できる。既存関数の再利用のため新規接触ではない）。却下「UI が axesShareWritableKey を再計算」: 同一ロジックの二重実装で乖離リスク。却下「Bases options から警告文言を引く」: Bases API 接触面を増やし churn 耐性方針に反する。
 - **書き戻しはアダプタに隔離（#20）**: `MatrixCallbacks.onMoveCard` は両軸の boolean だけを受け、`TFile` 解決・frontmatter キー算出・`app.fileManager.processFrontMatter` 実行をアダプタ（`EisenhowerBasesView`）が担う。UI・logic に `obsidian` 型を漏らさず（AC5 維持）、書き込み経路を読み取り経路（`getValue`）と同じく 1 領域へ集約する。frontmatter キーの取り出し（`note.urgent`→`urgent`）は純関数として切り出し単体テスト対象にする（`extends BasesView` 本体は obsidian ランタイム必須で対象外のため、テスト可能な純度をキー算出に逃がす）。
 - **開く/プレビューもアダプタに隔離（#22 F5）**: `onOpenCard`/`onHoverCard` は UI から plain データ（`entryId`・`newLeaf`・`targetEl`）だけを受け、`TFile` 解決・`workspace.openFile`・`hover-link` 発火をアダプタが担う（`onMoveCard` と同じ疎結合＝AC5 維持）。TFile 解決は書き戻しと共通の `resolveTargetFile` に集約して重複を避ける（#22 リファクタで抽出）。ホバープレビューはコア page-preview へ委譲し（`workspace.trigger("hover-link", …)`）プラグイン側で preview UI を再実装しない（表示可否はユーザーのコア設定に従う）。`extends BasesView` 本体は obsidian ランタイム必須で単体テスト対象外のため、開く/プレビューの往復は手動/結合で担保し、UI 側の意図算出（修飾キー→`newLeaf`・Enter 判定）は純関数（`src/ui/cardInteraction.ts`）として単体テストする。
 - **absent 判定は型同一性 `instanceof NullValue`（#33）**: 欠損プロパティの `getValue` は **NullValue（singleton）** を返す。これを `value instanceof NullValue` で検出し、明示 `false`（BooleanValue・`isTruthy()===false`）と区別する。
@@ -157,7 +166,7 @@ sequenceDiagram
 - **undo の記録は単一 `UndoManager` をプラグインが所有しビューへ注入**: コマンド（プラグイン全体）とビュー内トーストの双方が同一の「直前 1 手」を指すよう、記録の真実源を 1 箇所（プラグインの `UndoManager`）に置く。ビューは書き込み成功時に `record`、トリガーは `runUndo` で復元して `clear`。却下「ビューごとに記録を持つ」: コマンドがどのビューの記録を指すか曖昧になり、複数ビューで不整合。却下「トーストのローカル状態だけで復元」: コマンド経路と二重管理になる。複数ビューで別々に動かした場合は「最後の移動」を指す割り切り（最小実装・redo/多段なし）。**ただしトーストは特定ノートを名指しするため、`onUndoMove(expectedEntryId)` のガードで「記録が名指しの移動でなければ戻さず `Notice`」とし、無言で別ノートを undo する鋭いハザードだけは塞ぐ（code-reviewer 指摘）。コマンドは名指ししないため無条件に「直前 1 手」を戻す。**
 - **AC1/AC4 の UI はすべて Bases ネイティブ（独自 Preact コンポーネントを持たない）（#21 F4）**: 軸選択 UI は Bases の Configure view が options 宣言から自動描画し、options 変更→`onDataUpdated` 自動再発火で再配置される（手動再描画なし）。書込不可軸のガードは既存 Notice を流用。ゆえに F4 は `src/ui` に差分を持たず、ビジュアル/UX 検証はロジック（filter/ガード/再解決）の単体テストと結合（実機 Configure view 操作）で担保する。
 
-- **カード追加プロパティ表示は「独自セレクタ＋ViewModel 拡張」を採用（#104 F7・実装済み）**: カードに表示する追加プロパティ（読み取り専用）を、既存の軸セレクタ（`buildAxisViewOptions`）と**同型の property セレクタ**を最大 3 個宣言して選ばせ（`buildBadgeViewOptions(messages, count)`＝`viewOptions.ts`。`displayName` は `messages.badgeOption(n)` で i18n）、`resolveBadgePropertyIds(config, settings)`（`config.getAsPropertyId('badgeProperty1..N')` 主・プラグイン設定 `cardBadgeProperties` デフォルト）で解決する。読み取り専用サーフェスのため `filter` は `note.*` に限定せず**全プロパティ許可**（`formula.*`／`file.*` も可＝軸の書き戻し `isWritableAxisProperty` 制約とは別サーフェス。UI 文言でこの違いを明示）。`toViewModel` が各 entry ぶん `readBadges(entry, ids, { today, emphasizePastDates })` を呼び、`entry.getValue`→表示文字列へ正規化して `MatrixEntry.badges` に載せる。Value 正規化は**軸読み取りと同型の境界防御**（`readBadgeValueSafely`＝`readAxisValueSafely` と対称の try/catch。例外・absent は空文字 `text:""` へ退避しビュー全体は壊さない＝AC2）で、`toString()` ベース＋型別分岐は最小限（churn 耐性）。**既定は表示 0 個**（`cardBadgeProperties: []`）＝`badges` は空でカード密度は現状維持（AC3）。
+- **カード追加プロパティ表示は「独自セレクタ＋ViewModel 拡張」を採用（#104 F8・実装済み）**: カードに表示する追加プロパティ（読み取り専用）を、既存の軸セレクタ（`buildAxisViewOptions`）と**同型の property セレクタ**を最大 3 個宣言して選ばせ（`buildBadgeViewOptions(messages, count)`＝`viewOptions.ts`。`displayName` は `messages.badgeOption(n)` で i18n）、`resolveBadgePropertyIds(config, settings)`（`config.getAsPropertyId('badgeProperty1..N')` 主・プラグイン設定 `cardBadgeProperties` デフォルト）で解決する。読み取り専用サーフェスのため `filter` は `note.*` に限定せず**全プロパティ許可**（`formula.*`／`file.*` も可＝軸の書き戻し `isWritableAxisProperty` 制約とは別サーフェス。UI 文言でこの違いを明示）。`toViewModel` が各 entry ぶん `readBadges(entry, ids, { today, emphasizePastDates })` を呼び、`entry.getValue`→表示文字列へ正規化して `MatrixEntry.badges` に載せる。Value 正規化は**軸読み取りと同型の境界防御**（`readBadgeValueSafely`＝`readAxisValueSafely` と対称の try/catch。例外・absent は空文字 `text:""` へ退避しビュー全体は壊さない＝AC2）で、`toString()` ベース＋型別分岐は最小限（churn 耐性）。**既定は表示 0 個**（`cardBadgeProperties: []`）＝`badges` は空でカード密度は現状維持（AC3）。
   - **却下: 案 b＝Bases ネイティブのビュー別 Properties 設定を `config` から読む** — コア Cards ビューが使う表示プロパティリストを流用できればネイティブ UX 整合・churn 面縮小で優位だが、**その表示プロパティリストを `config` から取得できる公開 API があるかが未確認**。着手前ミニスパイク（実機 `.base` で `config` の該当アクセサを調査）が必要だが、本実装環境に obsidian ランタイム/実 `.d.ts` が無く**実機検証ができない**ため、確実に着手できる案 a を採用した。将来 `config` が表示プロパティリストの公開アクセサを提供することが確認できたら、`resolveBadgePropertyIds` の解決元を差し替える形で案 b へ移行できる余地を残す（`readBadges`・`MatrixEntry.badges` 契約・UI は不変）。
   - **却下: 軸セレクタ（`buildAxisViewOptions`）に相乗り** — 軸は書き戻し（`note.*` 限定・boolean）でバッジは読み取り専用（全プロパティ・任意型）と**述語・型制約が逆**。同一ビルダーに混ぜると `filter` が二重定義になり「選べるのに壊れる」非対称（#21 で単一述語に集約した思想）を再び崩す。別ビルダー・別キー空間（`badgeProperty*`）に分ける。
   - **日付強調は純ロジックに隔離（`src/logic`・AC4）**: 「厳格 ISO（`YYYY-MM-DD`）かつ今日以前」を純関数 `isEmphasizedDate(text, today)`（`today` は ISO 文字列で注入＝`Date.now()` 非依存で単体テスト可能）で判定し、`toString()`／ロケール依存の緩いパースはしない。**Bases の filter/formula の再実装には踏み込まない**（将来これを条件付き書式 DSL に育てない＝v1 は厳格 ISO 判定 1 種のみ。線引きを設計書に固定）。強調トグル（`emphasizePastDates`）は**既定オフ**。

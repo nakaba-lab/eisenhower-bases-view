@@ -29,6 +29,38 @@
   text-align: center;
 }
 
+/* 両軸同一キー設定ミスの警告バナー（#103 F7）。全カードロックの原因＋直し方をグリッド上部に
+ * 控えめな警告トーンで提示する。配色はハードコードせずテーマ変数に追従し（ライト/ダーク両対応）、
+ * 本文は --text-normal（AA）・アクセントのみ --text-warning。role="note"・aria-live なし。 */
+.eisenhower-matrix__diag-warning {
+  margin: 0 0 var(--size-4-2, 8px);
+  padding: var(--size-4-2, 8px) var(--size-4-3, 12px);
+  color: var(--text-normal);
+  background-color: var(--background-secondary);
+  border-inline-start: 3px solid var(--text-warning, var(--interactive-accent));
+  border-radius: var(--radius-s, 4px);
+  font-size: var(--font-ui-small, 0.8em);
+  /* 空状態コンテナ（.eisenhower-matrix--empty）は align-items:center のため、明示しないと
+   * バナーが content 幅に縮んで中央寄せになる。全ロックの説明が最も要る空×設定ミスでも
+   * ready と同じ全幅トップ提示を保つ（frontend-reviewer should 指摘）。 */
+  align-self: stretch;
+}
+
+/* 警告アイコンは装飾（意味は本文が担う）。テキストの前に控えめに添える。 */
+.eisenhower-matrix__diag-warning::before {
+  content: "⚠";
+  margin-inline-end: var(--size-4-2, 8px);
+  color: var(--text-warning, var(--interactive-accent));
+}
+
+/* 解決済み軸名の 1 行（空状態・未分類ヒント）。控えめ（--text-muted）に「いまどの軸か」を提示する。 */
+.eisenhower-matrix__axis-names {
+  margin: var(--size-4-1, 4px) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.75em);
+  text-align: center;
+}
+
 .eisenhower-matrix--loading,
 .eisenhower-matrix--empty {
   align-items: center;
@@ -160,7 +192,7 @@
 }
 
 /* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。
- * #104（F7）でタイトル下にバッジ行を持てるよう縦積み（flex column）にする。タイトルの 1 行省略は
+ * #104（F8）でタイトル下にバッジ行を持てるよう縦積み（flex column）にする。タイトルの 1 行省略は
  * __title へ移し、バッジは折返し可能な別行として並べる。min-width:0 は flex 子の省略成立に必要。 */
 .eisenhower-note-card {
   display: flex;
@@ -185,7 +217,7 @@
   text-overflow: ellipsis;
 }
 
-/* カード追加プロパティのバッジ行（#104 F7・読み取り専用）。タイトル下に控えめに折返し表示する。 */
+/* カード追加プロパティのバッジ行（#104 F8・読み取り専用）。タイトル下に控えめに折返し表示する。 */
 .eisenhower-note-card__badges {
   display: flex;
   flex-wrap: wrap;

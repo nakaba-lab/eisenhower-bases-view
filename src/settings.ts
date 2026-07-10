@@ -24,12 +24,12 @@ export interface EisenhowerSettings {
   /** 象限ごとのカスタムアクセント色（hex）。空文字＝テーマ既定にフォールバック（#23 F6）。 */
   quadrantColors: Record<QuadrantKey, string>;
   /**
-   * カードに表示する追加プロパティ（読み取り専用バッジ）の propertyId 既定（#104 F7）。
+   * カードに表示する追加プロパティ（読み取り専用バッジ）の propertyId 既定（#104 F8）。
    * ビュー options 未設定時に使うデフォルト。既定 `[]`＝表示 0 個（カード密度は現状維持）。
    * 読み取り専用サーフェスのため `note.*` に限らず `formula.*`／`file.*` も指定できる。
    */
   cardBadgeProperties: string[];
-  /** 期日らしい値（厳格 ISO・今日以前）をアクセント強調するか（#104 F7・既定オフ）。 */
+  /** 期日らしい値（厳格 ISO・今日以前）をアクセント強調するか（#104 F8・既定オフ）。 */
   emphasizePastDates: boolean;
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isEmphasizedDate } from "./dateEmphasis";
 
 /**
- * dateEmphasis — 「厳格 ISO 日付（YYYY-MM-DD）が今日以前か」を判定する純ロジック（#104 F7・AC4）。
+ * dateEmphasis — 「厳格 ISO 日付（YYYY-MM-DD）が今日以前か」を判定する純ロジック（#104 F8・AC4）。
  *
  * カード追加プロパティ表示（バッジ）の日付強調トグルが on のとき、期日らしい値を強調するかを決める。
  * `today` は ISO 文字列で注入する（`Date.now()` 非依存＝単体テスト可能）。**厳格 ISO 判定に限定**し、

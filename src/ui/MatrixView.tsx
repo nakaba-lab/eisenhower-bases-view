@@ -1,4 +1,4 @@
-import { render as preactRender } from "preact";
+import { Fragment, render as preactRender } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
@@ -414,6 +414,26 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     );
   };
 
+  // 診断表示（#103 F7）: 設定ミス警告バナー（設定ミス確定時のみ）と解決済み軸名の可視化。
+  // どちらも ViewModel の diagnostics（既存解決結果の転送）を描画するだけ。loading シェルでは出さない。
+  const diagnostics = viewModel.diagnostics;
+  // 両軸が同一の書き戻し可能キー＝全カードロックの設定ミス。原因＋直し方を role="note" で提示する
+  //（視覚補助＝Issue AC）。aria-live は付けない: 初期レンダーでは polite は元々発火せず、SR 利用者へは
+  // 各カードの cardLockedLabel（移動不可）が届く。移動アナウンス専用の sr-status にもバナー文言は載せない。
+  // sharedAxisKey は buildDiagnostics が shared 時に必ず設定する（?? urgentAxis は手構築 ViewModel への
+  // 防御フォールバック＝shared 時は両者一致＝toFrontmatterKey(ids.urgent)）。
+  const diagnosticWarning = diagnostics?.axesShareWritableKey ? (
+    <p class="eisenhower-matrix__diag-warning" role="note">
+      {messages.diagSharedAxisWarning(diagnostics.sharedAxisKey ?? diagnostics.urgentAxis)}
+    </p>
+  ) : null;
+  // 解決済みの緊急度／重要度軸名を控えめに 1 行で添える（空状態・未分類ヒントで「いまどの軸か」を提示）。
+  const axisNames = diagnostics ? (
+    <p class="eisenhower-matrix__axis-names">
+      {messages.diagAxisNames(diagnostics.urgentAxis, diagnostics.importantAxis)}
+    </p>
+  ) : null;
+
   if (viewModel.state === "loading") {
     return (
       <div
@@ -433,7 +453,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         role="group"
         aria-label={messages.matrixLabel}
       >
+        {diagnosticWarning}
         <p class="eisenhower-matrix__placeholder">{messages.empty}</p>
+        {axisNames}
       </section>
     );
   }
@@ -465,6 +487,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
           {liveStatus}
         </div>
+        {/* 設定ミス警告バナー（両軸同一キー＝全ロック時のみ）。グリッドの前に置き、ロックされたカードを
+            見る前に原因＋直し方を提示する（#103 F7）。 */}
+        {diagnosticWarning}
         <div class="eisenhower-matrix__grid">
           {QUADRANT_KEYS.map((key) => (
             <QuadrantCell
@@ -488,9 +513,13 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         {!showUnclassified &&
           placements.unclassified.length > 0 &&
           QUADRANT_KEYS.every((key) => placements[key].length === 0) && (
-            <p class="eisenhower-matrix__unclassified-hint" role="note">
-              {messages.unclassifiedHidden(placements.unclassified.length)}
-            </p>
+            <Fragment>
+              <p class="eisenhower-matrix__unclassified-hint" role="note">
+                {messages.unclassifiedHidden(placements.unclassified.length)}
+              </p>
+              {/* 未分類ヒントに解決済み軸名を添える（typo で全未分類のとき「どの軸か」を提示・#103 F7）。 */}
+              {axisNames}
+            </Fragment>
           )}
         {showUnclassified && (
           <QuadrantCell

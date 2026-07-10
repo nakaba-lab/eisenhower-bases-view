@@ -26,7 +26,7 @@ export interface MatrixEntry {
    */
   locked?: boolean;
   /**
-   * カード追加プロパティの読み取り専用バッジ（#104 F7）。アダプタ（`toViewModel`）が解決済みの
+   * カード追加プロパティの読み取り専用バッジ（#104 F8）。アダプタ（`toViewModel`）が解決済みの
    * `{ label, text, emphasized? }` を載せ、`NoteCard` が控えめに描画する。表示 0 個（既定）では省略する。
    */
   badges?: Badge[];
@@ -55,6 +55,22 @@ export interface MatrixPresentation {
   quadrantColors: Record<QuadrantKey, string>;
 }
 
+/**
+ * ビュー内診断情報（設定ミス診断・解決済み軸の可視化＝#103 F7）。
+ * アダプタ層が既に計算している `resolveAxisPropertyIds`／`axesShareWritableKey` の結果を
+ * 転送するだけの plain データ（Bases API への新規接触は増えない）。UI はこれを描画する。
+ */
+export interface MatrixDiagnostics {
+  /** 両軸が同一の書き戻し可能 `note.*` キーを指すか（設定ミス確定＝全カードロック）。 */
+  axesShareWritableKey: boolean;
+  /** 上が `true` のときの共有キー（frontmatter キー表記・例 "urgent"）。 */
+  sharedAxisKey?: string;
+  /** 解決済みの緊急度軸名（frontmatter キー表記。非 `note.*` は生 propertyId をフォールバック）。 */
+  urgentAxis: string;
+  /** 解決済みの重要度軸名（同上）。 */
+  importantAxis: string;
+}
+
 /** UI へ渡す ViewModel（アダプタ層が entries から組む）。 */
 export interface MatrixViewModel {
   state: MatrixState;
@@ -72,6 +88,11 @@ export interface MatrixViewModel {
    * フォールバックする（後方互換）。アダプタは常に載せる。
    */
   presentation?: MatrixPresentation;
+  /**
+   * ビュー内診断情報（#103 F7）。既存の軸解決結果を転送するだけ。省略時は UI が診断表示を出さない
+   *（後方互換・loading シェル）。アダプタは ready/empty で常に載せる。
+   */
+  diagnostics?: MatrixDiagnostics;
 }
 
 /** ドラッグ書き戻しで UI からアダプタへ渡す目的両軸値（両軸とも明示 boolean）。 */

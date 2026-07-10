@@ -7,10 +7,17 @@ import {
   hasUnsupportedAxisValue,
   readAxisValues,
   resolveAxisPropertyIds,
+  toFrontmatterKey,
+  type AxisPropertyIds,
 } from "./readAxis";
 import { readBadges, resolveBadgePropertyIds } from "./readBadges";
 import { resolvePresentation } from "./presentation";
-import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "./types";
+import type {
+  MatrixDiagnostics,
+  MatrixEntry,
+  MatrixViewModel,
+  QuadrantPlacements,
+} from "./types";
 
 /**
  * Bases の entries を Bases 非依存の {@link MatrixViewModel} へ変換する純関数。
@@ -25,6 +32,27 @@ import type { MatrixEntry, MatrixViewModel, QuadrantPlacements } from "./types";
 /** 全象限を空配列で初期化した placements を作る（loading シェルの初期状態にも使う）。 */
 export function emptyPlacements(): QuadrantPlacements {
   return { do: [], schedule: [], delegate: [], delete: [], unclassified: [] };
+}
+
+/**
+ * 解決済み軸 propertyId から診断情報を組む（#103 F7）。既存の `axesShareWritableKey`／
+ * `toFrontmatterKey` の結果を転送するだけ（Bases API への新規接触なし）。軸名は書き戻しキー
+ *（利用者が設定タブ・Bases options で編集する表記）で持ち、非 `note.*`（`formula.*`／`file.*`＝
+ * `toFrontmatterKey` が `null`）は生の propertyId をフォールバック表示する（"null" を出さない）。
+ */
+function buildDiagnostics(ids: AxisPropertyIds): MatrixDiagnostics {
+  const shared = axesShareWritableKey(ids);
+  const urgentAxis = toFrontmatterKey(ids.urgent) ?? String(ids.urgent);
+  const importantAxis = toFrontmatterKey(ids.important) ?? String(ids.important);
+  const diagnostics: MatrixDiagnostics = {
+    axesShareWritableKey: shared,
+    urgentAxis,
+    importantAxis,
+  };
+  // shared のときは両軸が同一 frontmatter キーで、その値は解決済みの urgentAxis に等しい
+  //（axesShareWritableKey が非 null を保証）。共有キーを載せる（UI の警告バナーが名指しする）。
+  if (shared) diagnostics.sharedAxisKey = urgentAxis;
+  return diagnostics;
 }
 
 /**
@@ -48,7 +76,7 @@ export function toViewModel(
   // messages 省略時は英語へフォールバックする（resolveLanguage の最終フォールバックが en＝
   // i18n の既定言語。実機ではアダプタが解決済みメッセージを常に渡す・レビュー指摘）。
   messages: Messages = messagesFor("en"),
-  // 今日の日付（ISO YYYY-MM-DD）。バッジの日付強調（#104 F7・AC4）に使う。アダプタが注入する
+  // 今日の日付（ISO YYYY-MM-DD）。バッジの日付強調（#104 F8・AC4）に使う。アダプタが注入する
   // （Date.now() 非依存で純度維持）。省略時は空＝日付強調しない（安全側）。
   today: string = "",
 ): MatrixViewModel {
@@ -58,6 +86,9 @@ export function toViewModel(
   // クエリ未初期化・失敗で data が undefined/null になっても落ちないよう防御する。
   // 非 Markdown（.base 自身・.canvas・画像等）は配置対象外のため事前に除外する（要件 §9）。
   const notes = entries ? entries.filter(isPlaceableNote) : [];
+  // 軸解決と診断は notes 有無に依らず行う（空状態でも軸名・設定ミスを提示する＝#103 F7）。
+  const ids = resolveAxisPropertyIds(config, settings);
+  const diagnostics = buildDiagnostics(ids);
   if (notes.length === 0) {
     return {
       state: "empty",
@@ -65,14 +96,14 @@ export function toViewModel(
       placements: emptyPlacements(),
       showUnclassified: settings.showUnclassified,
       presentation,
+      diagnostics,
     };
   }
 
-  const ids = resolveAxisPropertyIds(config, settings);
   // 両軸が同一 note.* キー（設定ミス）だと書き戻しが必ず失敗するため、当該ビューの全カードを
   // ドラッグ不可にして「掴めるのに必ず失敗する」状態を作らない（書込前ガードと対称・レビュー指摘）。
-  const sameAxisKey = axesShareWritableKey(ids);
-  // カード追加プロパティ表示（#104 F7）: 表示するバッジプロパティを解決する（既定 0 個＝現状維持）。
+  const sameAxisKey = diagnostics.axesShareWritableKey;
+  // カード追加プロパティ表示（#104 F8）: 表示するバッジプロパティを解決する（既定 0 個＝現状維持）。
   const badgeIds = resolveBadgePropertyIds(config, settings);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
@@ -104,5 +135,6 @@ export function toViewModel(
     placements,
     showUnclassified: settings.showUnclassified,
     presentation,
+    diagnostics,
   };
 }

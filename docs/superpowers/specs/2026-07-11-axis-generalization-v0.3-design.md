@@ -90,15 +90,20 @@ export type AxisSpec =
   | { kind: "select"; trueValue: string; falseValue: string }
   | { kind: "tag"; tagName: string };
 
-// アダプタ（readAxis）が Value を正規化した型付き生値。instanceof の確定は S0 スパイク待ち。
+// アダプタ（readAxis）が Value を正規化した型付き生値。§4 で instanceof 判別・取り出しを確定済み。
 export type AxisRaw =
-  | { kind: "absent" }                       // NullValue（欠損）
-  | { kind: "boolean"; value: boolean }
-  | { kind: "number"; value: number }
-  | { kind: "string"; value: string }
-  | { kind: "list"; values: string[] }       // タグ等のリスト
-  | { kind: "unsupported" };                 // getValue が throw／未知型
+  | { kind: "absent" }                       // NullValue（instanceof NullValue・#33）
+  | { kind: "boolean"; value: boolean }      // BooleanValue → isTruthy()
+  | { kind: "number"; value: number }        // NumberValue → Number(v.toString())
+  | { kind: "string"; value: string }        // StringValue → v.toString()
+  | { kind: "list"; value: ListValue }       // ListValue（要素 TagValue・`#` 前置）→ includes/length/get
+  | { kind: "unsupported" };                 // getValue throw／ErrorValue／未知型
 ```
+
+> **取り出しは公開 API**（§4 確定）: PrimitiveValue に公開 getter が無いため、数値は `Number(v.toString())`・
+> 文字列は `v.toString()`。list は生 `.data` を手パースせず **`ListValue.includes(new TagValue(name))`**
+> （loose-equals・`#` 前置吸収は 3b で実機確認）を使う。`kind: "list"` は解釈で native API を叩くため
+> ListValue 自体を保持する（`string[]` に潰さない）。判別は全 kind **instanceof**（minified 名に依存しない）。
 
 ### 3.3 `interpretAxis(raw, spec): { side: boolean | undefined; locked: boolean }`（純関数）
 
@@ -149,37 +154,58 @@ export type AxisRaw =
 3. **数値の代表値デフォルト**: `highValue ?? threshold`／`lowValue ?? threshold - 1` が妥当か。しきい値
    変更で既存ノートの象限が見かけ上一斉に動く（**書込は発生しない＝データ安全**だが視覚的驚き）ことの
    明示（数値サブ 1b）。
-4. **Configure view の options 表現力**: kind 選択＋条件付きフィールド（しきい値・代表値・trueValue/
-   falseValue・tagName）を宣言型 options で表せるか。**S0 スパイクに依存**。不可なら text option の
-   パース＋検証、またはしきい値等をプラグイン設定側のみに置く縮退案（feasibility は崩れない・#88）。
+4. **Configure view の options 表現力**: ~~kind 選択＋条件付きフィールドを宣言型 options で表せるか~~
+   → **S0 で解決（§4）**。`options: (config) => BasesAllOptions[]`（config 関数）＋ 各 option の `shouldHide`
+   ＋ `dropdown`/`slider`/`text`/`group` で、kind 選択＋条件付きフィールドはネイティブに実現可能。縮退案は不要。
 
 ---
 
-## 4. S0 スパイク（実機ゲート）
+## 4. S0 スパイク（実機ゲート）— 実行済み・確定（2026-07-12）
 
-**この実行環境（リモートコンテナ）では実行不可。実機 Obsidian（1.12.x 系）で回す。** 結果が読み取り
-許可リスト（§3.2 `AxisRaw`）と options UI（§3.6④）の設計を確定する。`scripts/e2e` の CDP プローブ流儀
-（#16／#33／#44 と同様）で実施し、結果を要件定義書 §9 と本書へ反映する。
+実機 Obsidian **1.12.7** で実行済み（`scripts/e2e/probe-s0.sh` ＋ `probe-s0.js`・CDP 方式・#16/#33/#44 と
+同流儀）。分離テスト Vault に数値/文字列/タグ/boolean/absent のフィクスチャを置き、`entry.getValue` の
+返す Value を introspect した。生ログ＝`out/probe-s0-{result.json,console.log}`。あわせて obsidian の型定義
+（`node_modules/obsidian/obsidian.d.ts`）で公開 API・export 名を確定した。**S0 の全項目が解決**した。
 
-### 検証項目
+### 確定した Value 表現（`AxisRaw` の許可リスト＝§3.2 の入力）
 
-- [ ] **NumberValue の実機表現**: 数値 frontmatter（`priority: 3`）の `entry.getValue` が返す Value の
-      instanceof 判別。`NumberValue` で `instanceof` が成立するか（minify 済みでも prototype チェーンで
-      成立するか＝#33 の教訓）。数値の取り出し方（`.toString()`／専用アクセサ）。
-- [ ] **StringValue の実機表現**: 文字列 frontmatter（`priority: high`）の Value（#34 で存在確認済みだが
-      取り出し方を確定）。
-- [ ] **ListValue の実機表現**: `tags: [urgent, work]` の Value。リストの反復・要素の文字列化。
-      `obsidianStub.ts` に ListValue 相当が無いため実機で確定してからスタブを足す。
-- [ ] **Bases options の型**: Configure view の宣言型 options に number/dropdown/toggle 入力があるか
-      （kind 選択＝dropdown・しきい値＝number・代表値＝number/text）。
-- [ ] **条件付きフィールド**: kind に応じて表示フィールドを切り替えられるか（不可なら §3.6④ の縮退案）。
-- [ ] **書き戻し往復（各 kind）**: `processFrontMatter` で数値・文字列・配列を書き、`onDataUpdated`
-      再発火で再配置されるか（tag は配列の add/remove で他要素が温存されるか）。
+| frontmatter | 実機 Value | 判別（instanceof） | primitive 取り出し（公開 API） | 備考 |
+|-------------|-----------|-------------------|------------------------------|------|
+| `flag: true` | BooleanValue | `instanceof BooleanValue`（既存・実証済み） | `isTruthy()` | 変更なし |
+| `score: 3` | **NumberValue** | `instanceof NumberValue` | **`Number(v.toString())`** | `toString()="3"`。`.data` に生値もあるが公開 getter が無いため **toString 経由**が churn 耐性で優る |
+| `level: high` | **StringValue** | `instanceof StringValue` | **`v.toString()`** | `toString()="high"` |
+| `tags: [urgent, work]` | **ListValue**（要素は **TagValue**） | `instanceof ListValue` | **`v.includes(new TagValue(name))`／`v.length()`／`v.get(i)`** | ⚠️ **タグは `#` 前置**（`#urgent`）。包含は `.data` 手パースでなく**ネイティブ `includes(value: Value)`（loose-equals）**を使う |
+| （キー欠損） | NullValue（singleton） | `instanceof NullValue`（既存・#33） | — | `toString()="null"`（文字列・#33 再確認）・`isTruthy()=false`・`equals` あり |
 
-### スパイク後に確定するもの
+> **export 名は obsidian.d.ts で確定**: `BooleanValue`/`NumberValue`/`StringValue`/`ListValue`/`TagValue`/
+> `DateValue`/`NullValue` すべて export（`NumberValue`/`StringValue` は `PrimitiveValue<T>` 派生、`TagValue
+> extends StringValue`）。全 Value は実機で minified constructor `"t"` のため **instanceof で判別**（名前・
+> toString に依存しない＝#33 の教訓を踏襲）。⚠️ **`getValue` はエラーを `ErrorValue` で返す**（formula 失敗
+> 等・d.ts 明記）→ 現行 `readAxisValueSafely` の try/catch に加え、`instanceof ErrorValue` も unsupported
+> （安全側ロック）へ倒す。`obsidianStub.ts` に `ListValue`/`TagValue`/`ErrorValue`（＋既存の Number/String）
+> を実機表現に合わせて追加する。
 
-`AxisRaw` の各 kind に対応する instanceof 許可リスト（`readAxis` のアダプタ配線）／options UI の実装
-方式（宣言型 or 縮退）／`obsidianStub.ts` への NumberValue・StringValue・ListValue の追加。
+### 確定した options 型（§3.6④＝条件付きフィールドの可否）
+
+**結論: kind 選択＋条件付きフィールドはネイティブに実現可能。縮退案は不要。**
+
+- `registerBasesView` の `registration.options` は **`(config: BasesViewConfig) => BasesAllOptions[]`**
+  ＝ **config を受け取る関数**。現在の `kind` を読んで返すオプション集合を変えられる。
+- 使える option 型: `BasesOptions = dropdown | slider | text | multitext | toggle | property | file |
+  folder | formula`。加えて各 option に **`shouldHide?: () => boolean`**（1.10.2〜）、折りたたみ
+  **`BasesOptionGroup`（`type:'group'`・`items[]`・`shouldHide`）** あり。
+- 割り当て: **kind 選択＝`dropdown`**（`{type:'dropdown', options: Record<string,string>}`）／数値しきい値・
+  代表値＝`slider` か `text`／select の trueValue/falseValue＝`text`／tag の tagName＝`text`／軸プロパティ＝
+  既存 `property`（`filter` で `note.*` 絞り継続）。**条件付き表示は `options(config)` の分岐 ＋ `shouldHide`
+  の二重手段**で実装する。
+
+### 残る実機確認（各 L2 の結合フェーズで担保・S0 では非ブロッキング）
+
+- **書き戻し往復（各 kind）**: `processFrontMatter` で数値/文字列/配列を書き `onDataUpdated` 再発火で
+  再配置されるか（既存 boolean 往復は実証済み。tag は配列 add/remove で他要素温存を実機確認）。
+- **`ListValue.includes` の loose-equals が `#` 前置・大小差を吸収するか**（tag 軸 3b の設計前提。実機で
+  `list.includes(new TagValue("urgent"))` が `#urgent` にヒットするか確認）。
+- これらは「読み取り許可リスト・options 型」の確定（S0 の本題）とは別で、各 L2 の TDD＋結合で担保する。
 
 ---
 
@@ -188,15 +214,15 @@ export type AxisRaw =
 依存順。1 リリースで全部出すが、内部は連鎖する複数 L2 に割る（`.claude/rules/scale.md`「L2 分割」）。
 「この環境」列＝S0 スパイク不要でリモート環境でも着手可能か。
 
-| # | L2 | 概要 | この環境 | 依存 |
+| # | L2 | 概要 | 状態 | 依存 |
 |---|----|------|:---:|------|
-| **S0** | Bases 軸型スパイク | §4 の検証項目。要件 §9 と本書へ反映 | ❌ 実機 | — |
-| **F0** | AxisSpec 基盤（純ロジック） | `AxisSpec`／`AxisRaw` 型・`interpretAxis`・`planAxisWrite` を TDD（§3）。undo は #105 流用。**Value 表現に非依存＝S0 と並行可** | ✅ | — |
-| **1a** | 数値軸 読み取り/表示 | `readAxis` を AxisSpec 対応（`normalizeAxis`→`interpretAxis` 配線・NumberValue 許可リスト）・locked 判定 kind-aware 化。**書き戻し無し（locked）でも出荷可能な段階** | ⚠️ 配線は S0 後 | S0, F0 |
-| **1b** | 数値軸 書き戻し+undo | `planAxisWrite` で越境時のみ代表値・undo 既存流用・**boolean 軸は回帰で挙動不変固定** | ✅（純度部分） | 1a |
-| **2** | 選択（select）軸 | StringValue 許可リスト・trueValue/falseValue 完全一致・未知値は未分類+locked・越境時のみ書込 | ⚠️ 配線は S0 後 | 1b |
-| **3a** | 同一キーガードの kind-aware 化 | `axesShareWritableKey` を改修。tag×tag×異 tagName を合法化（`tags` 1 本に 2 タグ）。boolean×boolean 同一キーは従来どおり弾く | ✅ | F0 |
-| **3b** | タグ軸 | ListValue 許可リスト・tagName 包含判定・配列 add/remove（他要素温存）・absent/false 意味論確定（§3.6①）・**undo 値等価補強**（§3.5）・inline tag 非対応を明示 | ⚠️ 配線は S0 後 | 3a, 1b |
+| **S0** | Bases 軸型スパイク | §4 **実行済み・確定（2026-07-12・実機 1.12.7）**。Value 許可リスト（Number/String/List/Tag/Error）・options 型（dropdown+slider+text+group+shouldHide）を確定。以降の配線ゲート解除 | ✅ 済 | — |
+| **F0** | AxisSpec 基盤（純ロジック） | `AxisSpec`／`AxisRaw` 型・`interpretAxis`・`planAxisWrite` を TDD（§3）。undo は #105 流用。Value 表現に非依存 | 未 | — |
+| **1a** | 数値軸 読み取り/表示 | `readAxis` を AxisSpec 対応（`normalizeAxis`→`interpretAxis` 配線・`instanceof NumberValue`＋`Number(toString())`）・locked 判定 kind-aware 化（`ErrorValue` も安全側ロック）。**書き戻し無し（locked）でも出荷可能な段階** | 未（S0 解決済） | S0, F0 |
+| **1b** | 数値軸 書き戻し+undo | `planAxisWrite` で越境時のみ代表値・undo 既存流用・**boolean 軸は回帰で挙動不変固定** | 未 | 1a |
+| **2** | 選択（select）軸 | `instanceof StringValue`＋`toString()`・trueValue/falseValue 完全一致・未知値は未分類+locked・越境時のみ書込 | 未（S0 解決済） | 1b |
+| **3a** | 同一キーガードの kind-aware 化 | `axesShareWritableKey` を改修。tag×tag×異 tagName を合法化（`tags` 1 本に 2 タグ）。boolean×boolean 同一キーは従来どおり弾く | 未 | F0 |
+| **3b** | タグ軸 | `instanceof ListValue`・`includes(new TagValue)` で包含（`#` 前置は loose-equals・要実機確認）・配列 add/remove（他要素温存）・absent/false 意味論確定（§3.6①）・**undo 値等価補強**（§3.5）・inline tag 非対応を明示 | 未（S0 解決済） | 3a, 1b |
 
 ### 横断作業（各 L2 に分散して実施）
 
@@ -265,7 +291,10 @@ F0 は S0 の結果を待たず**この環境で先行着手できる**（純ロ
 ## 9. 次のアクション
 
 1. 本書をレビュー・合意（人間ゲート）。
-2. **実機で S0 スパイクを回す**（この環境では不可）。結果を要件 §9・本書 §4 に反映。
-3. `/github-planning` で v0.3 マイルストーン＋L2 群（F0/1a/1b/2/3a/3b）を起票（起票前ゲートで AC
+2. ~~実機で S0 スパイクを回す~~ → **完了（2026-07-12・実機 1.12.7）**。Value 許可リスト・options 型を
+   §4 に確定。プローブは `scripts/e2e/probe-s0.{sh,js}`（throwaway・再実行可）。
+3. **要件定義書 §9「未決事項」に S0 結果を反映**（Value 表現・options 型の確定。`/github-planning` 起票時
+   または先行して人間承認のうえ）。§2 の v2 送り解除・§3 の F 行方針も同時に確定。
+4. `/github-planning` で v0.3 マイルストーン＋L2 群（F0/1a/1b/2/3a/3b）を起票（起票前ゲートで AC
    ウォークスルー＋依存 `> 依存:` の記録）。
-4. 各 L2 を `/dev-tasks`（実装前設計→TDD→レビュー）で実装。F0 は S0 と並行して先行着手可。
+5. 各 L2 を `/dev-tasks`（実装前設計→TDD→レビュー）で実装。**F0 は依存なしで即着手可**（S0 解決済）。

@@ -190,13 +190,19 @@ describe("NoteCard — 滞留バッジ（mtime ヒューリスティック・#10
     expect(screen.getByText("21d")).toBeTruthy();
   });
 
-  it("NoteCard_滞留バッジ_経過日数を aria-label で読み上げる（時計は装飾＝aria-hidden）", () => {
+  it("NoteCard_滞留バッジ_経過日数を SR 要約（aria-describedby）で読み上げる（バッジ自体は装飾＝aria-hidden・レビュー指摘）", () => {
     // given / when
-    render(<NoteCard entry={stagnantEntry(21)} stagnantBadge={badge} stagnantLabel={label} />);
-    // then: SR には経過日数付きの滞留ラベルが伝わる（img ロール＋aria-label）
-    expect(
-      screen.getByRole("img", { name: "Stale: not updated for 21 days" }),
-    ).toBeTruthy();
+    const { container } = render(
+      <NoteCard entry={stagnantEntry(21)} stagnantBadge={badge} stagnantLabel={label} />,
+    );
+    // then: 滞留バッジ自体は装飾（role=img を持たない＝aria-hidden）
+    expect(screen.queryByRole("img", { name: /Stale/ })).toBeNull();
+    // 経過日数はカードの aria-describedby が指す sr-only 要約に入る（名前を汚さず補足として読み上げる）
+    const card = container.querySelector(".eisenhower-note-card") as HTMLElement;
+    const descId = card.getAttribute("aria-describedby");
+    expect(descId).toBeTruthy();
+    const desc = container.querySelector(`[id="${descId}"]`);
+    expect(desc?.textContent).toContain("Stale: not updated for 21 days");
   });
 
   it("NoteCard_滞留バッジ_--text-muted のクラスで控えめに描画する", () => {
@@ -451,10 +457,57 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
         stagnantLabel={(days) => `Stale ${days}`}
       />,
     );
-    // then: カード div は明示 aria-label=title を持ち、子（滞留 role=img・バッジ・完了ボタン）の
+    // then: カード div は明示 aria-label=title を持ち、子（滞留バッジ・追加プロパティバッジ）の
     // ラベルが name-from-content で名前へ流れ込まない（v0.1.7 の title のみ挙動を維持）。
-    const card = container.querySelector(".eisenhower-note-card");
-    expect(card?.getAttribute("aria-label")).toBe("タスクA");
+    const card = container.querySelector(".eisenhower-note-card") as HTMLElement;
+    expect(card.getAttribute("aria-label")).toBe("タスクA");
+    // かつ滞留・バッジの情報は aria-describedby の SR 要約に補足として入る（情報パリティ・レビュー指摘）。
+    const descId = card.getAttribute("aria-describedby");
+    expect(descId).toBeTruthy();
+    const desc = container.querySelector(`[id="${descId}"]`);
+    expect(desc?.textContent).toContain("Stale 21");
+    expect(desc?.textContent).toContain("due 2026-01-01");
+    // 完了ボタンはカード（role=button）の子孫ではない（nested-interactive 回避・レビュー指摘）。
+    expect(card.querySelector(".eisenhower-note-card__complete")).toBeNull();
+  });
+
+  it("NoteCard_完了ボタンは role=button カードの子孫でない（nested-interactive 回避・レビュー指摘）", () => {
+    // given: 完了トグル有効のカード（非ロック）
+    const { container } = render(
+      <NoteCard
+        entry={entry()}
+        completionEnabled
+        completionLabel={(c) => (c ? "未完了に戻す" : "完了にする")}
+        onToggleCompletion={vi.fn()}
+      />,
+    );
+    // then: 完了 button は存在するが、ドラッグ可能な role=button カード div の内側ではなく item の直下（兄弟）
+    const item = container.querySelector(".eisenhower-note-card-item") as HTMLElement;
+    const card = container.querySelector(".eisenhower-note-card") as HTMLElement;
+    const button = container.querySelector(".eisenhower-note-card__complete") as HTMLElement;
+    expect(button).toBeTruthy();
+    expect(card.contains(button)).toBe(false); // カード（role=button）の子孫でない
+    expect(button.parentElement).toBe(item); // item の直下の兄弟
+  });
+
+  it("NoteCard_非 boolean 完了値のカードで x キー_トグルせず無効理由を通知する（silent no-op を避ける・レビュー指摘）", () => {
+    // given: completionUnsupported（日付型 done 等）のカード
+    const onToggleCompletion = vi.fn();
+    const onCompletionUnsupported = vi.fn();
+    render(
+      <NoteCard
+        entry={completionEntry({ completionUnsupported: true })}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={onToggleCompletion}
+        onCompletionUnsupported={onCompletionUnsupported}
+      />,
+    );
+    // when: カード（title のアクセシブル名）に x キー
+    fireEvent.keyDown(screen.getByRole("button", { name: "タスクA" }), { key: "x" });
+    // then: 書き込みはせず（元値保護）、無効理由の通知だけ出す（silent no-op を避ける）
+    expect(onToggleCompletion).not.toHaveBeenCalled();
+    expect(onCompletionUnsupported).toHaveBeenCalledWith("a.md");
   });
 
   it("NoteCard_x キー_フォーカス中のカードで完了をトグルする（Space=掴む/Enter=開く と非衝突・AC1）", () => {

@@ -13,7 +13,7 @@ import { NullValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import { isEmphasizedDate } from "../logic/dateEmphasis";
-import { safeGetAsPropertyId } from "./readAxis";
+import { logChurnFailureOnce, safeGetAsPropertyId } from "./readAxis";
 
 /** カードに表示できるバッジの最大個数（カード密度への影響を抑える上限）。 */
 export const MAX_BADGE_PROPERTIES = 3;
@@ -107,12 +107,24 @@ export function resolveBadgePropertyIds(
  * 壊さないよう空文字へ退避する＝AC2）。`null`・absent（`NullValue`）は空文字（`NullValue.toString()` は
  * 文字列 "null" を返すため型で弾く）、それ以外は `toString()` で文字列化する（型別分岐は最小限＝churn 耐性）。
  */
+const loggedBadgeReadFailures = new Set<string>();
+
 function readBadgeText(entry: BasesEntry, id: BasesPropertyId): string {
   try {
     const value: Value | null = entry.getValue(id);
     if (value == null || value instanceof NullValue) return "";
     return value.toString();
-  } catch {
+  } catch (error) {
+    // 姉妹の read パス（`readAxisValueSafely`）と対称に、churn した Bases の例外をキー単位で一度だけ
+    // ログする（読み取り専用のため空文字退避は安全だが、全カード空表示が「本当に空」か「読み取り失敗」
+    // かを区別できるよう診断を残す・レビュー指摘）。`toString()` の throw も同じ catch で拾う。
+    const raw = id as unknown as string;
+    logChurnFailureOnce(
+      loggedBadgeReadFailures,
+      typeof raw === "string" ? raw : String(raw),
+      "badge getValue/toString failed; showing empty",
+      error,
+    );
     return "";
   }
 }

@@ -475,6 +475,11 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 持たない（カード状態は onDataUpdated 再描画で最新化）ため、書込失敗（アダプタが Notice 済み）の
   // reject は握りつぶして未処理 rejection を防ぐ（ロールバック対象が無い・レビュー指摘）。
   const toggleCompletionCallback = callbacks.onToggleCompletion;
+  // 非 boolean 完了値のカードへ x キー操作が来たら、保護中の旨を sr-status へ読み上げる（silent no-op を
+  // 避ける・レビュー指摘）。書き込みは起こさない（元値を破壊しない＝AC2）。完了機能が無効なら配線しない。
+  const handleCompletionUnsupported = toggleCompletionCallback
+    ? () => announce(messages.completionUnsupported)
+    : undefined;
   const handleToggleCompletion = toggleCompletionCallback
     ? (entryId: string, done: boolean) => {
         // タイトルは非同期解決の前に捕捉する（done:true は再クエリで entry が消え titleOf が id に退化しうる）。
@@ -545,6 +550,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               completionLabel={completionLabel}
               completionUnsupportedLabel={messages.completionUnsupportedLabel}
               onToggleCompletion={handleToggleCompletion}
+              onCompletionUnsupported={handleCompletionUnsupported}
               dimCompleted={dimCompleted}
             />
           ))}
@@ -584,6 +590,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             completionLabel={completionLabel}
             completionUnsupportedLabel={messages.completionUnsupportedLabel}
             onToggleCompletion={handleToggleCompletion}
+            onCompletionUnsupported={handleCompletionUnsupported}
             dimCompleted={dimCompleted}
           />
         )}

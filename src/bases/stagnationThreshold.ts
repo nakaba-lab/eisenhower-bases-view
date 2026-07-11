@@ -9,6 +9,7 @@
  * 対称に try/catch で throw を境界退避し、ビュー全体の再描画を壊さず設定既定へ倒す。
  */
 import type { EisenhowerSettings } from "../settings";
+import { logChurnFailureOnce } from "./readAxis";
 
 /**
  * Bases ビュー options のキー（滞留しきい値・日数）。本層は `config.get(key)` で `.base` の
@@ -52,11 +53,7 @@ export function parseThresholdInput(raw: string): number | null {
   return parsed;
 }
 
-/**
- * 既にログ済みの失敗 option キー。`resolveStagnationThresholdDays` は再描画毎に呼ばれるため、
- * `config.get` が失敗し続けると同一キーのログでコンソールを埋める。兄弟の `safeGetAsPropertyId`／
- * `readAxisValueSafely`（`readAxis.ts`）と対称にキー単位で 1 回へ間引く（レビュー指摘）。
- */
+/** 既にログ済みの失敗 option キー（`logChurnFailureOnce` が再描画毎の多重ログを間引く）。 */
 const loggedGetOptionFailures = new Set<string>();
 
 /** `config.get(key)` を **throw させない**境界防御でくるむ（`safeGetAsPropertyId` と対称・churn 耐性）。 */
@@ -65,10 +62,13 @@ function safeGetOption(config: ConfigLike, key: string): unknown {
   try {
     return config.get(key);
   } catch (error) {
-    if (!loggedGetOptionFailures.has(key)) {
-      loggedGetOptionFailures.add(key);
-      console.error("[Eisenhower Matrix] config.get failed; using default stagnation threshold", error);
-    }
+    // ログ方針は `readAxis.logChurnFailureOnce` に集約（兄弟ガードと一斉に変えられる・レビュー指摘）。
+    logChurnFailureOnce(
+      loggedGetOptionFailures,
+      key,
+      "config.get failed; using default stagnation threshold",
+      error,
+    );
     return undefined;
   }
 }

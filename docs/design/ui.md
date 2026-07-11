@@ -91,7 +91,7 @@ flowchart LR
 ```
 
 - タイトルは `min-width:0` + `text-overflow:ellipsis` で truncate し、バッジ（`flex-shrink:0`）に場所を譲る。カード行は `display:flex; align-items:center; gap` でタイトルとバッジを並べる。
-- 時計アイコンは装飾（`aria-hidden`）。バッジ全体に `aria-label`（後述 i18n）を付け、経過日数を SR に読み上げる。
+- 時計アイコンもバッジ全体も**視覚装飾（`aria-hidden`）**とし、経過日数（`stagnantLabel`）は追加プロパティバッジと束ねてカードの `aria-describedby`（SR 要約・上記「アクセシビリティ」節）で読み上げる（`role="button"` カードの presentational children ではバッジ自身の `aria-label` が届かないため・v0.2 レビュー確定）。
 
 **却下: タイトル下のメタ行（案B）** — `🕐 21d` を独立行にするとタイトルを圧迫しないが、カード高さが増え縦の密度が下がる（象限に多数のカードが並ぶ本ビューでは一覧性が落ちる）。バッジは補助情報のため 1 行内の控えめな右寄せが妥当と判断。
 
@@ -362,6 +362,8 @@ stateDiagram-v2
 ```
 
 **キーボード / a11y（フロア＝キーボードパリティ）**:
+- **完了ボタンはドラッグ可能な `role="button"` カード div の子ではなく、`<li>`（item）直下の兄弟に置く（nested-interactive 回避・v0.2 レビュー確定）**。相互作用要素（`<button>`）を `role="button"` の子孫にすると axe の nested-interactive（serious）に触れ、内側ボタンの意味論が AT で平坦化されうる。ボタンは item を基準（`position: relative`）に**右上へ絶対配置**し、タイトル行側は `--with-completion` の `padding-inline-end` で場所を空ける（絶対配置なのでカードの flex レイアウトには影響しない）。hover/focus リビールは item hover（`.eisenhower-note-card-item:hover`）・カード focus（隣接兄弟 `~`）・ボタン focus で行う。
+- 非 boolean 完了値（`unsupported`）のカードに `x` キーが来たら、書き込みはせず（元値保護＝AC2）**保護中の旨（`completionUnsupported`）を sr-status へ読み上げる**（`onCompletionUnsupported`→`MatrixView.handleCompletionUnsupported`→`announce`）。disabled ボタンの `title`/`aria-label` はキーボード経路に届かないため、`x` の silent no-op を避ける（v0.2 レビュー確定）。
 - チェックボタンは本物の `<button>`。**hover だけでなく focus 時にも可視**（`:focus-within` / ボタンの `:focus-visible`）にしてキーボード利用者に露出する（#84 が明示した a11y 要件）。`aria-label` は状態別 i18n（未完了「完了にする」／完了「未完了に戻す」）。押下結果は**クリック・`x` キー双方の経路**で、移動と同じ `.eisenhower-matrix__sr-status`（`role="status" aria-live="polite"`）へ `MatrixView.handleToggleCompletion` からアナウンスする（`completionSucceeded`／失敗は `completionFailed`）。**Obsidian の `Notice` は `aria-live` を持たず SR に読まれない**ため、`x` キー経路（フォーカスはカード div にあり `aria-pressed` 変化も通知されない）でも成否が届くよう sr-status を唯一の通知源とする（v0.2 レビュー確定・WCAG 4.1.3）。
 - **`x` キー**（カードにフォーカス中）でトグルを発火する。既存キー割当（**Space=掴む／Enter=開く**）と**非衝突**（`NoteCard.handleKeyDown` に `x` 分岐を追加し、**非ドラッグ中のみ**発火。ロックカードの `handleLockedKeyDown` にも足す）。
 - ボタンの `onClick`／`onPointerDown`／`onKeyDown` は **click-to-open と `PointerSensor(distance:5)` に対し `stopPropagation`** してカードの「開く／掴む」と衝突させない（AC5）。フォーカスリングは明示 `outline: 2px solid var(--interactive-accent)`（`UndoToast`／`NoteCard` と同方針）。
@@ -445,7 +447,7 @@ Obsidian テーマ変数を使用（ハードコードしない）: `--backgroun
 - **dnd の日本語アナウンス＋操作説明**: `DndContext` の `accessibility.announcements`（onDragStart/Over/End/Cancel）と `screenReaderInstructions` を日本語化し、象限の**ローカライズ済みラベル**と**ノート名**で読み上げる（既定の英語＋内部 ID〔file.path・象限キー〕の読み上げを置換＝レビュー指摘）。
 - **移動結果のライブ通知（最新世代のみ・誤報しない・再読み上げ可）**: ビュー内に `role="status"`／`aria-live="polite"` の視覚的非表示領域を持ち、楽観移動の結果をスクリーンリーダーへ伝える（`Notice` はビュー外トーストのため a11y ツリーに乗る保証がない）。ただし **実際にロールバックした（最新世代の失敗）ときだけ「失敗・復元」を、後続ドラッグに上書きされていない最新世代のときだけ「移動成功」を通知**する（巻き戻していないのに「元に戻しました」と誤報せず、superseded な象限も読み上げない＝レビュー指摘）。同一文言の連続移動でも読み上げが消えないよう、`nextAnnouncement`（`liveStatus.ts`・純関数）が文言を不可視のゼロ幅スペース（U+200B）で差分化して再読み上げを促す。**成功かつ undo 導線があるとき（`planSettle` が `successUndoable` を返す）は、成功文言に「コマンド『直前の移動を元に戻す』で元に戻せる」旨（`messages.moveSucceededUndoable`）を添えて読み上げる（レビュー指摘 #1）**＝視覚利用者にはトーストで undo が見えるが、非ライブ（`role="group"`）で 8 秒自動消滅する `UndoToast` は SR/キーボード利用者に通知されず到達前に消えうるため、ライブ領域で undo の存在と到達手段（恒久導線＝コマンド）を届けて視覚/非視覚パリティを確保する（トースト本文自体は素の成功文言のまま＝視覚は重複しない）。
 - フォーカス可視（`:focus-visible` のアクセントリング。親の `overflow` で切れないよう**インセット** `outline-offset`）・WCAG AA コントラスト（テーマ変数に追従）・象限は region ランドマーク＋`aria-label`「象限名（軸ラベル）」。
-- **カードのアクセシブル名は明示 `aria-label`＝タイトルに固定する（v0.2 レビュー確定）**: ドラッグ可能な `role="button"` カード div は、明示 `aria-label` が無いと accname の **name-from-content** で子（滞留バッジ `role="img"`・追加プロパティバッジの可視テキスト・完了ボタンの操作ラベル）が名前に流れ込み、「タスクA, 滞留21日, due 2026-01-01, 完了にする, ボタン」のように冗長化する（v0.1.7 の「タイトルのみ」からの退行）。ロックカードは既に `aria-label={lockedLabel(title)}` を持つのと**対称**に、通常カード div にも `aria-label={entry.title}` を付け、名前をタイトルだけに固定する（dnd-kit の `attributes` は `aria-label` を含まないため spread と衝突しない）。滞留/バッジ/完了ボタンは名前に混ぜず、それぞれの `aria-label`／可視テキストで個別に読み上げさせる。
+- **カードのアクセシブル名は明示 `aria-label`＝タイトル・補足は `aria-describedby`（v0.2 レビュー確定）**: ドラッグ可能な `role="button"` カード div は、明示 `aria-label` が無いと accname の **name-from-content** で子（滞留・追加プロパティバッジの可視テキスト）が名前に流れ込み冗長化する（v0.1.7 の「タイトルのみ」からの退行）。ロックカードの `aria-label={lockedLabel(title)}` と**対称**に、通常カード div にも `aria-label={entry.title}` を付け名前をタイトルに固定する。ただし**バッジ/滞留の情報を完全に落とすと WCAG 1.3.1（情報パリティ）を割る**（`role="button"` の presentational children では子の可視テキスト・`role="img"` が AT ツリーから剥がれ独立到達不可のため、名前に無い＝SR に一切届かなくなる）。そこで**滞留バッジ・追加プロパティバッジは `aria-hidden` の視覚装飾**にし、その要約（`stagnantLabel(days)` ＋ 各バッジ `label value`）を 1 つの視覚非表示テキスト（`.eisenhower-sr-only`）に集約して**カードの `aria-describedby`** で参照する＝名前は汚さず、期日・滞留という意思決定材料を SR/キーボード利用者へ補足として届ける（dnd-kit の `attributes` は `aria-label`/`aria-describedby` を含まないため spread と衝突しない。要約が空なら `aria-describedby` は付けない）。
 - **カード名の省略とアクセシブル名（#22 F5・既知の制約）**: カードは 1 行省略（`text-overflow: ellipsis`）だが、アクセシブル名（＝上記の明示 `aria-label`＝全文タイトル）はスクリーンリーダーに省略に関わらず**全文タイトルを読み上げる**。F5 で native `title` を撤去した（コア page-preview との二重ツールチップ回避）ため、**視覚のみのキーボード利用者は、フォーカス中カードの省略された長いタイトル全文を確認する手段を持たない**（コア page-preview はマウスホバー起点でキーボードフォーカスでは発火しない）。今回は下限を満たすため許容し、将来「フォーカス時ツールチップ／幅可変表示」で補うことを検討する（`frontend-reviewer` question で確認済み・スコープ外）。
 
 ### コンポーネントカタログ

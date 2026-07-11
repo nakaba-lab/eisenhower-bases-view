@@ -44,6 +44,27 @@ function toNotePropertyId(name: string): BasesPropertyId {
   return `note.${name}` as BasesPropertyId;
 }
 
+/**
+ * churn 対象の Bases 接触点（`getAsPropertyId`／`getValue`／`config.get`）の失敗を、
+ * キー（propertyId／option キー）単位で**一度だけ** `console.error` する共有ヘルパ。
+ * `resolveAxisPropertyIds`／`toViewModel` は再描画毎に呼ばれるため、throw が続くと同一キーの
+ * ログでコンソールを埋める。log-once 規律を 1 箇所に集約し、各境界ガード（`safeGetAsPropertyId`／
+ * `readAxisValueSafely`／`readBadges` の `readBadgeText`／`stagnationThreshold` の `safeGetOption`）が
+ * これへ委譲することで、観測性ポリシーの変更（warn への格下げ・リセット等）が全接触点へ一斉に効く
+ *（レビュー指摘: 境界ガードの log-once 複製を単一化）。try/catch と戻り値センチネルは用途ごとに
+ * 異なるため各ガードに残し、**ログ方針だけ**を共有する。
+ */
+export function logChurnFailureOnce(
+  seen: Set<string>,
+  key: string,
+  message: string,
+  error: unknown,
+): void {
+  if (seen.has(key)) return;
+  seen.add(key);
+  console.error(`[Eisenhower Matrix] ${message}`, error);
+}
+
 /** `note.` 接頭辞。書き戻し可能なのはこの名前空間（frontmatter）のプロパティのみ。 */
 const NOTE_PROPERTY_PREFIX = "note.";
 
@@ -100,10 +121,12 @@ export function safeGetAsPropertyId(
   try {
     return config.getAsPropertyId(key);
   } catch (error) {
-    if (!loggedGetAsPropertyIdFailures.has(key)) {
-      loggedGetAsPropertyIdFailures.add(key);
-      console.error("[Eisenhower Matrix] config.getAsPropertyId failed; using default axis", error);
-    }
+    logChurnFailureOnce(
+      loggedGetAsPropertyIdFailures,
+      key,
+      "config.getAsPropertyId failed; using default axis",
+      error,
+    );
     return null;
   }
 }
@@ -173,7 +196,11 @@ export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
  *
  * #105 で 2 軸固定の {@link axesShareWritableKey} を N キーへ一般化した。非 `note.*`
  *（`formula.*`／`file.*`）・`null` は書き戻せないため衝突対象外（`toFrontmatterKey` が `null`）。
- * 軸×軸（F7 診断）と軸×完了（F10・{@link resolveCompletionId}）の設定ミス検出を単一述語で共有する。
+ * 本番の呼び出しは軸×軸（F7 診断＝2 キー・{@link axesShareWritableKey}）のみ。**軸×完了（F10）の衝突は
+ * {@link resolveCompletionId} が pairwise 比較で別途判定する**（本関数を呼ばない）＝完了キーが `[urgent, important, completion]`
+ * の 3 要素重複ではなく「完了キー == urgent か == important」を見るため。`firstSharedWritableKey([u,i,c])` は
+ * `u===i` のとき完了キーを見る前に軸共有を返し、完了が別キーでも無効化してしまい意味が異なる（＝単純置換不可）。
+ * ゆえに N キー一般化は現状テスト（3 キー衝突の単体固定）で行使され、本番では 2 キーで使う。
  */
 export function firstSharedWritableKey(
   ids: readonly (BasesPropertyId | null | undefined)[],
@@ -305,11 +332,13 @@ function readAxisValueSafely(entry: BasesEntry, id: BasesPropertyId): AxisReadRe
   try {
     return { ok: true, value: entry.getValue(id) };
   } catch (error) {
-    const key = id as unknown as string;
-    if (typeof key !== "string" || !loggedGetValueFailures.has(key)) {
-      if (typeof key === "string") loggedGetValueFailures.add(key);
-      console.error("[Eisenhower Matrix] entry.getValue failed", error);
-    }
+    const raw = id as unknown as string;
+    logChurnFailureOnce(
+      loggedGetValueFailures,
+      typeof raw === "string" ? raw : String(raw),
+      "entry.getValue failed",
+      error,
+    );
     return { ok: false };
   }
 }

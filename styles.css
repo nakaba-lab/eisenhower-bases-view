@@ -189,6 +189,23 @@
  * flex 列の項目として全幅に伸び、nowrap カードで広がらないよう収縮可能にする（ellipsis 維持）。 */
 .eisenhower-note-card-item {
   min-width: 0;
+  /* 完了ボタン（#105）を絶対配置する基準。ボタンはドラッグ可能な role=button カードの子ではなく
+   * 兄弟に置き nested-interactive を避けるため、この item を位置決めコンテキストにする（レビュー指摘）。 */
+  position: relative;
+}
+
+/* スクリーンリーダー専用（視覚非表示）テキスト。カードの aria-describedby 先（バッジ/滞留の要約）に使う。
+ * 視覚には出さず AT ツリーには残す標準の visually-hidden パターン（display:none だと読まれないため使わない）。 */
+.eisenhower-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。
@@ -249,11 +266,15 @@
   flex: 0 0 auto;
 }
 
-/* カード上の完了チェックボタン（#105 F10）。タイトル行の右端に置き、hover/focus で出現する
+/* カード上の完了チェックボタン（#105 F10）。ドラッグ可能な role=button カードの**兄弟**として
+ * item の右上へ絶対配置する（nested-interactive 回避・レビュー指摘）。hover/focus で出現する
  * （完了時は常時可視）。テーマ変数のみ（--text-muted 待機・--interactive-accent 完了）で配色し
- * ハードコードしない。レイアウト用の幅を常に確保し、hover での揺れを防ぐ。 */
+ * ハードコードしない。タイトル行側は --with-completion の padding で場所を空ける（下記）。 */
 .eisenhower-note-card__complete {
-  flex: 0 0 auto;
+  position: absolute;
+  top: var(--size-4-1, 4px);
+  inset-inline-end: var(--size-4-2, 8px);
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -270,12 +291,18 @@
   transition: opacity 120ms ease, color 120ms ease;
 }
 
-/* カード hover・カード focus・ボタン focus で出現（マウスにもキーボードにも露出＝a11y フロア）。
- * カード hover/focus のリビールは **:not(:disabled)** に限る: 非対応（disabled）ボタンまで
- * opacity:1 にすると下の :disabled{opacity:.4} を詳細度で上書きし、押せる「未完了」ボタンと
- * 見分けがつかなくなる（frontend-reviewer should）。カード focus でもリビールして x キーの発見性を上げる。 */
-.eisenhower-note-card:hover .eisenhower-note-card__complete:not(:disabled),
-.eisenhower-note-card:focus-visible .eisenhower-note-card__complete:not(:disabled),
+/* タイトル行が絶対配置ボタンの下に潜らないよう、完了ボタン表示時はカードの右側に余白を予約する
+ * （ボタン幅 1.5em ＋ 余白）。ボタンは item の兄弟なのでカードのレイアウトには影響しない。 */
+.eisenhower-note-card--with-completion .eisenhower-note-card__title-row {
+  padding-inline-end: calc(1.5em + var(--size-4-1, 4px));
+}
+
+/* item hover・カード focus・ボタン focus で出現（マウスにもキーボードにも露出＝a11y フロア）。
+ * リビールは **:not(:disabled)** に限る: 非対応（disabled）ボタンまで opacity:1 にすると下の
+ * :disabled{opacity:.4} を詳細度で上書きし、押せる「未完了」ボタンと見分けがつかなくなる
+ * （frontend-reviewer should）。ボタンはカード div の兄弟のため、カード focus は隣接兄弟結合子 `~` で拾う。 */
+.eisenhower-note-card-item:hover .eisenhower-note-card__complete:not(:disabled),
+.eisenhower-note-card:focus-visible ~ .eisenhower-note-card__complete:not(:disabled),
 .eisenhower-note-card__complete:focus-visible {
   opacity: 1;
 }

@@ -57,6 +57,8 @@ export interface QuadrantCellProps {
   completionUnsupportedLabel?: string;
   /** 完了状態をトグルする（#105 F10）。各 NoteCard へ委譲する。 */
   onToggleCompletion?: (entryId: string, done: boolean) => void;
+  /** 非 boolean 完了値のカードへの x キー操作の通知（#105 F10）。各 NoteCard へ委譲する。 */
+  onCompletionUnsupported?: (entryId: string) => void;
   /** 完了ノートを淡色表示するか（設定 `dimCompleted`・#105 F10）。各 NoteCard へ委譲する。 */
   dimCompleted?: boolean;
 }
@@ -84,6 +86,7 @@ export function QuadrantCell({
   completionLabel,
   completionUnsupportedLabel,
   onToggleCompletion,
+  onCompletionUnsupported,
   dimCompleted,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
@@ -136,6 +139,7 @@ export function QuadrantCell({
               completionLabel={completionLabel}
               completionUnsupportedLabel={completionUnsupportedLabel}
               onToggleCompletion={onToggleCompletion}
+              onCompletionUnsupported={onCompletionUnsupported}
               dimCompleted={dimCompleted}
             />
           ))}

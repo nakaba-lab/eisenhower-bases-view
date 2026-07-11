@@ -113,13 +113,15 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           .setPlaceholder("note.due, note.tags")
           .setValue(settings.cardBadgeProperties.join(", "))
           .onChange(async (value) => {
-            // カンマ区切り→トリム→空除去→最大数で丸める（入口で正規化する。永続層の
-            // mergeStringArray は型フィルタのみのため、trim/空除去/丸めはここで行う）。
-            settings.cardBadgeProperties = value
+            // カンマ区切り→トリム→空除去→**重複除去→**最大数で丸める（入口で正規化する。永続層の
+            // mergeStringArray は型フィルタのみのため、trim/空除去/dedup/丸めはここで行う）。
+            // dedup を slice の前に置く（`resolveBadgePropertyIds` と同順）＝重複が 1 枠を消費して
+            // 3 枠に収まる別プロパティが黙って押し出されるのを防ぐ（レビュー指摘）。
+            const parsed = value
               .split(",")
               .map((item) => item.trim())
-              .filter((item) => item.length > 0)
-              .slice(0, MAX_BADGE_PROPERTIES);
+              .filter((item) => item.length > 0);
+            settings.cardBadgeProperties = [...new Set(parsed)].slice(0, MAX_BADGE_PROPERTIES);
             await this.plugin.saveSettings();
           }),
       );

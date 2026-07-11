@@ -51,10 +51,10 @@ export interface QuadrantCellProps {
   stagnantLabel?: (days: number) => string;
   /** 完了トグル（#105 F10）が有効か。各 NoteCard へ委譲する。 */
   completionEnabled?: boolean;
-  /** 完了チェックボタンの状態別 aria-label（i18n）。各 NoteCard へ委譲する。 */
-  completionLabel?: (completed: boolean) => string;
-  /** 無効化された完了ボタンの理由ラベル（i18n `completionUnsupportedLabel`・#105 F10）。各 NoteCard へ委譲。 */
-  completionUnsupportedLabel?: string;
+  /** 完了チェックボタンの aria-label（ノート名＋状態別操作・i18n）。各 NoteCard がノート名で解決する。 */
+  completionLabel?: (title: string, completed: boolean) => string;
+  /** 無効化された完了ボタンの理由ラベル（ノート名込み・i18n `completionUnsupportedLabel`・#105 F10）。各 NoteCard へ委譲。 */
+  completionUnsupportedLabel?: (title: string) => string;
   /** 完了状態をトグルする（#105 F10）。各 NoteCard へ委譲する。 */
   onToggleCompletion?: (entryId: string, done: boolean) => void;
   /** 非 boolean 完了値のカードへの x キー操作の通知（#105 F10）。各 NoteCard へ委譲する。 */

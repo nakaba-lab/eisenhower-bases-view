@@ -181,7 +181,13 @@ export interface MatrixCallbacks {
    * 最新化する）。書込失敗はアダプタが `Notice` で通知し reject するが、ロールバック対象が無いため
    * 呼び出し側は reject を握りつぶしてよい。
    */
-  onToggleCompletion?: (entryId: string, done: boolean) => Promise<void>;
+  /**
+   * 完了状態を書き戻す（#105 F10）。**解決値で「実際に書いたか」を返す**: `true`＝書込成功／
+   * `false`＝非 boolean 値を保護して書かなかった（TOCTOU＝描画後〜書込前に外部で非 boolean 化した稀ケース）。
+   * ハード失敗（ファイル欠落・書込例外）は reject する。UI（`MatrixView`）はこの区別で、保護時に誤って
+   * 「完了しました」ではなく「保護中」を読み上げる（aria-live へ偽成功を流さない・レビュー指摘）。
+   */
+  onToggleCompletion?: (entryId: string, done: boolean) => Promise<boolean>;
   /**
    * ビュー内の楽観オーバーレイ（pending）を `entryId` 単位で落とす関数をアダプタへ登録する（レビュー指摘 #6）。
    *

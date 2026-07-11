@@ -113,10 +113,16 @@ export interface Messages {
   axisOption: { urgency: string; important: string };
   /** Bases Configure view のカードバッジセレクタ displayName（#104 F8・番号付き `badgeProperty1..N`）。 */
   badgeOption(index: number): string;
-  /** カード上の完了チェックボタンの aria-label（未完了→完了・#105 F10）。 */
-  completionToggle: string;
-  /** カード上の完了チェックボタンの aria-label（完了→未完了・双方向トグル・#105 F10）。 */
-  completionToggleDone: string;
+  /**
+   * カード上の完了チェックボタンの aria-label（未完了→完了・#105 F10）。**ノート名を含む**
+   *（複数カードで同名ボタンにならず、どのノートを完了させるか SR で識別できる・レビュー指摘）。
+   * ラベルが操作（完了にする/戻す）を表すため `aria-pressed` は付けない（APG のトグル指針・レビュー指摘）。
+   */
+  completionToggle: (title: string) => string;
+  /** カード上の完了チェックボタンの aria-label（完了→未完了・双方向トグル・ノート名含む・#105 F10）。 */
+  completionToggleDone: (title: string) => string;
+  /** カードにフォーカスした SR/キーボード利用者へ `x` キーで完了トグルできる旨の操作説明（完了有効時のみ・#105 F10）。 */
+  screenReaderCompletionHint: string;
   /** 完了トグル成功のライブ通知（#105 F10）。 */
   completionSucceeded(title: string): string;
   /** 完了トグル失敗のライブ通知（#105 F10）。 */
@@ -125,9 +131,10 @@ export interface Messages {
   completionUnsupported: string;
   /**
    * 無効化された完了ボタンの簡潔な aria-label／title（非 boolean 値の保護中＝押せない理由・#105 F10・AC2）。
-   * 長文の `completionUnsupported`（Notice 用）に対し、disabled ボタンに付ける短い理由表示。
+   * 長文の `completionUnsupported`（Notice 用）に対し、disabled ボタンに付ける短い理由表示。**ノート名を含む**
+   *（どのノートが保護中か SR で識別できる・レビュー指摘）。
    */
-  completionUnsupportedLabel: string;
+  completionUnsupportedLabel: (title: string) => string;
   /** Bases Configure view の完了プロパティセレクタ displayName（#105 F10）。 */
   completionOption: string;
 }
@@ -264,13 +271,15 @@ const JA: Messages = {
   },
   axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
   badgeOption: (index) => `カード表示プロパティ ${index}`,
-  completionToggle: "完了にする",
-  completionToggleDone: "未完了に戻す",
+  completionToggle: (title) => `「${title}」を完了にする`,
+  completionToggleDone: (title) => `「${title}」を未完了に戻す`,
+  screenReaderCompletionHint: "x キーで完了を切り替えます。",
   completionSucceeded: (title) => `「${title}」の完了状態を更新しました。`,
   completionFailed: (title) => `「${title}」の完了状態を変更できませんでした。`,
   completionUnsupported:
     "完了プロパティが boolean 型ではないため変更できません（日付などの既存の値を壊さないよう保護しました）。",
-  completionUnsupportedLabel: "完了にできません（boolean 型ではないため保護中）",
+  completionUnsupportedLabel: (title) =>
+    `「${title}」は完了にできません（boolean 型ではないため保護中）`,
   completionOption: "完了プロパティ",
 };
 
@@ -367,13 +376,15 @@ const EN: Messages = {
   },
   axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
   badgeOption: (index) => `Card property ${index}`,
-  completionToggle: "Mark done",
-  completionToggleDone: "Mark not done",
+  completionToggle: (title) => `Mark "${title}" done`,
+  completionToggleDone: (title) => `Mark "${title}" not done`,
+  screenReaderCompletionHint: "Press x to toggle completion.",
   completionSucceeded: (title) => `Updated completion for "${title}".`,
   completionFailed: (title) => `Couldn't change completion for "${title}".`,
   completionUnsupported:
     "The completion property isn't a boolean, so it can't be changed (its existing value, e.g. a date, was left intact).",
-  completionUnsupportedLabel: "Can't complete (not a boolean — value protected)",
+  completionUnsupportedLabel: (title) =>
+    `Can't complete "${title}" (not a boolean — value protected)`,
   completionOption: "Completion property",
 };
 

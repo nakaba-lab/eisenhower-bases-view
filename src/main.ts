@@ -80,13 +80,18 @@ export default class EisenhowerBasesViewPlugin extends Plugin {
           // Configure view へ宣言する（filter は書き戻し可能な note.* 判定・AC1）。
           // カード追加プロパティ表示（#104 F8）: 読み取り専用バッジのセレクタ（全プロパティ許可）も
           // 併せて宣言する。displayName は評価時点の解決言語に追従する（#23 F6 の i18n・AC4）。
-          options: () => [
-            ...buildAxisViewOptions(this.resolveMessages()),
-            ...buildBadgeViewOptions(this.resolveMessages()),
-            // カード上の完了トグル（#105 F10）: 完了プロパティのセレクタ（filter は書き戻し可能な
-            // note.* 判定＝軸と同型）。displayName は評価時点の解決言語に追従する（i18n）。
-            buildCompletionViewOption(this.resolveMessages()),
-          ],
+          options: () => {
+            // 解決言語メッセージは呼び出しごとに不変のため 1 度だけ解決して共有する（軸・バッジ・完了で
+            // 同一値を 3 回再解決しない・レビュー指摘）。
+            const messages = this.resolveMessages();
+            return [
+              ...buildAxisViewOptions(messages),
+              ...buildBadgeViewOptions(messages),
+              // カード上の完了トグル（#105 F10）: 完了プロパティのセレクタ（filter は書き戻し可能な
+              // note.* 判定＝軸と同型）。displayName は評価時点の解決言語に追従する（i18n）。
+              buildCompletionViewOption(messages),
+            ];
+          },
         }),
       () => {
         console.warn(

@@ -75,21 +75,23 @@ function CompletionButton({
 }: {
   completed: boolean;
   unsupported: boolean;
-  label: (completed: boolean) => string;
-  /** 非 boolean 値で無効化されているときの理由（aria-label/title）。省略時は状態ラベルのまま。 */
+  /** 解決済みの aria-label（ノート名＋操作。NoteCard が entry.title で組む・#105 F10）。 */
+  label: string;
+  /** 非 boolean 値で無効化されているときの理由（ノート名込み・解決済み）。省略時は状態ラベルのまま。 */
   unsupportedLabel?: string;
   onToggle: (done: boolean) => void;
 }) {
   // 無効化時は「押せない理由」を可視（title）・SR（aria-label）双方に出す。さもないと disabled ボタンが
   // 「完了にする, 使用不可」としか読まれず、非 boolean 値の保護という理由が伝わらない（レビュー指摘）。
   const reason = unsupported ? unsupportedLabel : undefined;
+  // aria-label は「ノート名＋操作（完了にする/戻す）」で状態を表すため aria-pressed は付けない（APG のトグル
+  // 指針＝可変ラベルと aria-pressed の併用を避ける・レビュー指摘）。完了状態は is-completed クラス（可視）で示す。
   return (
     <button
       type="button"
       class={"eisenhower-note-card__complete" + (completed ? " is-completed" : "")}
-      aria-label={reason ?? label(completed)}
+      aria-label={reason ?? label}
       title={reason}
-      aria-pressed={completed}
       disabled={unsupported}
       onClick={(event) => {
         // 開く導線（カードの onClick）へ伝播させない（AC5）。目的値は現状態の反転（双方向トグル）。
@@ -150,15 +152,16 @@ export interface NoteCardProps {
    */
   completionEnabled?: boolean;
   /**
-   * チェックボタンの状態別 aria-label（`completed` → 未完了に戻す／未完了 → 完了にする・#105 F10）。
-   * i18n（`completionToggle`/`completionToggleDone`）から組んで渡す。
+   * チェックボタンの aria-label をノート名＋状態から組む（`completed` → 未完了に戻す／未完了 → 完了にする・#105 F10）。
+   * i18n（`completionToggle(title)`/`completionToggleDone(title)`）から組んで渡す。ノート名を含むことで
+   * 複数カードで同名ボタンにならず SR で識別できる（レビュー指摘）。ラベルが操作を表すため aria-pressed は付けない。
    */
-  completionLabel?: (completed: boolean) => string;
+  completionLabel?: (title: string, completed: boolean) => string;
   /**
-   * 非 boolean 値で無効化された完了ボタンの理由ラベル（i18n `completionUnsupportedLabel`・#105 F10）。
+   * 非 boolean 値で無効化された完了ボタンの理由ラベルをノート名から組む（i18n `completionUnsupportedLabel(title)`・#105 F10）。
    * 省略時は状態ラベルのまま（disabled 理由を提示しない従来挙動）。
    */
-  completionUnsupportedLabel?: string;
+  completionUnsupportedLabel?: (title: string) => string;
   /**
    * 完了状態をトグルする（#105 F10）。UI は目的値 `done` を渡すだけで、書き込みはアダプタが担う（AC5）。
    */
@@ -217,8 +220,9 @@ export function NoteCard({
     <CompletionButton
       completed={completed}
       unsupported={completionUnsupported}
-      label={completionLabel!}
-      unsupportedLabel={completionUnsupportedLabel}
+      // ノート名を含む aria-label をカード側で解決して渡す（どのノートか SR で識別・レビュー指摘）。
+      label={completionLabel!(entry.title, completed)}
+      unsupportedLabel={completionUnsupportedLabel?.(entry.title)}
       onToggle={(done) => onToggleCompletion!(entry.id, done)}
     />
   ) : null;

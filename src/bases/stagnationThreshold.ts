@@ -47,10 +47,10 @@ export function toThresholdDays(raw: unknown): number | null {
  */
 export function parseThresholdInput(raw: string): number | null {
   const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  const parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return parsed;
+  // 厳密な非負整数（10 進数字のみ）だけ受理する。`Number.parseInt` はプレフィックス受理のため
+  // "14x"→14・"1e3"→1・"0x10"→0 を黙って通してしまう（文書化した「非数値は現在値保持」に反する・レビュー指摘）。
+  if (!/^\d+$/.test(trimmed)) return null;
+  return Number.parseInt(trimmed, 10);
 }
 
 /** 既にログ済みの失敗 option キー（`logChurnFailureOnce` が再描画毎の多重ログを間引く）。 */

@@ -229,7 +229,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
    * `UndoManager` へ「直前 1 手」として保存し、成功/失敗/非対応を `Notice` で通知する。完了ノートの
    * 表示/非表示は Base の `done != true` フィルタ（+ `onDataUpdated` 再クエリ）に委譲する。
    */
-  private async writeCompletion(entryId: string, done: boolean): Promise<void> {
+  private async writeCompletion(entryId: string, done: boolean): Promise<boolean> {
     const messages = this.getMessages();
     const completionKey = resolveCompletionKey(this.config, this.getSettings());
     if (completionKey === null) {
@@ -270,11 +270,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     }
     if (unsupported) {
       // 非 boolean を検出して書き込まなかった（元値を破壊していない）。undo 記録も作らない。
+      // `false`（＝保護・未書込）を返し、呼び出し側が「完了しました」ではなく「保護中」を通知できるようにする
+      //（aria-live へ偽成功を流さない・レビュー指摘）。
       new Notice(`Eisenhower Matrix: ${messages.completionUnsupported}`);
-      return;
+      return false;
     }
     if (undoRecord) this.undoManager?.record(undoRecord);
     new Notice(`Eisenhower Matrix: ${messages.completionSucceeded(file.basename)}`);
+    return true;
   }
 
   /**

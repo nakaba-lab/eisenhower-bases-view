@@ -186,34 +186,16 @@ export function resolveWritableAxisKeys(
  * `resolveWritableAxisKeys` の `urgent === important` ガードで毎回 `null`→Notice→ロールバックになる
  *（「掴めるのに必ず失敗する」壊れた UI 状態）。UI 側で当該ビューの全カードをドラッグ不可（`locked`）に
  * するために、`toViewModel` がこの述語で検出する（書き込み前ガードと対称の読み取り側ガード・レビュー指摘）。
+ *
+ * 2 軸の直接比較で判定する（両軸とも書き戻し可能な `note.*` で同一キー）。かつて N キー汎用ヘルパへ
+ * 一般化したが、本番は 2 キー固定のみ・軸×完了の衝突は {@link resolveCompletionId} が pairwise で別途
+ * 判定するため、汎用化は使われず YAGNI だった（v0.2 レビューで 2 軸直接比較へ戻した）。
  */
 export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
-  return firstSharedWritableKey([ids.urgent, ids.important]) !== null;
-}
-
-/**
- * 与えた propertyId 群のうち、**書込可能な `note.*` キーの最初の重複**を返す（無ければ null）。
- *
- * #105 で 2 軸固定の {@link axesShareWritableKey} を N キーへ一般化した。非 `note.*`
- *（`formula.*`／`file.*`）・`null` は書き戻せないため衝突対象外（`toFrontmatterKey` が `null`）。
- * 本番の呼び出しは軸×軸（F7 診断＝2 キー・{@link axesShareWritableKey}）のみ。**軸×完了（F10）の衝突は
- * {@link resolveCompletionId} が pairwise 比較で別途判定する**（本関数を呼ばない）＝完了キーが `[urgent, important, completion]`
- * の 3 要素重複ではなく「完了キー == urgent か == important」を見るため。`firstSharedWritableKey([u,i,c])` は
- * `u===i` のとき完了キーを見る前に軸共有を返し、完了が別キーでも無効化してしまい意味が異なる（＝単純置換不可）。
- * ゆえに N キー一般化は現状テスト（3 キー衝突の単体固定）で行使され、本番では 2 キーで使う。
- */
-export function firstSharedWritableKey(
-  ids: readonly (BasesPropertyId | null | undefined)[],
-): string | null {
-  const seen = new Set<string>();
-  for (const id of ids) {
-    if (id == null) continue;
-    const key = toFrontmatterKey(id);
-    if (key === null) continue;
-    if (seen.has(key)) return key;
-    seen.add(key);
-  }
-  return null;
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  // 両軸とも書き戻し可能（非 null）で同一キーのときだけ衝突（非 note.* は書けないため衝突対象外）。
+  return urgent !== null && urgent === important;
 }
 
 /**

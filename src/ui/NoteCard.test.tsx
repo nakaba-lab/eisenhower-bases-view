@@ -289,8 +289,11 @@ describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F
 });
 
 describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）", () => {
-  /** 完了ラベル（i18n の状態別 aria-label 相当）。 */
-  const completionLabel = (completed: boolean) => (completed ? "未完了に戻す" : "完了にする");
+  /** 完了ラベル（i18n の aria-label 相当・ノート名込み・状態別操作）。 */
+  const completionLabel = (title: string, completed: boolean) =>
+    completed ? `「${title}」を未完了に戻す` : `「${title}」を完了にする`;
+  /** 無効化された完了ボタンの理由ラベル（ノート名込み）。 */
+  const completionUnsupportedLabel = (title: string) => `「${title}」は完了にできません（保護中）`;
 
   function completionEntry(over: Partial<MatrixEntry> = {}): MatrixEntry {
     return { id: "a.md", title: "タスクA", urgent: true, important: true, ...over };
@@ -307,15 +310,15 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
       />,
     );
     // then: aria-label 付きのチェックボタンが出る（状態別文言）
-    expect(screen.getByRole("button", { name: "完了にする" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "「タスクA」を完了にする" })).toBeTruthy();
   });
 
   it("NoteCard_完了プロパティ無効時_チェックボタンを描画しない（opt-in）", () => {
     // given / when: completionEnabled を渡さない
     render(<NoteCard entry={completionEntry()} onToggleCompletion={vi.fn()} />);
     // then
-    expect(screen.queryByRole("button", { name: "完了にする" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "未完了に戻す" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "「タスクA」を完了にする" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "「タスクA」を未完了に戻す" })).toBeNull();
   });
 
   it("NoteCard_チェックボタンのクリック_onToggleCompletion(id, true) を呼ぶ（未完了→完了・AC1）", () => {
@@ -330,7 +333,7 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
       />,
     );
     // when
-    fireEvent.click(screen.getByRole("button", { name: "完了にする" }));
+    fireEvent.click(screen.getByRole("button", { name: "「タスクA」を完了にする" }));
     // then: 目的値 true（done:true 書き込み）を渡す
     expect(onToggleCompletion).toHaveBeenCalledWith("a.md", true);
   });
@@ -349,7 +352,7 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
       />,
     );
     // when: チェックボタンをクリック（カード全体の onClick=開く と衝突しうる）
-    fireEvent.click(screen.getByRole("button", { name: "完了にする" }));
+    fireEvent.click(screen.getByRole("button", { name: "「タスクA」を完了にする" }));
     // then: トグルは呼ばれ、開く（onOpenCard）は呼ばれない（click-to-open と衝突しない）
     expect(onToggleCompletion).toHaveBeenCalledWith("a.md", true);
     expect(onOpenCard).not.toHaveBeenCalled();
@@ -367,7 +370,7 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
       />,
     );
     // when
-    fireEvent.click(screen.getByRole("button", { name: "未完了に戻す" }));
+    fireEvent.click(screen.getByRole("button", { name: "「タスクA」を未完了に戻す" }));
     // then: 目的値 false（done:false を明示書き込み・delete しない）
     expect(onToggleCompletion).toHaveBeenCalledWith("a.md", false);
   });
@@ -410,30 +413,29 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
       />,
     );
     // when
-    const button = screen.getByRole("button", { name: "完了にする" }) as HTMLButtonElement;
+    const button = screen.getByRole("button", { name: "「タスクA」を完了にする" }) as HTMLButtonElement;
     fireEvent.click(button);
     // then: disabled で押しても書き込み経路を塞ぐ（元値を破壊しない）
     expect(button.disabled).toBe(true);
     expect(onToggleCompletion).not.toHaveBeenCalled();
   });
 
-  it("NoteCard_無効化された完了ボタン_無効理由を aria-label と title で提示する（レビュー指摘）", () => {
-    // given: 非 boolean 完了値 ＋ 無効理由ラベルを渡す
+  it("NoteCard_無効化された完了ボタン_無効理由（ノート名込み）を aria-label と title で提示する（レビュー指摘）", () => {
+    // given: 非 boolean 完了値 ＋ 無効理由ラベル（ノート名込み）を渡す
     render(
       <NoteCard
         entry={completionEntry({ completionUnsupported: true })}
         completionEnabled
         completionLabel={completionLabel}
-        completionUnsupportedLabel="完了にできません（保護中）"
+        completionUnsupportedLabel={completionUnsupportedLabel}
         onToggleCompletion={vi.fn()}
       />,
     );
-    // then: disabled ボタンの名前は状態ラベルでなく無効理由（title も同じ＝可視ツールチップ）。
-    const button = screen.getByRole("button", {
-      name: "完了にできません（保護中）",
-    }) as HTMLButtonElement;
+    // then: disabled ボタンの名前は状態ラベルでなく無効理由（ノート名込み・title も同じ＝可視ツールチップ）。
+    const reason = "「タスクA」は完了にできません（保護中）";
+    const button = screen.getByRole("button", { name: reason }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(button.getAttribute("title")).toBe("完了にできません（保護中）");
+    expect(button.getAttribute("title")).toBe(reason);
   });
 
   it("NoteCard_非ロックカードのアクセシブル名は title だけ（滞留/バッジ/完了ボタンが名前に混入しない・レビュー指摘）", () => {
@@ -477,7 +479,7 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
       <NoteCard
         entry={entry()}
         completionEnabled
-        completionLabel={(c) => (c ? "未完了に戻す" : "完了にする")}
+        completionLabel={completionLabel}
         onToggleCompletion={vi.fn()}
       />,
     );

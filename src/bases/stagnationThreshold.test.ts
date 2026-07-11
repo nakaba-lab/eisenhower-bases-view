@@ -117,6 +117,14 @@ describe("parseThresholdInput — 設定タブ入力の解釈（#106・レビュ
     expect(parseThresholdInput("-5")).toBeNull();
   });
 
+  it("数字始まりの非数値（プレフィックス）も null＝現在値保持（parseInt の緩さを厳密化・レビュー指摘）", () => {
+    // Number.parseInt は "14x"→14・"1e3"→1・"0x10"→0 と黙って受理してしまうため厳密な非負整数のみ通す
+    expect(parseThresholdInput("14x")).toBeNull();
+    expect(parseThresholdInput("1e3")).toBeNull();
+    expect(parseThresholdInput("0x10")).toBeNull();
+    expect(parseThresholdInput("3.5")).toBeNull();
+  });
+
   it("0 は 0（機能オフの明示入力）", () => {
     expect(parseThresholdInput("0")).toBe(0);
   });

@@ -272,6 +272,23 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     reconcileNow();
   }, [viewModel]);
 
+  // 設定ミス警告バナー（両軸同一キー）が**動的に出現**したとき、その原因＋直し方を sr-status へ一度流す。
+  // バナー自体は role="note"（非ライブ）で自動読み上げされないため、ビューを開いたまま設定を壊した SR
+  // 利用者へ届かない（WCAG 4.1.3・レビュー指摘）。初回描画（前回値 null）では流さない＝初期表示は静か。
+  const prevSharedAxisRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const shared = viewModel.diagnostics?.axesShareWritableKey ?? false;
+    const prev = prevSharedAxisRef.current;
+    prevSharedAxisRef.current = shared;
+    if (prev === null) return; // 初期描画は announce しない（role=note の初期表示で足りる）
+    if (shared && !prev) {
+      const diagnostics = viewModel.diagnostics;
+      announce(
+        messages.diagSharedAxisWarning(diagnostics?.sharedAxisKey ?? diagnostics?.urgentAxis ?? ""),
+      );
+    }
+  }, [viewModel]);
+
   const titleOf = (id: string): string =>
     viewModel.entries.find((entry) => entry.id === id)?.title ?? id;
   const labelOf = (quadrant: Quadrant): string =>
@@ -469,8 +486,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // ドラッグのような楽観オーバーレイは持たない（Bases 委譲＝最小実装）。
   const completionEnabled = viewModel.completionEnabled ?? false;
   const dimCompleted = viewModel.dimCompleted ?? false;
-  const completionLabel = (isCompleted: boolean) =>
-    isCompleted ? messages.completionToggleDone : messages.completionToggle;
+  // 完了ボタンの aria-label はノート名を含む（どのノートか SR で識別・レビュー指摘）。ラベルが操作を
+  // 表すため aria-pressed は付けない（NoteCard 側）。タイトルはカード単位のため NoteCard から渡される。
+  const completionLabel = (title: string, isCompleted: boolean) =>
+    isCompleted ? messages.completionToggleDone(title) : messages.completionToggle(title);
   // クロージャ内で narrow するためコールバックを const 捕捉する。完了トグルは楽観オーバーレイを
   // 持たない（カード状態は onDataUpdated 再描画で最新化）ため、書込失敗（アダプタが Notice 済み）の
   // reject は握りつぶして未処理 rejection を防ぐ（ロールバック対象が無い・レビュー指摘）。
@@ -485,8 +504,14 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
         // タイトルは非同期解決の前に捕捉する（done:true は再クエリで entry が消え titleOf が id に退化しうる）。
         const title = titleOf(entryId);
         void toggleCompletionCallback(entryId, done).then(
-          () => {
+          (written) => {
             if (!mountedRef.current) return;
+            // 非 boolean 値を保護して書かなかった（TOCTOU）ときは「完了しました」ではなく「保護中」を読み上げる
+            //（aria-live へ偽成功を流さない・#4/WCAG 4.1.3）。書込は起きていないためフォーカスも動かさない。
+            if (!written) {
+              announce(messages.completionUnsupported);
+              return;
+            }
             // 完了トグルの成否を、移動と同じ sr-status ライブ領域へ通知する（Obsidian の Notice は
             // aria-live でなく SR に読まれないため、x キー経路の成否が無通知になるのを塞ぐ・#2/WCAG 4.1.3）。
             announce(messages.completionSucceeded(title));
@@ -511,7 +536,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       onDragCancel={handleDragCancel}
       accessibility={{
         announcements,
-        screenReaderInstructions: { draggable: messages.screenReaderDraggable },
+        screenReaderInstructions: {
+          // 完了トグル有効時は x キーの操作説明を添える（カードフォーカス時に告知・レビュー指摘）。
+          draggable:
+            messages.screenReaderDraggable +
+            (completionEnabled ? " " + messages.screenReaderCompletionHint : ""),
+        },
       }}
     >
       <section

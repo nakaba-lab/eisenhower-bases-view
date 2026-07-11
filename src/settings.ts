@@ -88,6 +88,15 @@ function mergeStringArray(raw: unknown): string[] {
     : [];
 }
 
+/**
+ * `loadData()` 由来の frontmatter プロパティ名（軸・完了）を復元する。**前後空白をトリムする**
+ *（設定タブの入力時トリム `settingsTab` と一致させ、手編集の `"done "` 等が propertyId 完全一致で解決されず
+ * 書き戻しが空白付きのゴミキー〔`frontmatter["done "]`〕へ流れるのを防ぐ・レビュー指摘）。非文字列は既定へ。
+ */
+function mergePropertyName(raw: unknown, fallback: string): string {
+  return typeof raw === "string" ? raw.trim() : fallback;
+}
+
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];
 
 function isLanguageSetting(value: unknown): value is LanguageSetting {
@@ -126,14 +135,14 @@ function mergeQuadrantRecord(raw: unknown): Record<QuadrantKey, string> {
 export function mergeSettings(loaded: unknown): EisenhowerSettings {
   const data = (loaded ?? {}) as Partial<Record<keyof EisenhowerSettings, unknown>>;
   return {
-    defaultUrgencyProperty:
-      typeof data.defaultUrgencyProperty === "string"
-        ? data.defaultUrgencyProperty
-        : DEFAULT_SETTINGS.defaultUrgencyProperty,
-    defaultImportanceProperty:
-      typeof data.defaultImportanceProperty === "string"
-        ? data.defaultImportanceProperty
-        : DEFAULT_SETTINGS.defaultImportanceProperty,
+    defaultUrgencyProperty: mergePropertyName(
+      data.defaultUrgencyProperty,
+      DEFAULT_SETTINGS.defaultUrgencyProperty,
+    ),
+    defaultImportanceProperty: mergePropertyName(
+      data.defaultImportanceProperty,
+      DEFAULT_SETTINGS.defaultImportanceProperty,
+    ),
     showUnclassified:
       typeof data.showUnclassified === "boolean"
         ? data.showUnclassified
@@ -149,10 +158,10 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
       typeof data.emphasizePastDates === "boolean"
         ? data.emphasizePastDates
         : DEFAULT_SETTINGS.emphasizePastDates,
-    completionProperty:
-      typeof data.completionProperty === "string"
-        ? data.completionProperty
-        : DEFAULT_SETTINGS.completionProperty,
+    completionProperty: mergePropertyName(
+      data.completionProperty,
+      DEFAULT_SETTINGS.completionProperty,
+    ),
     dimCompleted:
       typeof data.dimCompleted === "boolean"
         ? data.dimCompleted

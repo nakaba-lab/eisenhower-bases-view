@@ -6,6 +6,7 @@
  * #23（F6）で設定タブから編集する `language`／`quadrantLabels`／`quadrantColors` を追加した。
  */
 import { mapQuadrantKeys, type QuadrantKey } from "./logic/quadrant";
+import { toThresholdDays } from "./bases/stagnationThreshold";
 
 /** 表示言語の設定値。`auto` は Obsidian のアプリ言語に追従する（解決は `src/i18n.ts`）。 */
 export type LanguageSetting = "auto" | "en" | "ja";
@@ -87,14 +88,12 @@ function isLanguageSetting(value: unknown): value is LanguageSetting {
 
 /**
  * `loadData()` 由来の滞留しきい値日数を検証して整数へ正規化する（欠損・不正値は既定へ）。
- * 有効値は「有限・0 以上の数値」で、小数は `floor` して整数日にする（`0` はオフの有効値）。
- * 負・非数値・NaN は手編集された `data.json` 等の不正値として既定（14）へフォールバックする。
+ * 正規化規則は options 解決側と共有の {@link toThresholdDays}（有限・0 以上・小数は floor・`0` はオフ）。
+ * 不正（負・非数値・NaN）は `null` が返るため手編集された `data.json` 等の不正値として既定（14）へ倒す。
+ * `toThresholdDays(0)` は `0` を返し `0 ?? DEFAULT === 0`（`??` は `0` を保持）＝オフ設定は既定に潰れない。
  */
 function mergeStagnationThresholdDays(raw: unknown): number {
-  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
-    return Math.floor(raw);
-  }
-  return DEFAULT_STAGNATION_THRESHOLD_DAYS;
+  return toThresholdDays(raw) ?? DEFAULT_STAGNATION_THRESHOLD_DAYS;
 }
 
 /** `loadData()` 由来の Record<QuadrantKey,string> を既定（空文字）で補完する（欠損キー対策）。 */

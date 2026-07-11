@@ -92,7 +92,7 @@ export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
  */
 const loggedGetAsPropertyIdFailures = new Set<string>();
 
-function safeGetAsPropertyId(
+export function safeGetAsPropertyId(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   key: string,
 ): BasesPropertyId | null {
@@ -194,10 +194,15 @@ export function firstSharedWritableKey(
  * 設定デフォルト（`note.<completionProperty>`）。次のとき **`null`（機能オフ）**:
  * ① 未設定（`completionProperty` 空 かつ options 未設定）② 非 `note.*`（書き戻せない）
  * ③ 完了キーが緊急/重要軸のいずれかと同一（3 キー衝突ガード・AC3＝完了書き込みが軸値を巻き添えに壊す）。
+ *
+ * `axes` を渡すと 3 キー衝突ガードの軸解決に再利用する（`toViewModel` は既に `resolveAxisPropertyIds` を
+ * 済ませているため、渡さないと 1 レンダーで軸の `getAsPropertyId` を 2 度引く冗長解決になる・レビュー指摘）。
+ * 省略時は従来どおり内部で解決する（書き戻し経路 {@link resolveCompletionKey} は解決済み軸を持たないため）。
  */
 export function resolveCompletionId(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   settings: EisenhowerSettings,
+  axes?: AxisPropertyIds,
 ): BasesPropertyId | null {
   const fromConfig = safeGetAsPropertyId(config, COMPLETION_OPTION_KEY);
   const id =
@@ -207,8 +212,12 @@ export function resolveCompletionId(
   const key = toFrontmatterKey(id);
   if (key === null) return null; // 非 note.*（formula/file）は書き戻せないので無効
   // 3 キー衝突ガード（AC3）: 完了キーが軸キーと同一なら無効（チェックボタンを出さない）。
-  const axes = resolveAxisPropertyIds(config, settings);
-  if (key === toFrontmatterKey(axes.urgent) || key === toFrontmatterKey(axes.important)) {
+  // 解決済み軸があれば再利用し、無ければ解決する（冗長な二重解決を避ける・レビュー指摘）。
+  const resolvedAxes = axes ?? resolveAxisPropertyIds(config, settings);
+  if (
+    key === toFrontmatterKey(resolvedAxes.urgent) ||
+    key === toFrontmatterKey(resolvedAxes.important)
+  ) {
     return null;
   }
   return id;

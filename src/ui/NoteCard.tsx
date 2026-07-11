@@ -67,18 +67,25 @@ function CompletionButton({
   completed,
   unsupported,
   label,
+  unsupportedLabel,
   onToggle,
 }: {
   completed: boolean;
   unsupported: boolean;
   label: (completed: boolean) => string;
+  /** 非 boolean 値で無効化されているときの理由（aria-label/title）。省略時は状態ラベルのまま。 */
+  unsupportedLabel?: string;
   onToggle: (done: boolean) => void;
 }) {
+  // 無効化時は「押せない理由」を可視（title）・SR（aria-label）双方に出す。さもないと disabled ボタンが
+  // 「完了にする, 使用不可」としか読まれず、非 boolean 値の保護という理由が伝わらない（レビュー指摘）。
+  const reason = unsupported ? unsupportedLabel : undefined;
   return (
     <button
       type="button"
       class={"eisenhower-note-card__complete" + (completed ? " is-completed" : "")}
-      aria-label={label(completed)}
+      aria-label={reason ?? label(completed)}
+      title={reason}
       aria-pressed={completed}
       disabled={unsupported}
       onClick={(event) => {
@@ -145,6 +152,11 @@ export interface NoteCardProps {
    */
   completionLabel?: (completed: boolean) => string;
   /**
+   * 非 boolean 値で無効化された完了ボタンの理由ラベル（i18n `completionUnsupportedLabel`・#105 F10）。
+   * 省略時は状態ラベルのまま（disabled 理由を提示しない従来挙動）。
+   */
+  completionUnsupportedLabel?: string;
+  /**
    * 完了状態をトグルする（#105 F10）。UI は目的値 `done` を渡すだけで、書き込みはアダプタが担う（AC5）。
    */
   onToggleCompletion?: (entryId: string, done: boolean) => void;
@@ -174,6 +186,7 @@ export function NoteCard({
   stagnantLabel,
   completionEnabled,
   completionLabel,
+  completionUnsupportedLabel,
   onToggleCompletion,
   dimCompleted,
 }: NoteCardProps) {
@@ -191,6 +204,7 @@ export function NoteCard({
       completed={completed}
       unsupported={completionUnsupported}
       label={completionLabel!}
+      unsupportedLabel={completionUnsupportedLabel}
       onToggle={(done) => onToggleCompletion!(entry.id, done)}
     />
   ) : null;
@@ -332,6 +346,11 @@ export function NoteCard({
         class={className}
         {...dndAttributes}
         {...dndListeners}
+        // role="button" の非ロックカードのアクセシブル名を **title だけ**に固定する（レビュー指摘）。
+        // 明示 aria-label が無いと accname の name-from-content で子（滞留バッジ・追加プロパティバッジ・
+        // 完了ボタンの操作ラベル）が名前に流れ込み冗長化する（ロックカードは既に aria-label を持ち非対称だった）。
+        // dndAttributes は aria-label を含まないため spread の後に置いても衝突しない。
+        aria-label={entry.title}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         onMouseEnter={handleMouseEnter}

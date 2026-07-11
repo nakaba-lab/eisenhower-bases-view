@@ -477,7 +477,25 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   const toggleCompletionCallback = callbacks.onToggleCompletion;
   const handleToggleCompletion = toggleCompletionCallback
     ? (entryId: string, done: boolean) => {
-        void toggleCompletionCallback(entryId, done).catch(() => {});
+        // タイトルは非同期解決の前に捕捉する（done:true は再クエリで entry が消え titleOf が id に退化しうる）。
+        const title = titleOf(entryId);
+        void toggleCompletionCallback(entryId, done).then(
+          () => {
+            if (!mountedRef.current) return;
+            // 完了トグルの成否を、移動と同じ sr-status ライブ領域へ通知する（Obsidian の Notice は
+            // aria-live でなく SR に読まれないため、x キー経路の成否が無通知になるのを塞ぐ・#2/WCAG 4.1.3）。
+            announce(messages.completionSucceeded(title));
+            // done:true は Base の done!=true フィルタで当該カードが再クエリ後に消えうる。操作していた
+            // カード/ボタンが unmount されるとフォーカスが body へ落ちるため、undo と同様にマトリクス領域へ
+            // 受け皿として戻し、SR/キーボード利用者の読み進め位置の喪失を防ぐ（#3/WCAG 2.4.3）。
+            // done:false（未完了化）は当該カードが表示中＝消えないためフォーカスは動かさない。
+            if (done) matrixSectionRef.current?.focus();
+          },
+          () => {
+            if (!mountedRef.current) return;
+            announce(messages.completionFailed(title));
+          },
+        );
       }
     : undefined;
   return (
@@ -525,6 +543,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               onHoverCard={callbacks.onHoverCard}
               completionEnabled={completionEnabled}
               completionLabel={completionLabel}
+              completionUnsupportedLabel={messages.completionUnsupportedLabel}
               onToggleCompletion={handleToggleCompletion}
               dimCompleted={dimCompleted}
             />
@@ -563,6 +582,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             onHoverCard={callbacks.onHoverCard}
             completionEnabled={completionEnabled}
             completionLabel={completionLabel}
+            completionUnsupportedLabel={messages.completionUnsupportedLabel}
             onToggleCompletion={handleToggleCompletion}
             dimCompleted={dimCompleted}
           />

@@ -26,15 +26,38 @@ export const STAGNATION_OPTION_KEY = "stagnationThresholdDays";
 type ConfigLike = { get?(key: string): unknown } | null | undefined;
 
 /**
- * options 由来の生値を「有限・0 以上の整数日」に正規化する（不正なら null＝フォールバック要求）。
- * `0` はオフの有効値。負・非数値・NaN は null（設定既定へ）。小数は `floor` して整数日にする。
+ * 生値（options 由来・`loadData()` 由来）を「有限・0 以上の整数日」に正規化する（不正なら null）。
+ * `0` はオフの有効値。負・非数値・NaN は null（呼び出し側が既定へ倒す）。小数は `floor` して整数日にする。
+ * 設定読込側（`settings.mergeStagnationThresholdDays`）と options 解決側の**単一の正規化規則**
+ *（同じ unknown を同じ規則で正規化する二重管理を避ける・レビュー指摘）。
  */
-function toThresholdDays(raw: unknown): number | null {
+export function toThresholdDays(raw: unknown): number | null {
   if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
     return Math.floor(raw);
   }
   return null;
 }
+
+/**
+ * 設定タブのテキスト入力（文字列）を滞留しきい値へ解釈する（#106 F9・レビュー指摘）。
+ * **`null` は「保存しない＝現在値を保持」**を表す（空欄＝入力途中・非数値・負値）。有効値のみ number を返す。
+ * 空欄化を「無効化(0)」でも「既定復帰(14)」でもなく現在値保持にすることで、カスタム値を黙って
+ * 上書きしない（無効化は `0` を明示入力する）。`extends PluginSettingTab` の設定タブから切り出して単体固定する。
+ */
+export function parseThresholdInput(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+/**
+ * 既にログ済みの失敗 option キー。`resolveStagnationThresholdDays` は再描画毎に呼ばれるため、
+ * `config.get` が失敗し続けると同一キーのログでコンソールを埋める。兄弟の `safeGetAsPropertyId`／
+ * `readAxisValueSafely`（`readAxis.ts`）と対称にキー単位で 1 回へ間引く（レビュー指摘）。
+ */
+const loggedGetOptionFailures = new Set<string>();
 
 /** `config.get(key)` を **throw させない**境界防御でくるむ（`safeGetAsPropertyId` と対称・churn 耐性）。 */
 function safeGetOption(config: ConfigLike, key: string): unknown {
@@ -42,7 +65,10 @@ function safeGetOption(config: ConfigLike, key: string): unknown {
   try {
     return config.get(key);
   } catch (error) {
-    console.error("[Eisenhower Matrix] config.get failed; using default stagnation threshold", error);
+    if (!loggedGetOptionFailures.has(key)) {
+      loggedGetOptionFailures.add(key);
+      console.error("[Eisenhower Matrix] config.get failed; using default stagnation threshold", error);
+    }
     return undefined;
   }
 }

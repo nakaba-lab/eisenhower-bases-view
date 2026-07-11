@@ -411,6 +411,52 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
     expect(onToggleCompletion).not.toHaveBeenCalled();
   });
 
+  it("NoteCard_無効化された完了ボタン_無効理由を aria-label と title で提示する（レビュー指摘）", () => {
+    // given: 非 boolean 完了値 ＋ 無効理由ラベルを渡す
+    render(
+      <NoteCard
+        entry={completionEntry({ completionUnsupported: true })}
+        completionEnabled
+        completionLabel={completionLabel}
+        completionUnsupportedLabel="完了にできません（保護中）"
+        onToggleCompletion={vi.fn()}
+      />,
+    );
+    // then: disabled ボタンの名前は状態ラベルでなく無効理由（title も同じ＝可視ツールチップ）。
+    const button = screen.getByRole("button", {
+      name: "完了にできません（保護中）",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("title")).toBe("完了にできません（保護中）");
+  });
+
+  it("NoteCard_非ロックカードのアクセシブル名は title だけ（滞留/バッジ/完了ボタンが名前に混入しない・レビュー指摘）", () => {
+    // given: 滞留バッジ・追加プロパティバッジ・完了ボタンをすべて持つ非ロックカード
+    const rich: MatrixEntry = {
+      id: "a.md",
+      title: "タスクA",
+      urgent: true,
+      important: true,
+      stagnant: true,
+      stagnantDays: 21,
+      badges: [{ label: "due", text: "2026-01-01" }],
+    };
+    const { container } = render(
+      <NoteCard
+        entry={rich}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={vi.fn()}
+        stagnantBadge={(days) => `${days}d`}
+        stagnantLabel={(days) => `Stale ${days}`}
+      />,
+    );
+    // then: カード div は明示 aria-label=title を持ち、子（滞留 role=img・バッジ・完了ボタン）の
+    // ラベルが name-from-content で名前へ流れ込まない（v0.1.7 の title のみ挙動を維持）。
+    const card = container.querySelector(".eisenhower-note-card");
+    expect(card?.getAttribute("aria-label")).toBe("タスクA");
+  });
+
   it("NoteCard_x キー_フォーカス中のカードで完了をトグルする（Space=掴む/Enter=開く と非衝突・AC1）", () => {
     // given
     const onToggleCompletion = vi.fn();

@@ -53,6 +53,8 @@ export interface QuadrantCellProps {
   completionEnabled?: boolean;
   /** 完了チェックボタンの状態別 aria-label（i18n）。各 NoteCard へ委譲する。 */
   completionLabel?: (completed: boolean) => string;
+  /** 無効化された完了ボタンの理由ラベル（i18n `completionUnsupportedLabel`・#105 F10）。各 NoteCard へ委譲。 */
+  completionUnsupportedLabel?: string;
   /** 完了状態をトグルする（#105 F10）。各 NoteCard へ委譲する。 */
   onToggleCompletion?: (entryId: string, done: boolean) => void;
   /** 完了ノートを淡色表示するか（設定 `dimCompleted`・#105 F10）。各 NoteCard へ委譲する。 */
@@ -80,6 +82,7 @@ export function QuadrantCell({
   stagnantLabel,
   completionEnabled,
   completionLabel,
+  completionUnsupportedLabel,
   onToggleCompletion,
   dimCompleted,
 }: QuadrantCellProps) {
@@ -131,6 +134,7 @@ export function QuadrantCell({
               stagnantLabel={stagnantLabel}
               completionEnabled={completionEnabled}
               completionLabel={completionLabel}
+              completionUnsupportedLabel={completionUnsupportedLabel}
               onToggleCompletion={onToggleCompletion}
               dimCompleted={dimCompleted}
             />

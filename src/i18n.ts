@@ -123,6 +123,11 @@ export interface Messages {
   completionFailed(title: string): string;
   /** 非 boolean な完了値のため変更できない Notice（元値を破壊しない・#105 F10・AC2）。 */
   completionUnsupported: string;
+  /**
+   * 無効化された完了ボタンの簡潔な aria-label／title（非 boolean 値の保護中＝押せない理由・#105 F10・AC2）。
+   * 長文の `completionUnsupported`（Notice 用）に対し、disabled ボタンに付ける短い理由表示。
+   */
+  completionUnsupportedLabel: string;
   /** Bases Configure view の完了プロパティセレクタ displayName（#105 F10）。 */
   completionOption: string;
 }
@@ -265,6 +270,7 @@ const JA: Messages = {
   completionFailed: (title) => `「${title}」の完了状態を変更できませんでした。`,
   completionUnsupported:
     "完了プロパティが boolean 型ではないため変更できません（日付などの既存の値を壊さないよう保護しました）。",
+  completionUnsupportedLabel: "完了にできません（boolean 型ではないため保護中）",
   completionOption: "完了プロパティ",
 };
 
@@ -367,6 +373,7 @@ const EN: Messages = {
   completionFailed: (title) => `Couldn't change completion for "${title}".`,
   completionUnsupported:
     "The completion property isn't a boolean, so it can't be changed (its existing value, e.g. a date, was left intact).",
+  completionUnsupportedLabel: "Can't complete (not a boolean — value protected)",
   completionOption: "Completion property",
 };
 

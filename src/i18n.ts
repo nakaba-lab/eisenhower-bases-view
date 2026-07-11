@@ -89,6 +89,11 @@ export interface Messages {
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
   cardLockedLabel: (title: string) => string;
+  /**
+   * 期日強調（emphasized＝過期日）バッジの SR 要約に添える短い注記（#104・視覚の太字+アクセント色と情報パリティ）。
+   * 視覚利用者は強調で一目で過期日と分かるが、SR 要約には日付値しか載らないため「過期日」の意味を補う（レビュー指摘）。
+   */
+  badgeOverdue: string;
   /** 滞留カードの経過日数バッジ本文（例 英 "21d"／日 "21日"・#106）。 */
   stagnantBadge: (days: number) => string;
   /** 滞留バッジの aria-label（SR 読み上げ・経過日数を含む・#106）。 */
@@ -113,16 +118,31 @@ export interface Messages {
   axisOption: { urgency: string; important: string };
   /** Bases Configure view のカードバッジセレクタ displayName（#104 F8・番号付き `badgeProperty1..N`）。 */
   badgeOption(index: number): string;
-  /** カード上の完了チェックボタンの aria-label（未完了→完了・#105 F10）。 */
-  completionToggle: string;
-  /** カード上の完了チェックボタンの aria-label（完了→未完了・双方向トグル・#105 F10）。 */
-  completionToggleDone: string;
-  /** 完了トグル成功のライブ通知（#105 F10）。 */
-  completionSucceeded(title: string): string;
+  /**
+   * カード上の完了チェックボタンの aria-label（未完了→完了・#105 F10）。**ノート名を含む**
+   *（複数カードで同名ボタンにならず、どのノートを完了させるか SR で識別できる・レビュー指摘）。
+   * ラベルが操作（完了にする/戻す）を表すため `aria-pressed` は付けない（APG のトグル指針・レビュー指摘）。
+   */
+  completionToggle: (title: string) => string;
+  /** カード上の完了チェックボタンの aria-label（完了→未完了・双方向トグル・ノート名含む・#105 F10）。 */
+  completionToggleDone: (title: string) => string;
+  /** カードにフォーカスした SR/キーボード利用者へ `x` キーで完了トグルできる旨の操作説明（完了有効時のみ・#105 F10）。 */
+  screenReaderCompletionHint: string;
+  /**
+   * 完了トグル成功のライブ通知（#105 F10）。**結果状態（`done`＝完了/未完了）を含める**（move が対象象限を
+   * 明示するのと対称＝SR 利用者にフィルタで消えても結果が伝わる・WCAG 4.1.3・レビュー指摘）。
+   */
+  completionSucceeded(title: string, done: boolean): string;
   /** 完了トグル失敗のライブ通知（#105 F10）。 */
   completionFailed(title: string): string;
   /** 非 boolean な完了値のため変更できない Notice（元値を破壊しない・#105 F10・AC2）。 */
   completionUnsupported: string;
+  /**
+   * 無効化された完了ボタンの簡潔な aria-label／title（非 boolean 値の保護中＝押せない理由・#105 F10・AC2）。
+   * 長文の `completionUnsupported`（Notice 用）に対し、disabled ボタンに付ける短い理由表示。**ノート名を含む**
+   *（どのノートが保護中か SR で識別できる・レビュー指摘）。
+   */
+  completionUnsupportedLabel: (title: string) => string;
   /** Bases Configure view の完了プロパティセレクタ displayName（#105 F10）。 */
   completionOption: string;
 }
@@ -215,6 +235,7 @@ const JA: Messages = {
     `緊急度: ${urgentAxis} ／ 重要度: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
   cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
+  badgeOverdue: "（期日超過）",
   stagnantBadge: (days) => `${days}日`,
   stagnantLabel: (days) => `滞留: ${days}日更新なし`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
@@ -259,12 +280,16 @@ const JA: Messages = {
   },
   axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
   badgeOption: (index) => `カード表示プロパティ ${index}`,
-  completionToggle: "完了にする",
-  completionToggleDone: "未完了に戻す",
-  completionSucceeded: (title) => `「${title}」の完了状態を更新しました。`,
+  completionToggle: (title) => `「${title}」を完了にする`,
+  completionToggleDone: (title) => `「${title}」を未完了に戻す`,
+  screenReaderCompletionHint: "x キーで完了を切り替えます。",
+  completionSucceeded: (title, done) =>
+    done ? `「${title}」を完了にしました。` : `「${title}」を未完了に戻しました。`,
   completionFailed: (title) => `「${title}」の完了状態を変更できませんでした。`,
   completionUnsupported:
     "完了プロパティが boolean 型ではないため変更できません（日付などの既存の値を壊さないよう保護しました）。",
+  completionUnsupportedLabel: (title) =>
+    `「${title}」は完了にできません（boolean 型ではないため保護中）`,
   completionOption: "完了プロパティ",
 };
 
@@ -316,6 +341,7 @@ const EN: Messages = {
     `Urgency: ${urgentAxis} · Importance: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
+  badgeOverdue: "(overdue)",
   stagnantBadge: (days) => `${days}d`,
   stagnantLabel: (days) => `Stale: not updated for ${days} days`,
   fileNotFoundForMove: "Target file not found; cannot move.",
@@ -361,12 +387,16 @@ const EN: Messages = {
   },
   axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
   badgeOption: (index) => `Card property ${index}`,
-  completionToggle: "Mark done",
-  completionToggleDone: "Mark not done",
-  completionSucceeded: (title) => `Updated completion for "${title}".`,
+  completionToggle: (title) => `Mark "${title}" done`,
+  completionToggleDone: (title) => `Mark "${title}" not done`,
+  screenReaderCompletionHint: "Press x to toggle completion.",
+  completionSucceeded: (title, done) =>
+    done ? `Marked "${title}" done.` : `Marked "${title}" not done.`,
   completionFailed: (title) => `Couldn't change completion for "${title}".`,
   completionUnsupported:
     "The completion property isn't a boolean, so it can't be changed (its existing value, e.g. a date, was left intact).",
+  completionUnsupportedLabel: (title) =>
+    `Can't complete "${title}" (not a boolean — value protected)`,
   completionOption: "Completion property",
 };
 

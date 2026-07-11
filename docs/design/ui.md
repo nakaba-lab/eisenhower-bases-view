@@ -3,7 +3,7 @@ title: UI 設計
 area: ui
 status: active
 relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44, 103, 104, 105, 106]
-updated: 2026-07-10
+updated: 2026-07-11
 kind: ui
 ---
 
@@ -91,7 +91,7 @@ flowchart LR
 ```
 
 - タイトルは `min-width:0` + `text-overflow:ellipsis` で truncate し、バッジ（`flex-shrink:0`）に場所を譲る。カード行は `display:flex; align-items:center; gap` でタイトルとバッジを並べる。
-- 時計アイコンは装飾（`aria-hidden`）。バッジ全体に `aria-label`（後述 i18n）を付け、経過日数を SR に読み上げる。
+- 時計アイコンもバッジ全体も**視覚装飾（`aria-hidden`）**とし、経過日数（`stagnantLabel`）は追加プロパティバッジと束ねてカードの `aria-describedby`（SR 要約・上記「アクセシビリティ」節）で読み上げる（`role="button"` カードの presentational children ではバッジ自身の `aria-label` が届かないため・v0.2 レビュー確定）。
 
 **却下: タイトル下のメタ行（案B）** — `🕐 21d` を独立行にするとタイトルを圧迫しないが、カード高さが増え縦の密度が下がる（象限に多数のカードが並ぶ本ビューでは一覧性が落ちる）。バッジは補助情報のため 1 行内の控えめな右寄せが妥当と判断。
 
@@ -188,7 +188,7 @@ interface EisenhowerSettings {
 ```mermaid
 flowchart LR
     E["BasesEntry[]（data.data）"] --> R["toViewModel(entries, config, settings)"]
-    R -->|config.getAsPropertyId / settings デフォルトで軸 propertyId 解決| RA["readAxisValues(entry, urgentId, importantId)<br/>getValue(...) instanceof NullValue → undefined(absent)"]
+    R -->|config.getAsPropertyId / settings デフォルトで軸 propertyId 解決| RA["readAxisValues(entry, ids)<br/>getValue(...) instanceof NullValue → undefined(absent)"]
     RA --> C["classifyQuadrant(AxisValues)"]
     C --> P["placements: Record&lt;Quadrant, MatrixEntry[]&gt;"]
     P --> UI["MatrixView（QuadrantCell ×4 ＋ UnclassifiedZone）"]
@@ -362,12 +362,15 @@ stateDiagram-v2
 ```
 
 **キーボード / a11y（フロア＝キーボードパリティ）**:
-- チェックボタンは本物の `<button>`。**hover だけでなく focus 時にも可視**（`:focus-within` / ボタンの `:focus-visible`）にしてキーボード利用者に露出する（#84 が明示した a11y 要件）。`aria-label` は状態別 i18n（未完了「完了にする」／完了「未完了に戻す」）。押下結果は既存 `.eisenhower-matrix__sr-status`（`role="status" aria-live="polite"`）で SR にアナウンス（`completionSucceeded`／失敗は `completionFailed`）。
+- **完了ボタンはドラッグ可能な `role="button"` カード div の子ではなく、`<li>`（item）直下の兄弟に置く（nested-interactive 回避・v0.2 レビュー確定）**。相互作用要素（`<button>`）を `role="button"` の子孫にすると axe の nested-interactive（serious）に触れ、内側ボタンの意味論が AT で平坦化されうる。ボタンは item を基準（`position: relative`）に**右上へ絶対配置**し、タイトル行側は `--with-completion` の `padding-inline-end` で場所を空ける（絶対配置なのでカードの flex レイアウトには影響しない）。hover/focus リビールは item hover（`.eisenhower-note-card-item:hover`）・カード focus（隣接兄弟 `~`）・ボタン focus で行う。
+- 非 boolean 完了値（`unsupported`）のカードに `x` キーが来たら、書き込みはせず（元値保護＝AC2）**保護中の旨（`completionUnsupported`）を sr-status へ読み上げる**（`onCompletionUnsupported`→`MatrixView.handleCompletionUnsupported`→`announce`）。disabled ボタンの `title`/`aria-label` はキーボード経路に届かないため、`x` の silent no-op を避ける（v0.2 レビュー確定）。
+- チェックボタンは本物の `<button>`。**hover だけでなく focus 時にも可視**（`:focus-within` / ボタンの `:focus-visible`）にしてキーボード利用者に露出する（#84 が明示した a11y 要件）。**`aria-label` はノート名を含む**（`completionToggle(title)`／`completionToggleDone(title)`＝「「タスクA」を完了にする」）＝複数カードで同名ボタンにならず、SR/キーボードでどのノートを完了させるか識別できる（v0.2 レビュー確定）。ラベルが**操作**（完了にする/戻す）を表すため **`aria-pressed` は付けない**（可変ラベルと `aria-pressed` の併用は WAI-ARIA APG のトグル指針に反し冗長・曖昧＝v0.2 レビュー確定。完了状態は `is-completed` クラス〔可視☑・アクセント〕で示す）。押下結果は**クリック・`x` キー双方の経路**で、移動と同じ `.eisenhower-matrix__sr-status`（`role="status" aria-live="polite"`）へ `MatrixView.handleToggleCompletion` からアナウンスする。**Obsidian の `Notice` は `aria-live` を持たず SR に読まれない**ため sr-status を唯一の通知源とする（WCAG 4.1.3）。**通知は書込結果で分岐**: `onToggleCompletion` は「実際に書いたか」を `Promise<boolean>`（`true`＝書込／`false`＝非 boolean を保護して未書込＝TOCTOU の稀ケース）で返し、`false` のときは `completionSucceeded`（偽成功）ではなく `completionUnsupported`（保護中）を読み上げフォーカスも動かさない（v0.2 レビュー確定）。成功時の `completionSucceeded(title, done)` は**結果状態（完了/未完了）を含める**（move が対象象限を明示するのと対称＝フィルタで消えても結果が SR に伝わる・WCAG 4.1.3・v0.2 レビュー確定）。SR/キーボード利用者には、カードフォーカス時に dnd 操作説明へ `completionEnabled` 時のみ `x` キーの完了トグル説明（`screenReaderCompletionHint`）を添えて発見可能性を上げる。**ロックカードは dnd 属性を持たず dnd の操作説明が付かない**ため、`x` キーで完了トグルできる（`handleLockedKeyDown`）にもかかわらず案内が届かない非対称を、ロックカードの `aria-describedby`（SR 要約）に同ヒントを添えて解消する（v0.2 レビュー確定）。
 - **`x` キー**（カードにフォーカス中）でトグルを発火する。既存キー割当（**Space=掴む／Enter=開く**）と**非衝突**（`NoteCard.handleKeyDown` に `x` 分岐を追加し、**非ドラッグ中のみ**発火。ロックカードの `handleLockedKeyDown` にも足す）。
 - ボタンの `onClick`／`onPointerDown`／`onKeyDown` は **click-to-open と `PointerSensor(distance:5)` に対し `stopPropagation`** してカードの「開く／掴む」と衝突させない（AC5）。フォーカスリングは明示 `outline: 2px solid var(--interactive-accent)`（`UndoToast`／`NoteCard` と同方針）。
+- **完了（`done:true`）成功後のフォーカス移譲（実存在で判定）**: Base の `done != true` フィルタ構成では当該カードが再クエリで unmount され、操作していたボタン/カードが消えてフォーカスが `body` へ落ちる。これを受け皿（`matrixSectionRef`＝`tabIndex=-1` のマトリクス領域）へ戻して読み進め位置の喪失を防ぐ（WCAG 2.4.3）。**ただしフィルタ無し構成ではカードが残る**ため焦点をボタンに留める必要があり、`dimCompleted` はフィルタ有無の代理にならない（独立設定＝『フィルタ無し＋dim 無し（既定）』でカードが残るのに焦点を奪う退行になる・v0.2 レビュー確定）。よって**「実際に消えたか」を再クエリ後（次の viewModel）に判定**する: 書込 `.then`（microtask）で保留 `{ entryId, done }` をセット→`onDataUpdated`（macrotask）の再描画後に effect が、当該 entry が **entries から消えていれば**（＋フォーカスが `body`）section へ戻し、**残ったまま `completed` が目的値に反映されていれば**ボタンに留めて保留を落とす（反映前の announce 再描画では保留を保ち次の再クエリを待つ）。未完了化（`done:false`）はカードが残るため対象外。
 - 淡色は**カード全体 `opacity` ではなくテーマ弱色トークンで色だけ落とす**（#34／#103 の locked と同じ理由＝`opacity` では可視テキストの実効コントラストが AA を割る）。
 
-**非 boolean done のガード表示**: 完了プロパティに非 boolean 値（`completed: 2026-07-06` 等）を持つカードは、チェックボタンを**無効化**して押下時に破壊しない（`bases.md` の `isUnsupportedAxisValue` 流用・per-card 判定＝`entry.completionUnsupported`）。既存の軸 `locked`（ドラッグ不可）とは別軸（完了はトグル不可）。
+**非 boolean done のガード表示**: 完了プロパティに非 boolean 値（`completed: 2026-07-06` 等）を持つカードは、チェックボタンを**無効化**して押下時に破壊しない（`bases.md` の `isUnsupportedAxisValue` 流用・per-card 判定＝`entry.completionUnsupported`）。既存の軸 `locked`（ドラッグ不可）とは別軸（完了はトグル不可）。無効化ボタンは**状態ラベルのままにせず、無効理由（i18n `completionUnsupportedLabel`）を `aria-label` と `title` に出す**（可視ツールチップ＋SR に「なぜ押せないか＝非 boolean 値の保護中」を伝える。無効ボタンは native click が発火せず `completionUnsupported` Notice にも到達しないため・v0.2 レビュー確定）。
 
 **設定タブ行の追加（`▸ 表示` 区分）**:
 
@@ -379,7 +382,7 @@ stateDiagram-v2
   完了ノートを淡色表示       [ ──○ OFF ]     ← #105。Base に done!=true を張らない人向け
 ```
 
-**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle`／`completionToggleDone`＝「完了にする」/「未完了に戻す」）・押下結果アナウンス（`completionSucceeded(title)`／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。**軸同一キーの衝突（3 キーガード）は実行時 Notice/診断バナーを持たず、`resolveCompletionKey` が `null` を返して静かに完了トグルを無効化する**（＝チェックボタンを出さない）。設定ミスの気づきは**設定タブの説明文**（`completionDesc`＝「軸と同じプロパティは指定できません」/ "Can't be the same as an axis property"）で config 時に伝える（opt-in 機能の設定衝突は影響が限定的なため、全ロック時の F7 診断バナーのような実行時提示は持たない）。
+**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle(title)`／`completionToggleDone(title)`＝「「タスクA」を完了にする」/「未完了に戻す」＝ノート名を含む・367 行）・押下結果アナウンス（`completionSucceeded(title, done)`＝結果状態〔完了/未完了〕を含む／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。**軸同一キーの衝突（3 キーガード）は実行時 Notice/診断バナーを持たず、`resolveCompletionKey` が `null` を返して静かに完了トグルを無効化する**（＝チェックボタンを出さない）。設定ミスの気づきは**設定タブの説明文**（`completionDesc`＝「軸と同じプロパティは指定できません」/ "Can't be the same as an axis property"）で config 時に伝える（opt-in 機能の設定衝突は影響が限定的なため、全ロック時の F7 診断バナーのような実行時提示は持たない）。
 
 **ViewModel 追加（契約の正は `bases.md`）**: `MatrixEntry.completed?`（`done:true`＝淡色＋☑ 状態）・`MatrixEntry.completionUnsupported?`（非 boolean done＝ボタン無効）、`MatrixViewModel.completionEnabled?`（完了プロパティが有効に解決＝チェックボタンを描画）・`dimCompleted?`（淡色オプション）。`MatrixCallbacks.onToggleCompletion?(entryId, done)`。
 
@@ -390,7 +393,7 @@ stateDiagram-v2
 ドラッグ書き戻し（#20）は両軸を `true/false` で上書きする破壊的操作のため、**直前 1 手だけ**を元に戻す最小の undo を足す。UI 側の責務は **(a) 移動成功直後にトーストを出す・(b) トーストの「元に戻す」ボタン／コマンドから `MatrixCallbacks.onUndoMove()` を呼ぶ**の 2 点で、実際の frontmatter 復元（値の代入／absent の delete）と「直前 1 手」の保持はアダプタ層（`bases.md` の `UndoManager`／`runUndo`）に隔離する（`onMoveCard` と同じ疎結合＝AC5 維持。UI は `obsidian` 型に触れない）。
 
 - **境界契約の追加（`src/bases/types.ts`）**: `onUndoMove?(expectedEntryId?: string): void` — トースト／コマンドが起動する。アダプタが保持する「直前 1 手」の記録を復元し、無ければ `Notice`（「元に戻せる移動がありません」）を出す。**トースト起動時は名指しノートの `expectedEntryId` を渡す**（記録が別ビューの移動へ置き換わっていたら戻さないガード＝code-reviewer 指摘）。コマンド起動は省略し無条件に直前 1 手を戻す。復元の実体はアダプタ責務。
-- **トースト（分離コンポーネント `src/ui/UndoToast.tsx`）**: `NoteCard`/`QuadrantCell` と同じく**分離した純 UI 部品**にして単体テスト可能にする（`MatrixView` は移動成功時に表示状態＝`{ message, entryId }` を持ち条件描画する。`entryId` は `onUndoMove` のガードに渡す）。props は `{ message; regionLabel; undoLabel; dismissLabel; onUndo; onDismiss }`。`message` は移動成功文言（`messages.moveSucceeded` を流用）、`undoLabel` は `messages.undoMove`（「元に戻す」）。トーストは非モーダル。**表示の解除**は ① 「元に戻す」クリック（→`onUndoMove(entryId)` 後に消える）／② 次のドラッグ開始（`onDragStart` で消す・古い提案を残さない）／③ タイムアウト（8 秒）／④ アンマウント。**タイムアウトはトースト内にフォーカス/ポインタがある間は一時停止し、両方が離れたら再開する（WCAG 2.2.1 Timing Adjustable・レビュー指摘）**＝ポインタ（`onPointerInside`＝`onMouseEnter/Leave`）とフォーカス（`onFocusInside`＝`onFocusCapture/BlurCapture`。focus/blur はバブルしないため capture 段で子ボタンの出入りを親が捉える）を**別々に**通知し、`MatrixView` が両者の論理和で採時する（`shouldRescheduleAutoDismiss(pointerInside, focusInside, timerActive)` の純関数で「両方外＋停止中のときだけ再開」を一元化。focus 片側だけで判定すると hover 継続中に blur → 再開 → hover 中に消える非対称が起きる＝round2 指摘の回帰ガード）。キーボード/AT 利用者が「元に戻す」ボタンへ到達する前に消えないようにする（コマンドパレット undo も恒久導線として併存）。ビュー内下部に重ねて出し、`DragOverlay` と競合しない z 順にする。
+- **トースト（分離コンポーネント `src/ui/UndoToast.tsx`）**: `NoteCard`/`QuadrantCell` と同じく**分離した純 UI 部品**にして単体テスト可能にする（`MatrixView` は移動成功時に表示状態＝`{ message, entryId }` を持ち条件描画する。`entryId` は `onUndoMove` のガードに渡す）。props は `{ message; regionLabel; undoLabel; dismissLabel; onUndo; onDismiss }`。`message` は移動成功文言（`messages.moveSucceeded` を流用）、`undoLabel` は `messages.undoMove`（「元に戻す」）。トーストは非モーダル。**表示の解除**は ① 「元に戻す」クリック（→`onUndoMove(entryId)` 後に消える）／② 次のドラッグ開始（`onDragStart` で消す・古い提案を残さない）／③ **完了トグル操作（`handleToggleCompletion`）**＝完了は move と**同じ UndoManager スロット**を上書きするため、残った move トーストは陳腐化し、その undo が move ではなく完了を巻き戻す（同一カードでは `expectedEntryId` ガードを通過する）ので、ドラッグ開始と同様にここでも消す（v0.2 レビュー確定）／④ タイムアウト（8 秒）／⑤ アンマウント。**タイムアウトはトースト内にフォーカス/ポインタがある間は一時停止し、両方が離れたら再開する（WCAG 2.2.1 Timing Adjustable・レビュー指摘）**＝ポインタ（`onPointerInside`＝`onMouseEnter/Leave`）とフォーカス（`onFocusInside`＝`onFocusCapture/BlurCapture`。focus/blur はバブルしないため capture 段で子ボタンの出入りを親が捉える）を**別々に**通知し、`MatrixView` が両者の論理和で採時する（`shouldRescheduleAutoDismiss(pointerInside, focusInside, timerActive)` の純関数で「両方外＋停止中のときだけ再開」を一元化。focus 片側だけで判定すると hover 継続中に blur → 再開 → hover 中に消える非対称が起きる＝round2 指摘の回帰ガード）。キーボード/AT 利用者が「元に戻す」ボタンへ到達する前に消えないようにする（コマンドパレット undo も恒久導線として併存）。ビュー内下部に重ねて出し、`DragOverlay` と競合しない z 順にする。
 - **コマンド（`main.ts`・`bases.md` が正）**: `addCommand({ id: "undo-last-move", name: messages.undoCommandName })` を登録し、コマンドパレット／ユーザー割当ホットキー（Ctrl+Z 以外）から `onUndoMove` 相当（`UndoManager` の記録復元）を呼ぶ。
 
 ```
@@ -413,6 +416,8 @@ stateDiagram-v2
 > - **`empty` の表現**: F1 のシェル全体 1 文プレースホルダ（「表示するノートがありません」＝entries 0 件）は維持しつつ、`ready` 時は**各象限セルが 0 件なら象限内に控えめな空プレースホルダ**を出す（象限別の空状態）。
 > - **`ready` の支援技術への状態伝達**: グリッドに意味を持つ要素（4 象限セル＝`region`＋見出し、未分類ゾーン）が入ったため `aria-hidden` を外す。各象限は `aria-label`（**象限名＋軸ラベル**＝例「Do（重要 × 緊急）」）を持つランドマークにし、ランドマーク移動時に軸の文脈が伝わるようにする（件数は名前に含めず、ヘッダ内の可視テキストとして読み上げる＝変化する値を landmark 名に焼かない）。
 > - **シェルの高さ依存**: グリッドは CSS Grid（`grid-template-columns: 1fr 1fr` / `1fr 1fr` 行）。親ペイン高さに追従しつつ、各セルに `min-height` を与えて高さ 0 ペインでも潰れないようにする。
+>
+> **v0.2 レビュー追補（空状態の a11y）**: `empty` の `<section>` にも **`sr-status` ライブ領域（`role="status" aria-live="polite"`）と `ref={matrixSectionRef}`（`tabIndex=-1`）を持たせる**。推奨の `done != true` フィルタ下で**最後の 1 枚を完了にすると `ready`→`empty` へ遷移**するため、これらが `ready` 分岐にしか無いと、完了アナウンス（`completionSucceeded`／保護時の `completionUnsupported`）が読み上げられず（WCAG 4.1.3）、消えたカードからフォーカスが `body` へ落ちる（WCAG 2.4.3）。3 分岐で通知領域とフォーカス受け皿を共通化する。
 
 | 状態 | 表示 |
 |------|------|
@@ -422,7 +427,7 @@ stateDiagram-v2
 | 軸欠損ノートあり | 既定では未分類ゾーンに表示（ドロップ不可）。**`settings.showUnclassified=false` で未分類ゾーンを描画しない**（`toViewModel` が ViewModel に flag を載せ `MatrixView` が条件描画＝レビュー指摘で配線。切替 UI は設定タブ〔F6/#23〕の「欠損ノートを未分類に表示」トグルで提供済み） |
 | 非 boolean 軸値のノート／両軸同一キー設定 | 弱色（`--text-muted`）＋鍵アイコン（`--locked`・`🔒`）で表示し**ドラッグ不可**（`entry.locked`）。非 boolean 値はドロップの両軸 `true/false` 上書きで数値/文字列を破壊するため、両軸が同一 `note.*` キーの設定ミス（`axesShareWritableKey`）は書き戻しが毎回失敗するため、いずれも掴ませない（後者は象限に載るカードも含め全カードをロック）。クリックで開いて値/設定を直せる（**カード全体を `opacity` で薄くすると、まだ開けるタイトル文字の実効コントラストが AA を割るため、opacity ではなく AA を満たすテーマ弱色トークンで色だけ落とす**・レビュー指摘／詳細は下記「主要な設計判断」／`bases.md`） |
 | 未分類非表示×全象限空 | `showUnclassified=false` で 4 象限が全て空・未分類にカードあり の構成は「ready なのに無言」になるため、件数入りヒント（`messages.unclassifiedHidden`・`.eisenhower-matrix__unclassified-hint`）を表示する（レビュー指摘・無言の空表示を避ける） |
-| 両軸同一キー設定ミス（#103 F7） | `diagnostics.axesShareWritableKey===true` のとき、**section 冒頭（グリッドの前）**に `role="note"` の警告バナー（`.eisenhower-matrix__diag-warning`）を**原因（同一プロパティ名）＋直し方（ビュー options かプラグイン設定で 2 軸に別プロパティを指定）**付きで描画する（`ready`／`empty` の両状態で出しうる・`loading` シェルでは出さない）。**`aria-live` を持たない**（既存 `.eisenhower-matrix__sr-status`〔`role="status" aria-live="polite"`〕との二重読み上げを避ける＝視覚補助の位置づけ。全ロック時の各カード理由は `cardLockedLabel` が SR に届く）。トーンは**控えめな警告**（`--text-warning` 相当のアクセント＋⚠アイコン・テーマ変数追従・本文 `--text-normal` で AA・ハードコード配色なし）。正常時（`axesShareWritableKey===false`）は**非表示**（ノイズ抑制） |
+| 両軸同一キー設定ミス（#103 F7） | `diagnostics.axesShareWritableKey===true` のとき、**section 冒頭（グリッドの前）**に `role="note"` の警告バナー（`.eisenhower-matrix__diag-warning`）を**原因（同一プロパティ名）＋直し方（ビュー options かプラグイン設定で 2 軸に別プロパティを指定）**付きで描画する（`ready`／`empty` の両状態で出しうる・`loading` シェルでは出さない）。**バナー自体は `aria-live` を持たない**（初期表示での二重読み上げを避ける＝視覚補助）。ただし**ビューを開いたまま設定を壊してバナーが動的に出現したとき**（`axesShareWritableKey` が false→true へ変化）は、`role="note"` が自動読み上げされないため、原因＋直し方を既存 `.eisenhower-matrix__sr-status`（`aria-live="polite"`）へ**一度だけ流す**（`MatrixView` が前回値を追って差分検知・初期描画〔前回値 null〕では流さない＝WCAG 4.1.3・v0.2 レビュー確定）。トーンは**控えめな警告**（`--text-warning` 相当のアクセント＋⚠アイコン・テーマ変数追従・本文 `--text-normal` で AA・ハードコード配色なし）。正常時（`axesShareWritableKey===false`）は**非表示**（ノイズ抑制） |
 | 解決済み軸名の可視化（#103 F7・控えめ） | 空状態（`state:"empty"`）と未分類非表示ヒント（上記「未分類非表示×全象限空」）に、解決済みの緊急度／重要度軸名（`diagnostics.urgentAxis`／`importantAxis`＝**frontmatter キー表記**・例「urgent／important」）を 1 行添える（`--text-muted` 相当の控えめなトーン）。空状態でも「いまどの軸で分類しているか」を提示でき、typo（軸名誤り→全ノート未分類）の気づきになる。表示範囲は AC どおり**この 2 箇所のみ**（`showUnclassified=true`×全未分類での新規ヒントは持たない＝正常運用のノイズを避ける・人間承認済み） |
 | 狭ペイン（サイドバー/縦分割） | 2×2 グリッドの単列化を**コンテナクエリ**（`.eisenhower-matrix { container-type: inline-size }` ＋ `@container (max-width:600px)`）でこのビューのペイン幅に追従させる。ビューポート幅依存の `@media` では広ウィンドウ内の狭ペインに反応しなかった（レビュー指摘） |
 | ドラッグ中 | ドラッグ元/ドロップ可象限を視覚フィードバック（#20）。ドロップで楽観的にカードを移動（書き込み確定前＝`applyPendingMoves`） |
@@ -444,7 +449,8 @@ Obsidian テーマ変数を使用（ハードコードしない）: `--backgroun
 - **dnd の日本語アナウンス＋操作説明**: `DndContext` の `accessibility.announcements`（onDragStart/Over/End/Cancel）と `screenReaderInstructions` を日本語化し、象限の**ローカライズ済みラベル**と**ノート名**で読み上げる（既定の英語＋内部 ID〔file.path・象限キー〕の読み上げを置換＝レビュー指摘）。
 - **移動結果のライブ通知（最新世代のみ・誤報しない・再読み上げ可）**: ビュー内に `role="status"`／`aria-live="polite"` の視覚的非表示領域を持ち、楽観移動の結果をスクリーンリーダーへ伝える（`Notice` はビュー外トーストのため a11y ツリーに乗る保証がない）。ただし **実際にロールバックした（最新世代の失敗）ときだけ「失敗・復元」を、後続ドラッグに上書きされていない最新世代のときだけ「移動成功」を通知**する（巻き戻していないのに「元に戻しました」と誤報せず、superseded な象限も読み上げない＝レビュー指摘）。同一文言の連続移動でも読み上げが消えないよう、`nextAnnouncement`（`liveStatus.ts`・純関数）が文言を不可視のゼロ幅スペース（U+200B）で差分化して再読み上げを促す。**成功かつ undo 導線があるとき（`planSettle` が `successUndoable` を返す）は、成功文言に「コマンド『直前の移動を元に戻す』で元に戻せる」旨（`messages.moveSucceededUndoable`）を添えて読み上げる（レビュー指摘 #1）**＝視覚利用者にはトーストで undo が見えるが、非ライブ（`role="group"`）で 8 秒自動消滅する `UndoToast` は SR/キーボード利用者に通知されず到達前に消えうるため、ライブ領域で undo の存在と到達手段（恒久導線＝コマンド）を届けて視覚/非視覚パリティを確保する（トースト本文自体は素の成功文言のまま＝視覚は重複しない）。
 - フォーカス可視（`:focus-visible` のアクセントリング。親の `overflow` で切れないよう**インセット** `outline-offset`）・WCAG AA コントラスト（テーマ変数に追従）・象限は region ランドマーク＋`aria-label`「象限名（軸ラベル）」。
-- **カード名の省略とアクセシブル名（#22 F5・既知の制約）**: カードは 1 行省略（`text-overflow: ellipsis`）だが、可視テキストがそのまま**アクセシブル名**になるためスクリーンリーダーは省略に関わらず**全文タイトルを読み上げる**。F5 で native `title` を撤去した（コア page-preview との二重ツールチップ回避）ため、**視覚のみのキーボード利用者は、フォーカス中カードの省略された長いタイトル全文を確認する手段を持たない**（コア page-preview はマウスホバー起点でキーボードフォーカスでは発火しない）。今回は下限を満たすため許容し、将来「フォーカス時ツールチップ／幅可変表示」で補うことを検討する（`frontend-reviewer` question で確認済み・スコープ外）。
+- **カードのアクセシブル名は明示 `aria-label`＝タイトル・補足は `aria-describedby`（v0.2 レビュー確定）**: ドラッグ可能な `role="button"` カード div は、明示 `aria-label` が無いと accname の **name-from-content** で子（滞留・追加プロパティバッジの可視テキスト）が名前に流れ込み冗長化する（v0.1.7 の「タイトルのみ」からの退行）。ロックカードの `aria-label={lockedLabel(title)}` と**対称**に、通常カード div にも `aria-label={entry.title}` を付け名前をタイトルに固定する。ただし**バッジ/滞留の情報を完全に落とすと WCAG 1.3.1（情報パリティ）を割る**（`role="button"` の presentational children では子の可視テキスト・`role="img"` が AT ツリーから剥がれ独立到達不可のため、名前に無い＝SR に一切届かなくなる）。そこで**滞留バッジ・追加プロパティバッジは `aria-hidden` の視覚装飾**にし、その要約（`stagnantLabel(days)` ＋ 各バッジ `label value`）を 1 つの視覚非表示テキスト（`.eisenhower-sr-only`）に集約して**カードの `aria-describedby`** で参照する＝名前は汚さず、期日・滞留という意思決定材料を SR/キーボード利用者へ補足として届ける（要約が空なら参照しない）。**⚠️ dnd-kit の `attributes` は `aria-describedby` を設定する**（キーボード DnD 操作説明＋#105 の `x` キー完了案内を指す隠しテキスト id）ため、自前の要約 id で**上書きすると DnD 操作説明が SR から消える**（バッジ無しカードでは `undefined` で属性ごと消滅＝キーボード操作が発見不能になる回帰）。よって非ロックカードは **dnd の id と自前の要約 id をスペース区切りで連結**して渡す（`aria-describedby` は複数 id 可・spread の後に置く）。ロックカードは dnd 属性を展開しないため自前 id 単独で可（v0.2 レビュー確定 must の回帰対策）。
+- **カード名の省略とアクセシブル名（#22 F5・既知の制約）**: カードは 1 行省略（`text-overflow: ellipsis`）だが、アクセシブル名（＝上記の明示 `aria-label`＝全文タイトル）はスクリーンリーダーに省略に関わらず**全文タイトルを読み上げる**。F5 で native `title` を撤去した（コア page-preview との二重ツールチップ回避）ため、**視覚のみのキーボード利用者は、フォーカス中カードの省略された長いタイトル全文を確認する手段を持たない**（コア page-preview はマウスホバー起点でキーボードフォーカスでは発火しない）。今回は下限を満たすため許容し、将来「フォーカス時ツールチップ／幅可変表示」で補うことを検討する（`frontend-reviewer` question で確認済み・スコープ外）。
 
 ### コンポーネントカタログ
 

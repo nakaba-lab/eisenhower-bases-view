@@ -49,12 +49,20 @@ export interface QuadrantCellProps {
   stagnantBadge?: (days: number) => string;
   /** 滞留バッジの aria-label を経過日数から組む（i18n `messages.stagnantLabel`・#106）。各 NoteCard へ委譲。 */
   stagnantLabel?: (days: number) => string;
+  /** 期日強調バッジの SR 注記（i18n `messages.badgeOverdue`・#104）。各 NoteCard へ委譲。 */
+  badgeOverdueLabel?: string;
   /** 完了トグル（#105 F10）が有効か。各 NoteCard へ委譲する。 */
   completionEnabled?: boolean;
-  /** 完了チェックボタンの状態別 aria-label（i18n）。各 NoteCard へ委譲する。 */
-  completionLabel?: (completed: boolean) => string;
+  /** `x` キー完了トグルの SR 案内（ロックカード用・i18n `screenReaderCompletionHint`・#105 F10）。各 NoteCard へ委譲。 */
+  completionHint?: string;
+  /** 完了チェックボタンの aria-label（ノート名＋状態別操作・i18n）。各 NoteCard がノート名で解決する。 */
+  completionLabel?: (title: string, completed: boolean) => string;
+  /** 無効化された完了ボタンの理由ラベル（ノート名込み・i18n `completionUnsupportedLabel`・#105 F10）。各 NoteCard へ委譲。 */
+  completionUnsupportedLabel?: (title: string) => string;
   /** 完了状態をトグルする（#105 F10）。各 NoteCard へ委譲する。 */
   onToggleCompletion?: (entryId: string, done: boolean) => void;
+  /** 非 boolean 完了値のカードへの x キー操作の通知（#105 F10）。各 NoteCard へ委譲する。 */
+  onCompletionUnsupported?: (entryId: string) => void;
   /** 完了ノートを淡色表示するか（設定 `dimCompleted`・#105 F10）。各 NoteCard へ委譲する。 */
   dimCompleted?: boolean;
 }
@@ -78,9 +86,13 @@ export function QuadrantCell({
   lockedLabel,
   stagnantBadge,
   stagnantLabel,
+  badgeOverdueLabel,
   completionEnabled,
+  completionHint,
   completionLabel,
+  completionUnsupportedLabel,
   onToggleCompletion,
+  onCompletionUnsupported,
   dimCompleted,
 }: QuadrantCellProps) {
   // 未分類はドロップ先にしない（AC4）。4 象限のみ droppable にする。
@@ -129,9 +141,13 @@ export function QuadrantCell({
               lockedLabel={lockedLabel}
               stagnantBadge={stagnantBadge}
               stagnantLabel={stagnantLabel}
+              badgeOverdueLabel={badgeOverdueLabel}
               completionEnabled={completionEnabled}
+              completionHint={completionHint}
               completionLabel={completionLabel}
+              completionUnsupportedLabel={completionUnsupportedLabel}
               onToggleCompletion={onToggleCompletion}
+              onCompletionUnsupported={onCompletionUnsupported}
               dimCompleted={dimCompleted}
             />
           ))}

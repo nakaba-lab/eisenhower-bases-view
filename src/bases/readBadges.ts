@@ -13,6 +13,7 @@ import { NullValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import { isEmphasizedDate } from "../logic/dateEmphasis";
+import { logChurnFailureOnce, safeGetAsPropertyId } from "./readAxis";
 
 /** カードに表示できるバッジの最大個数（カード密度への影響を抑える上限）。 */
 export const MAX_BADGE_PROPERTIES = 3;
@@ -58,26 +59,28 @@ export function badgeLabel(id: BasesPropertyId): string {
 }
 
 /**
- * `config.getAsPropertyId(key)` を **throw させない**境界防御でくるむ（`readAxis.safeGetAsPropertyId` と対称）。
- * バッジ解決は描画毎に走るため、churn 対象の Bases 接触点の例外がビュー全体の再描画を壊さないよう握る。
+ * 同一 propertyId の重複を除去する（順序は保つ）。同じプロパティを複数指定しても同じバッジが
+ * 二重表示されず、最大 {@link MAX_BADGE_PROPERTIES} 個の表示枠を無駄に消費しない（レビュー指摘）。
  */
-function safeGetAsPropertyId(
-  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
-  key: string,
-): BasesPropertyId | null {
-  if (config == null) return null;
-  try {
-    return config.getAsPropertyId(key);
-  } catch {
-    return null;
+function dedupePropertyIds(ids: readonly BasesPropertyId[]): BasesPropertyId[] {
+  const seen = new Set<string>();
+  const result: BasesPropertyId[] = [];
+  for (const id of ids) {
+    const key = id as unknown as string;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(id);
   }
+  return result;
 }
 
 /**
  * 表示するバッジプロパティ ID を解決する（#104 F8）。ビュー options（`badgeProperty1..N`）を主とし、
  * 1 つでも設定されていればそれを使う。未設定ならプラグイン設定 `cardBadgeProperties` をデフォルトに使う。
  * 読み取り専用サーフェスのため `note.*` に限定せず、`formula.*`／`file.*` も通す（軸の書き戻し制約とは別）。
- * 既定（options 無し・設定 `[]`）は空配列＝**表示 0 個**（カード密度は現状維持・AC3）。最大 {@link MAX_BADGE_PROPERTIES} 個。
+ * 境界防御は `readAxis.safeGetAsPropertyId` を共有する（別実装で観測性が乖離しないため・レビュー指摘）。
+ * 重複 propertyId は除去し（同じバッジの二重表示を防ぐ）、最大 {@link MAX_BADGE_PROPERTIES} 個で丸める。
+ * 既定（options 無し・設定 `[]`）は空配列＝**表示 0 個**（カード密度は現状維持・AC3）。
  */
 export function resolveBadgePropertyIds(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
@@ -88,11 +91,12 @@ export function resolveBadgePropertyIds(
     const id = safeGetAsPropertyId(config, key);
     if (id != null) fromOptions.push(id);
   }
-  if (fromOptions.length > 0) return fromOptions.slice(0, MAX_BADGE_PROPERTIES);
-  // options 未設定なら設定デフォルト（文字列配列。非文字列/空は `mergeSettings` が既に弾いている）。
-  return settings.cardBadgeProperties
-    .slice(0, MAX_BADGE_PROPERTIES)
-    .map((name) => name as BasesPropertyId);
+  // options が 1 つでもあればそれを、無ければ設定デフォルト（非文字列/空は mergeSettings が弾き済み）を使う。
+  const source =
+    fromOptions.length > 0
+      ? fromOptions
+      : settings.cardBadgeProperties.map((name) => name as BasesPropertyId);
+  return dedupePropertyIds(source).slice(0, MAX_BADGE_PROPERTIES);
 }
 
 /**
@@ -103,12 +107,24 @@ export function resolveBadgePropertyIds(
  * 壊さないよう空文字へ退避する＝AC2）。`null`・absent（`NullValue`）は空文字（`NullValue.toString()` は
  * 文字列 "null" を返すため型で弾く）、それ以外は `toString()` で文字列化する（型別分岐は最小限＝churn 耐性）。
  */
+const loggedBadgeReadFailures = new Set<string>();
+
 function readBadgeText(entry: BasesEntry, id: BasesPropertyId): string {
   try {
     const value: Value | null = entry.getValue(id);
     if (value == null || value instanceof NullValue) return "";
     return value.toString();
-  } catch {
+  } catch (error) {
+    // 姉妹の read パス（`readAxisValueSafely`）と対称に、churn した Bases の例外をキー単位で一度だけ
+    // ログする（読み取り専用のため空文字退避は安全だが、全カード空表示が「本当に空」か「読み取り失敗」
+    // かを区別できるよう診断を残す・レビュー指摘）。`toString()` の throw も同じ catch で拾う。
+    const raw = id as unknown as string;
+    logChurnFailureOnce(
+      loggedBadgeReadFailures,
+      typeof raw === "string" ? raw : String(raw),
+      "badge getValue/toString failed; showing empty",
+      error,
+    );
     return "";
   }
 }

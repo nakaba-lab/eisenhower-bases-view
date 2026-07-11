@@ -49,6 +49,8 @@ export interface QuadrantCellProps {
   stagnantBadge?: (days: number) => string;
   /** 滞留バッジの aria-label を経過日数から組む（i18n `messages.stagnantLabel`・#106）。各 NoteCard へ委譲。 */
   stagnantLabel?: (days: number) => string;
+  /** 期日強調バッジの SR 注記（i18n `messages.badgeOverdue`・#104）。各 NoteCard へ委譲。 */
+  badgeOverdueLabel?: string;
   /** 完了トグル（#105 F10）が有効か。各 NoteCard へ委譲する。 */
   completionEnabled?: boolean;
   /** 完了チェックボタンの aria-label（ノート名＋状態別操作・i18n）。各 NoteCard がノート名で解決する。 */
@@ -82,6 +84,7 @@ export function QuadrantCell({
   lockedLabel,
   stagnantBadge,
   stagnantLabel,
+  badgeOverdueLabel,
   completionEnabled,
   completionLabel,
   completionUnsupportedLabel,
@@ -135,6 +138,7 @@ export function QuadrantCell({
               lockedLabel={lockedLabel}
               stagnantBadge={stagnantBadge}
               stagnantLabel={stagnantLabel}
+              badgeOverdueLabel={badgeOverdueLabel}
               completionEnabled={completionEnabled}
               completionLabel={completionLabel}
               completionUnsupportedLabel={completionUnsupportedLabel}

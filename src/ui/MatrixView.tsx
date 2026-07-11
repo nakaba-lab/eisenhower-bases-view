@@ -530,8 +530,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             // done:true は Base の done!=true フィルタで当該カードが再クエリ後に消えうる。操作していた
             // カード/ボタンが unmount されるとフォーカスが body へ落ちるため、undo と同様にマトリクス領域へ
             // 受け皿として戻し、SR/キーボード利用者の読み進め位置の喪失を防ぐ（#3/WCAG 2.4.3）。
-            // done:false（未完了化）は当該カードが表示中＝消えないためフォーカスは動かさない。
-            if (done) matrixSectionRef.current?.focus();
+            // ただし **dimCompleted（＝done!=true フィルタを張らない no-filter モードの目印）のときはカードが
+            // 残る**ため、フォーカスをボタンに留める（残るのに section へ移すと読み進め位置を不要に失う・レビュー指摘）。
+            // done:false（未完了化）も当該カードが残るため動かさない。
+            if (done && !dimCompleted) matrixSectionRef.current?.focus();
           },
           () => {
             if (!mountedRef.current) return;
@@ -583,6 +585,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               lockedLabel={messages.cardLockedLabel}
               stagnantBadge={messages.stagnantBadge}
               stagnantLabel={messages.stagnantLabel}
+              badgeOverdueLabel={messages.badgeOverdue}
               accentColor={quadrantColors?.[key]}
               entries={placements[key]}
               emptyText={messages.emptyQuadrant}
@@ -623,6 +626,7 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
             lockedLabel={messages.cardLockedLabel}
             stagnantBadge={messages.stagnantBadge}
             stagnantLabel={messages.stagnantLabel}
+            badgeOverdueLabel={messages.badgeOverdue}
             entries={placements.unclassified}
             emptyText={messages.emptyQuadrant}
             variant="unclassified"

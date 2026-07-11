@@ -2,7 +2,6 @@ import { PluginSettingTab, Setting, type App } from "obsidian";
 import type EisenhowerBasesViewPlugin from "./main";
 import { QUADRANT_KEYS } from "./logic/quadrant";
 import { messagesFor, resolveLanguage } from "./i18n";
-import { MAX_BADGE_PROPERTIES } from "./bases/readBadges";
 import { parseThresholdInput } from "./bases/stagnationThreshold";
 import { type LanguageSetting } from "./settings";
 
@@ -113,15 +112,14 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           .setPlaceholder("note.due, note.tags")
           .setValue(settings.cardBadgeProperties.join(", "))
           .onChange(async (value) => {
-            // カンマ区切り→トリム→空除去→**重複除去→**最大数で丸める（入口で正規化する。永続層の
-            // mergeStringArray は型フィルタのみのため、trim/空除去/dedup/丸めはここで行う）。
-            // dedup を slice の前に置く（`resolveBadgePropertyIds` と同順）＝重複が 1 枠を消費して
-            // 3 枠に収まる別プロパティが黙って押し出されるのを防ぐ（レビュー指摘）。
-            const parsed = value
+            // 入口では**カンマ区切り→トリム→空除去のみ**行う。**重複除去と最大数の丸めは読み取り側の
+            // 権威的ガード `resolveBadgePropertyIds`（ビュー options も入力源になるため必須）に一本化**し、
+            // 同じ正規化を 2 箇所で二重管理しない（read 側が dedup→slice の順で行うため、ここで slice しても
+            // ならない＝重複が 1 枠を消費して別プロパティを押し出す。read へ委譲する・レビュー指摘）。
+            settings.cardBadgeProperties = value
               .split(",")
               .map((item) => item.trim())
               .filter((item) => item.length > 0);
-            settings.cardBadgeProperties = [...new Set(parsed)].slice(0, MAX_BADGE_PROPERTIES);
             await this.plugin.saveSettings();
           }),
       );

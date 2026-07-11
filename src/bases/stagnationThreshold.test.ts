@@ -133,4 +133,10 @@ describe("parseThresholdInput — 設定タブ入力の解釈（#106・レビュ
     expect(parseThresholdInput("30")).toBe(30);
     expect(parseThresholdInput("  21 ")).toBe(21);
   });
+
+  it("全角数字を半角へ正規化して受理する（日本語 IME の全角入力を silent-drop しない・レビュー指摘）", () => {
+    expect(parseThresholdInput("３０")).toBe(30);
+    expect(parseThresholdInput("　１４　")).toBe(14); // 全角空白＋全角数字
+    expect(parseThresholdInput("０")).toBe(0);
+  });
 });

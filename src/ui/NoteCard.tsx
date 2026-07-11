@@ -148,6 +148,11 @@ export interface NoteCardProps {
    */
   stagnantLabel?: (days: number) => string;
   /**
+   * 期日強調（emphasized＝過期日）バッジの SR 要約に添える注記（i18n `messages.badgeOverdue`・#104）。
+   * 視覚の太字＋アクセント色と情報パリティを取る（省略時は日付値のみ＝従来）。
+   */
+  badgeOverdueLabel?: string;
+  /**
    * 完了トグル（#105 F10）が有効か。true のときのみカードにチェックボタンを描画し、`x` キーでトグルする
    *（`MatrixViewModel.completionEnabled` を上流から渡す）。省略/false のときはボタンを出さない（opt-in）。
    */
@@ -196,6 +201,7 @@ export function NoteCard({
   lockedLabel,
   stagnantBadge,
   stagnantLabel,
+  badgeOverdueLabel,
   completionEnabled,
   completionLabel,
   completionUnsupportedLabel,
@@ -271,7 +277,9 @@ export function NoteCard({
   const descriptionParts: string[] = [];
   if (stagnantDays !== null) descriptionParts.push((stagnantLabel ?? badgeText)(stagnantDays));
   for (const badge of visibleBadges) {
-    descriptionParts.push(`${badge.label} ${badge.text}`);
+    // emphasized（過期日）は視覚で太字＋アクセント色。SR 要約にも注記を添えて情報パリティを取る（レビュー指摘）。
+    const overdue = badge.emphasized && badgeOverdueLabel ? ` ${badgeOverdueLabel}` : "";
+    descriptionParts.push(`${badge.label} ${badge.text}${overdue}`);
   }
   const cardDescription = descriptionParts.join(", ");
   const descriptionId = useId();
@@ -352,6 +360,27 @@ export function NoteCard({
     onHoverCard?.(entry.id, event.currentTarget, event);
   };
 
+  // カード div の**内側**（タイトル行＋滞留バッジ＋追加プロパティバッジ＋SR 要約）を 1 箇所に集約し、
+  // ロック/非ロックの 2 分岐で重複させない（片側だけ変えると表示・情報パリティが乖離する回帰を防ぐ・レビュー指摘）。
+  // 差分はタイトル span 内のロックアイコンのみ（`locked` フラグで分岐）。完了ボタンはカード div の兄弟のため含めない。
+  const cardBody = (
+    <>
+      <div class="eisenhower-note-card__title-row">
+        <span class="eisenhower-note-card__title">
+          {locked && (
+            <span class="eisenhower-note-card__lock" aria-hidden="true">
+              🔒
+            </span>
+          )}
+          {entry.title}
+        </span>
+        {stagnationBadge}
+      </div>
+      <NoteBadges badges={visibleBadges} />
+      {cardDescriptionNode}
+    </>
+  );
+
   if (locked) {
     // ロックカード: dnd 属性/listener を付けずドラッグ不可にする（掴めない＝誤ドロップでのデータ破壊を防ぐ）。
     // 開く（クリック/Enter）とホバープレビューは残す（ユーザーがノートを開いて非 boolean 値を直せる）。
@@ -368,17 +397,7 @@ export function NoteCard({
           onKeyDown={handleLockedKeyDown}
           onMouseEnter={handleMouseEnter}
         >
-          <div class="eisenhower-note-card__title-row">
-            <span class="eisenhower-note-card__title">
-              <span class="eisenhower-note-card__lock" aria-hidden="true">
-                🔒
-              </span>
-              {entry.title}
-            </span>
-            {stagnationBadge}
-          </div>
-          <NoteBadges badges={visibleBadges} />
-          {cardDescriptionNode}
+          {cardBody}
         </div>
         {/* 完了ボタンはカード（role=button）の子ではなく兄弟に置き nested-interactive を避ける（レビュー指摘）。 */}
         {completionButton}
@@ -409,12 +428,7 @@ export function NoteCard({
         onKeyDown={handleKeyDown}
         onMouseEnter={handleMouseEnter}
       >
-        <div class="eisenhower-note-card__title-row">
-          <span class="eisenhower-note-card__title">{entry.title}</span>
-          {stagnationBadge}
-        </div>
-        <NoteBadges badges={visibleBadges} />
-        {cardDescriptionNode}
+        {cardBody}
       </div>
       {/* 完了ボタンはドラッグ可能な role=button カードの子ではなく兄弟に置き、nested-interactive
           （相互作用要素の入れ子）を避ける。視覚的にはカード右上へ絶対配置する（styles.css）。 */}

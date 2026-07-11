@@ -89,6 +89,11 @@ export interface Messages {
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
   cardLockedLabel: (title: string) => string;
+  /**
+   * 期日強調（emphasized＝過期日）バッジの SR 要約に添える短い注記（#104・視覚の太字+アクセント色と情報パリティ）。
+   * 視覚利用者は強調で一目で過期日と分かるが、SR 要約には日付値しか載らないため「過期日」の意味を補う（レビュー指摘）。
+   */
+  badgeOverdue: string;
   /** 滞留カードの経過日数バッジ本文（例 英 "21d"／日 "21日"・#106）。 */
   stagnantBadge: (days: number) => string;
   /** 滞留バッジの aria-label（SR 読み上げ・経過日数を含む・#106）。 */
@@ -227,6 +232,7 @@ const JA: Messages = {
     `緊急度: ${urgentAxis} ／ 重要度: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
   cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
+  badgeOverdue: "（期日超過）",
   stagnantBadge: (days) => `${days}日`,
   stagnantLabel: (days) => `滞留: ${days}日更新なし`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
@@ -331,6 +337,7 @@ const EN: Messages = {
     `Urgency: ${urgentAxis} · Importance: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
+  badgeOverdue: "(overdue)",
   stagnantBadge: (days) => `${days}d`,
   stagnantLabel: (days) => `Stale: not updated for ${days} days`,
   fileNotFoundForMove: "Target file not found; cannot move.",

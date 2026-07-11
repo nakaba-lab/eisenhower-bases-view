@@ -46,7 +46,11 @@ export function toThresholdDays(raw: unknown): number | null {
  * 上書きしない（無効化は `0` を明示入力する）。`extends PluginSettingTab` の設定タブから切り出して単体固定する。
  */
 export function parseThresholdInput(raw: string): number | null {
-  const trimmed = raw.trim();
+  // 日本語 IME の全角数字（"３０"）を半角へ正規化してから判定する（一次利用者が全角で入力した有効値を
+  // silent-drop しない・レビュー指摘）。U+FF10..FF19 → U+0030..0039。
+  const trimmed = raw
+    .trim()
+    .replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
   // 厳密な非負整数（10 進数字のみ）だけ受理する。`Number.parseInt` はプレフィックス受理のため
   // "14x"→14・"1e3"→1・"0x10"→0 を黙って通してしまう（文書化した「非数値は現在値保持」に反する・レビュー指摘）。
   if (!/^\d+$/.test(trimmed)) return null;

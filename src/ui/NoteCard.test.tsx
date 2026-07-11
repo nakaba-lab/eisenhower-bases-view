@@ -257,6 +257,27 @@ describe("NoteCard — カード追加プロパティ表示（バッジ・#104 F
     expect(screen.getByText("2026-07-01")).toBeTruthy();
   });
 
+  it("NoteCard_emphasized バッジは SR 要約に過期日注記を添える（視覚の強調と情報パリティ・レビュー指摘）", () => {
+    // given: 強調（過期日）バッジ ＋ 過期日注記ラベル
+    const entry = badgedEntry([{ label: "due", text: "2026-01-01", emphasized: true }]);
+    const { container } = render(<NoteCard entry={entry} badgeOverdueLabel="(overdue)" />);
+    // then: カードの aria-describedby が指す SR 要約に日付値＋注記が入る（視覚の太字＋色と同じ意味を SR にも）
+    const card = container.querySelector(".eisenhower-note-card") as HTMLElement;
+    const descId = card.getAttribute("aria-describedby");
+    const desc = container.querySelector(`[id="${descId}"]`);
+    expect(desc?.textContent).toContain("due 2026-01-01 (overdue)");
+  });
+
+  it("NoteCard_非 emphasized バッジは SR 要約に注記を添えない（日付値のみ）", () => {
+    const entry = badgedEntry([{ label: "due", text: "2026-01-01" }]);
+    const { container } = render(<NoteCard entry={entry} badgeOverdueLabel="(overdue)" />);
+    const card = container.querySelector(".eisenhower-note-card") as HTMLElement;
+    const descId = card.getAttribute("aria-describedby");
+    const desc = container.querySelector(`[id="${descId}"]`);
+    expect(desc?.textContent).toContain("due 2026-01-01");
+    expect(desc?.textContent).not.toContain("(overdue)");
+  });
+
   it("NoteCard_emphasized バッジは強調クラスを持つ（アクセント色・AC4）", () => {
     // given: 過去日で強調フラグ付き
     const entry = badgedEntry([{ label: "due", text: "2026-07-01", emphasized: true }]);

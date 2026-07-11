@@ -128,8 +128,11 @@ export interface Messages {
   completionToggleDone: (title: string) => string;
   /** カードにフォーカスした SR/キーボード利用者へ `x` キーで完了トグルできる旨の操作説明（完了有効時のみ・#105 F10）。 */
   screenReaderCompletionHint: string;
-  /** 完了トグル成功のライブ通知（#105 F10）。 */
-  completionSucceeded(title: string): string;
+  /**
+   * 完了トグル成功のライブ通知（#105 F10）。**結果状態（`done`＝完了/未完了）を含める**（move が対象象限を
+   * 明示するのと対称＝SR 利用者にフィルタで消えても結果が伝わる・WCAG 4.1.3・レビュー指摘）。
+   */
+  completionSucceeded(title: string, done: boolean): string;
   /** 完了トグル失敗のライブ通知（#105 F10）。 */
   completionFailed(title: string): string;
   /** 非 boolean な完了値のため変更できない Notice（元値を破壊しない・#105 F10・AC2）。 */
@@ -280,7 +283,8 @@ const JA: Messages = {
   completionToggle: (title) => `「${title}」を完了にする`,
   completionToggleDone: (title) => `「${title}」を未完了に戻す`,
   screenReaderCompletionHint: "x キーで完了を切り替えます。",
-  completionSucceeded: (title) => `「${title}」の完了状態を更新しました。`,
+  completionSucceeded: (title, done) =>
+    done ? `「${title}」を完了にしました。` : `「${title}」を未完了に戻しました。`,
   completionFailed: (title) => `「${title}」の完了状態を変更できませんでした。`,
   completionUnsupported:
     "完了プロパティが boolean 型ではないため変更できません（日付などの既存の値を壊さないよう保護しました）。",
@@ -386,7 +390,8 @@ const EN: Messages = {
   completionToggle: (title) => `Mark "${title}" done`,
   completionToggleDone: (title) => `Mark "${title}" not done`,
   screenReaderCompletionHint: "Press x to toggle completion.",
-  completionSucceeded: (title) => `Updated completion for "${title}".`,
+  completionSucceeded: (title, done) =>
+    done ? `Marked "${title}" done.` : `Marked "${title}" not done.`,
   completionFailed: (title) => `Couldn't change completion for "${title}".`,
   completionUnsupported:
     "The completion property isn't a boolean, so it can't be changed (its existing value, e.g. a date, was left intact).",

@@ -158,6 +158,12 @@ export interface NoteCardProps {
    */
   completionEnabled?: boolean;
   /**
+   * `x` キーで完了トグルできる旨の SR 操作説明（i18n `messages.screenReaderCompletionHint`・#105 F10）。
+   * **ロックカード用**: 非ロックは dnd の操作説明経由で案内されるが、ロックカードは dnd 属性を持たないため
+   * この案内を SR 要約（aria-describedby）に添える（発見性の非対称の解消・レビュー指摘）。
+   */
+  completionHint?: string;
+  /**
    * チェックボタンの aria-label をノート名＋状態から組む（`completed` → 未完了に戻す／未完了 → 完了にする・#105 F10）。
    * i18n（`completionToggle(title)`/`completionToggleDone(title)`）から組んで渡す。ノート名を含むことで
    * 複数カードで同名ボタンにならず SR で識別できる（レビュー指摘）。ラベルが操作を表すため aria-pressed は付けない。
@@ -203,6 +209,7 @@ export function NoteCard({
   stagnantLabel,
   badgeOverdueLabel,
   completionEnabled,
+  completionHint,
   completionLabel,
   completionUnsupportedLabel,
   onToggleCompletion,
@@ -274,6 +281,8 @@ export function NoteCard({
   // 表示対象バッジ（値が空でないもの）を一度だけ絞り込み、描画（NoteBadges）と SR 要約で共有する
   //（同じ絞り込みを 2 箇所に持たず情報パリティ崩れを防ぐ・レビュー指摘）。
   const visibleBadges = (entry.badges ?? []).filter((badge) => badge.text !== "");
+  // 非 boolean 軸値のカードはドラッグ不可（ドロップの両軸 true/false 上書きで元値破壊を防ぐ・#34 補完）。
+  const locked = entry.locked ?? false;
   const descriptionParts: string[] = [];
   if (stagnantDays !== null) descriptionParts.push((stagnantLabel ?? badgeText)(stagnantDays));
   for (const badge of visibleBadges) {
@@ -281,6 +290,10 @@ export function NoteCard({
     const overdue = badge.emphasized && badgeOverdueLabel ? ` ${badgeOverdueLabel}` : "";
     descriptionParts.push(`${badge.label} ${badge.text}${overdue}`);
   }
+  // ロックカードは dnd 属性を持たない（＝dnd の操作説明 describedby が付かない）が `x` キーで完了トグルできる
+  //（handleLockedKeyDown）。その `x` キー案内（completionHint）を SR 要約に添えて、非ロックカード（dnd の
+  // 隠しテキスト経由で案内される）との発見性の非対称を解消する（レビュー指摘）。非ロックは dnd 側で案内済み。
+  if (locked && showCompletion && completionHint) descriptionParts.push(completionHint);
   const cardDescription = descriptionParts.join(", ");
   const descriptionId = useId();
   const describedBy = cardDescription !== "" ? descriptionId : undefined;
@@ -290,8 +303,6 @@ export function NoteCard({
         {cardDescription}
       </span>
     ) : null;
-  // 非 boolean 軸値のカードはドラッグ不可（ドロップの両軸 true/false 上書きで元値破壊を防ぐ・#34 補完）。
-  const locked = entry.locked ?? false;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: entry.id,
     disabled: locked,

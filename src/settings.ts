@@ -79,7 +79,12 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
  */
 function mergeStringArray(raw: unknown): string[] {
   return Array.isArray(raw)
-    ? raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    ? raw
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        // 生き残る要素も**トリムする**（設定タブのライブ編集 `settingsTab` と同じ正規化を永続復元経路にも
+        // 適用＝手編集の " note.due " が propertyId 完全一致で解決されず無言で非表示になるのを防ぐ・レビュー指摘）。
+        .filter((item) => item.length > 0)
     : [];
 }
 

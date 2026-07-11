@@ -53,6 +53,8 @@ export interface QuadrantCellProps {
   badgeOverdueLabel?: string;
   /** 完了トグル（#105 F10）が有効か。各 NoteCard へ委譲する。 */
   completionEnabled?: boolean;
+  /** `x` キー完了トグルの SR 案内（ロックカード用・i18n `screenReaderCompletionHint`・#105 F10）。各 NoteCard へ委譲。 */
+  completionHint?: string;
   /** 完了チェックボタンの aria-label（ノート名＋状態別操作・i18n）。各 NoteCard がノート名で解決する。 */
   completionLabel?: (title: string, completed: boolean) => string;
   /** 無効化された完了ボタンの理由ラベル（ノート名込み・i18n `completionUnsupportedLabel`・#105 F10）。各 NoteCard へ委譲。 */
@@ -86,6 +88,7 @@ export function QuadrantCell({
   stagnantLabel,
   badgeOverdueLabel,
   completionEnabled,
+  completionHint,
   completionLabel,
   completionUnsupportedLabel,
   onToggleCompletion,
@@ -140,6 +143,7 @@ export function QuadrantCell({
               stagnantLabel={stagnantLabel}
               badgeOverdueLabel={badgeOverdueLabel}
               completionEnabled={completionEnabled}
+              completionHint={completionHint}
               completionLabel={completionLabel}
               completionUnsupportedLabel={completionUnsupportedLabel}
               onToggleCompletion={onToggleCompletion}

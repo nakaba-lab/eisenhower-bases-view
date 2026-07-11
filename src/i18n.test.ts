@@ -311,12 +311,22 @@ describe("messagesFor — カード上の完了トグルの i18n（#105 F10・AC
   });
 
   it("messagesFor — 完了トグルの結果アナウンス（成功/失敗）がノート名を差し込み言語別", () => {
-    expect(messagesFor("ja").completionSucceeded("タスクA")).toContain("タスクA");
-    expect(messagesFor("en").completionSucceeded("TaskA")).toContain("TaskA");
+    expect(messagesFor("ja").completionSucceeded("タスクA", true)).toContain("タスクA");
+    expect(messagesFor("en").completionSucceeded("TaskA", true)).toContain("TaskA");
     expect(messagesFor("ja").completionFailed("タスクA")).toContain("タスクA");
     expect(messagesFor("en").completionFailed("TaskA")).toContain("TaskA");
-    expect(messagesFor("ja").completionSucceeded("x")).not.toBe(
-      messagesFor("en").completionSucceeded("x"),
+    expect(messagesFor("ja").completionSucceeded("x", true)).not.toBe(
+      messagesFor("en").completionSucceeded("x", true),
+    );
+  });
+
+  it("messagesFor — 完了トグル成功は結果状態（完了/未完了）を含める（done で文言が変わる・レビュー指摘）", () => {
+    // done=true と done=false で異なる文言（結果状態を SR に伝える）
+    expect(messagesFor("ja").completionSucceeded("タスクA", true)).not.toBe(
+      messagesFor("ja").completionSucceeded("タスクA", false),
+    );
+    expect(messagesFor("en").completionSucceeded("TaskA", true)).not.toBe(
+      messagesFor("en").completionSucceeded("TaskA", false),
     );
   });
 

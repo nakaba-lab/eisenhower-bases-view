@@ -208,11 +208,11 @@ export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
  * 済ませているため、渡さないと 1 レンダーで軸の `getAsPropertyId` を 2 度引く冗長解決になる・レビュー指摘）。
  * 省略時は従来どおり内部で解決する（書き戻し経路 {@link resolveCompletionKey} は解決済み軸を持たないため）。
  */
-export function resolveCompletionId(
+function resolveCompletion(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   settings: EisenhowerSettings,
   axes?: AxisPropertyIds,
-): BasesPropertyId | null {
+): { id: BasesPropertyId; key: string } | null {
   const fromConfig = safeGetAsPropertyId(config, COMPLETION_OPTION_KEY);
   const id =
     fromConfig ??
@@ -229,16 +229,26 @@ export function resolveCompletionId(
   ) {
     return null;
   }
-  return id;
+  return { id, key };
 }
 
-/** 完了プロパティの frontmatter 書き戻しキー（#105 F10）。無効時は `null`（{@link resolveCompletionId}）。 */
+export function resolveCompletionId(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+  axes?: AxisPropertyIds,
+): BasesPropertyId | null {
+  return resolveCompletion(config, settings, axes)?.id ?? null;
+}
+
+/**
+ * 完了プロパティの frontmatter 書き戻しキー（#105 F10）。無効時は `null`（{@link resolveCompletionId}）。
+ * `id` から `key` を再計算せず、内部 `resolveCompletion` が検証時に組んだ `key` を再利用する（レビュー指摘）。
+ */
 export function resolveCompletionKey(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   settings: EisenhowerSettings,
 ): string | null {
-  const id = resolveCompletionId(config, settings);
-  return id === null ? null : toFrontmatterKey(id);
+  return resolveCompletion(config, settings)?.key ?? null;
 }
 
 /** 完了プロパティの読み取り結果（#105 F10）。 */

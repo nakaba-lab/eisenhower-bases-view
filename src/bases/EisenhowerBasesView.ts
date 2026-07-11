@@ -276,7 +276,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
       return false;
     }
     if (undoRecord) this.undoManager?.record(undoRecord);
-    new Notice(`Eisenhower Matrix: ${messages.completionSucceeded(file.basename)}`);
+    new Notice(`Eisenhower Matrix: ${messages.completionSucceeded(file.basename, done)}`);
     return true;
   }
 

@@ -29,6 +29,38 @@
   text-align: center;
 }
 
+/* 両軸同一キー設定ミスの警告バナー（#103 F7）。全カードロックの原因＋直し方をグリッド上部に
+ * 控えめな警告トーンで提示する。配色はハードコードせずテーマ変数に追従し（ライト/ダーク両対応）、
+ * 本文は --text-normal（AA）・アクセントのみ --text-warning。role="note"・aria-live なし。 */
+.eisenhower-matrix__diag-warning {
+  margin: 0 0 var(--size-4-2, 8px);
+  padding: var(--size-4-2, 8px) var(--size-4-3, 12px);
+  color: var(--text-normal);
+  background-color: var(--background-secondary);
+  border-inline-start: 3px solid var(--text-warning, var(--interactive-accent));
+  border-radius: var(--radius-s, 4px);
+  font-size: var(--font-ui-small, 0.8em);
+  /* 空状態コンテナ（.eisenhower-matrix--empty）は align-items:center のため、明示しないと
+   * バナーが content 幅に縮んで中央寄せになる。全ロックの説明が最も要る空×設定ミスでも
+   * ready と同じ全幅トップ提示を保つ（frontend-reviewer should 指摘）。 */
+  align-self: stretch;
+}
+
+/* 警告アイコンは装飾（意味は本文が担う）。テキストの前に控えめに添える。 */
+.eisenhower-matrix__diag-warning::before {
+  content: "⚠";
+  margin-inline-end: var(--size-4-2, 8px);
+  color: var(--text-warning, var(--interactive-accent));
+}
+
+/* 解決済み軸名の 1 行（空状態・未分類ヒント）。控えめ（--text-muted）に「いまどの軸か」を提示する。 */
+.eisenhower-matrix__axis-names {
+  margin: var(--size-4-1, 4px) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.75em);
+  text-align: center;
+}
+
 .eisenhower-matrix--loading,
 .eisenhower-matrix--empty {
   align-items: center;
@@ -159,19 +191,196 @@
   min-width: 0;
 }
 
-/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。 */
+/* 1 ノートのカード（ドラッグで象限移動＝#20。クリック/Enter で開く・ホバーでプレビュー＝#22 F5）。
+ * #104（F8）でタイトル下にバッジ行を持てるよう縦積み（flex column）にする。#106（F9）でタイトル行に
+ * 滞留バッジを横並べする __title-row を持つ（title＝truncate・滞留バッジ＝右端固定）。
+ * タイトルの 1 行省略は __title へ移し、追加プロパティバッジは折返し可能な別行として並べる。
+ * min-width:0 は flex 子の省略成立に必要。 */
 .eisenhower-note-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   padding: var(--size-4-1, 4px) var(--size-4-2, 8px);
   border-radius: var(--radius-s, 4px);
   background-color: var(--background-primary);
   color: var(--text-normal);
   font-size: var(--font-ui-small, 0.8em);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   /* ドラッグ可能であることを示す（#20）。開く導線（#22）は role=button で伝わる。 */
   cursor: grab;
   touch-action: none;
+}
+
+/* タイトルと滞留バッジ（#106 F9）を横並びにする行。タイトルは truncate し、滞留バッジは右端に固定する。 */
+.eisenhower-note-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1, 4px);
+  min-width: 0;
+}
+
+/* カードのタイトル。__title-row 内で滞留バッジに場所を譲りつつ長いタイトルは truncate する（#106 F9）。
+ * flex 子として縮み（flex:1 1 auto・min-width:0）、追加プロパティバッジ行とは縦に積む（#104）。 */
+.eisenhower-note-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 滞留バッジ（最終更新から N 日超過・#106 F9）。時計＋経過日数を --text-muted で控えめに、
+ * タイトル行の右端へ固定する（一覧の視線移動を最小化）。数字は等幅で桁揺れを抑える。 */
+.eisenhower-note-card__stagnation {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller, 0.75em);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 時計アイコン（装飾＝aria-hidden）。currentColor で --text-muted を継ぎ、文字と一体の控えめさにする。 */
+.eisenhower-note-card__stagnation-icon {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+}
+
+/* カード上の完了チェックボタン（#105 F10）。タイトル行の右端に置き、hover/focus で出現する
+ * （完了時は常時可視）。テーマ変数のみ（--text-muted 待機・--interactive-accent 完了）で配色し
+ * ハードコードしない。レイアウト用の幅を常に確保し、hover での揺れを防ぐ。 */
+.eisenhower-note-card__complete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-s, 4px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  /* 既定は不可視（hover/focus・完了で可視化）。opacity:0 でもフォーカス可能＝キーボードパリティを保つ。 */
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+/* カード hover・カード focus・ボタン focus で出現（マウスにもキーボードにも露出＝a11y フロア）。
+ * カード hover/focus のリビールは **:not(:disabled)** に限る: 非対応（disabled）ボタンまで
+ * opacity:1 にすると下の :disabled{opacity:.4} を詳細度で上書きし、押せる「未完了」ボタンと
+ * 見分けがつかなくなる（frontend-reviewer should）。カード focus でもリビールして x キーの発見性を上げる。 */
+.eisenhower-note-card:hover .eisenhower-note-card__complete:not(:disabled),
+.eisenhower-note-card:focus-visible .eisenhower-note-card__complete:not(:disabled),
+.eisenhower-note-card__complete:focus-visible {
+  opacity: 1;
+}
+
+/* 完了カードのボタンは常時可視・アクセント色（再度押して未完了に戻せることを示す）。 */
+.eisenhower-note-card__complete.is-completed {
+  opacity: 1;
+  color: var(--interactive-accent);
+}
+
+.eisenhower-note-card__complete:hover:not(:disabled) {
+  color: var(--text-normal);
+}
+
+/* 非 boolean 完了値のカードは無効（AC2）。押下を塞ぎ、控えめに落とす。 */
+.eisenhower-note-card__complete:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* 明示フォーカスリング（テーマ既定に頼らない・NoteCard/UndoToast と同方針）。 */
+.eisenhower-note-card__complete:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.eisenhower-note-card__complete-icon {
+  width: 1em;
+  height: 1em;
+}
+
+/* 未完了は円のみ、完了はチェックを可視にする（状態を形でも示す＝色のみ依存を避ける）。 */
+.eisenhower-note-card__complete-check {
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+.eisenhower-note-card__complete.is-completed .eisenhower-note-card__complete-check {
+  opacity: 1;
+}
+
+/* 完了ノートの淡色表示（設定 dimCompleted on）。opacity ではなく弱色トークンで色だけ落とす
+ * （タイトルの可読性＝AA を保つ・--locked と同方針）。チェックボタンはアクセント色のまま残す。 */
+.eisenhower-note-card--dimmed {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eisenhower-note-card__complete,
+  .eisenhower-note-card__complete-check {
+    transition: none;
+  }
+}
+
+/* カード追加プロパティのバッジ行（#104 F8・読み取り専用）。タイトル下に控えめに折返し表示する。 */
+.eisenhower-note-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1, 4px);
+  margin-block-start: var(--size-4-1, 4px);
+  min-width: 0;
+}
+
+/* 1 バッジ。テーマの弱色トークン（AA を満たす --text-muted）で控えめに。値が長ければ省略する。
+ * 背景は塗らず**細い枠線**でグルーピングする: 塗り背景（--background-modifier-border）は弱色の小さいテキストの
+ * 実効コントラストを AA 未満へ落とすため、テキストはカード背景の上に置いて AA を確保する（枠線は
+ * コントラストに影響しない）。 */
+.eisenhower-note-card__badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  max-width: 100%;
+  padding: 0 var(--size-4-1, 4px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+  color: var(--text-muted);
+  font-size: var(--font-smallest, 0.75em);
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+/* ラベル（プロパティ名）は値と区別できるよう小さめ大文字。opacity で色を落とすと AA を割るため
+ * 色は --text-muted のまま、字形（大文字・字間・やや小）だけで差をつける。 */
+.eisenhower-note-card__badge-label {
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.9em;
+}
+
+/* 値は長ければ省略（バッジ行が横に溢れないようにする＝375px でも崩れない）。 */
+.eisenhower-note-card__badge-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 期日らしい値（厳格 ISO・今日以前）× 強調トグル on の 1 バッジをアクセント色で強調する（#104 AC4）。
+ * テキスト色は **--text-accent**（リンク等の“アクセント色テキスト”用で AA 調整済みトークン）を使う。
+ * 塗り用の --interactive-accent を小さいテキストの前景に使うと AA を割るため（frontend-reviewer must）、
+ * テキストは --text-accent・枠線は --interactive-accent に分ける。さらに**色のみに依存しない**よう
+ *（WCAG 1.4.1）字の太さも上げ、色覚特性のある利用者にも「過期日」が伝わるようにする。 */
+.eisenhower-note-card__badge--emphasized {
+  color: var(--text-accent, var(--interactive-accent));
+  border-color: var(--interactive-accent);
+  font-weight: var(--font-semibold, 600);
 }
 
 /* クリックで開けることを示すホバー（#22 F5）。ドラッグ affordance（grab）は保ちつつ、

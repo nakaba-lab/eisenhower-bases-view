@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { BasesPropertyId } from "obsidian";
-import { buildAxisViewOptions } from "./viewOptions";
+import {
+  buildAxisViewOptions,
+  buildBadgeViewOptions,
+  buildCompletionViewOption,
+} from "./viewOptions";
 import { messagesFor } from "../i18n";
 import {
+  COMPLETION_OPTION_KEY,
   IMPORTANT_OPTION_KEY,
   URGENT_OPTION_KEY,
   isWritableAxisProperty,
 } from "./readAxis";
+import { BADGE_OPTION_KEYS, MAX_BADGE_PROPERTIES } from "./readBadges";
 
 /**
  * viewOptions — `registerBasesView` に渡す軸プロパティセレクタ options の純ビルダーと、
@@ -83,5 +89,74 @@ describe("buildAxisViewOptions（AC1: note.* のみ選択肢）", () => {
       expect(filter("file.name" as BasesPropertyId)).toBe(false);
       expect(filter("note." as BasesPropertyId)).toBe(false);
     }
+  });
+});
+
+describe("buildBadgeViewOptions（#104 F8: カード表示プロパティ・読み取り専用）", () => {
+  it("buildBadgeViewOptions — 既定で最大 3 個の property セレクタを返す（badgeProperty1..3）", () => {
+    // when
+    const options = buildBadgeViewOptions(messagesFor("ja"));
+    // then: MAX_BADGE_PROPERTIES 個、キーは resolveBadgePropertyIds が読むキーと一致
+    expect(options).toHaveLength(MAX_BADGE_PROPERTIES);
+    options.forEach((option, index) => {
+      expect(option.key).toBe(BADGE_OPTION_KEYS[index]);
+      expect(option.type).toBe("property");
+      expect(option.displayName.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("buildBadgeViewOptions — count を渡すと個数を絞れる（最大 3 でクランプ）", () => {
+    expect(buildBadgeViewOptions(messagesFor("ja"), 2)).toHaveLength(2);
+    // MAX を超える指定は MAX に丸める
+    expect(buildBadgeViewOptions(messagesFor("ja"), 5)).toHaveLength(MAX_BADGE_PROPERTIES);
+  });
+
+  it("buildBadgeViewOptions — filter は全プロパティを許可する（軸と違い formula.*/file.* も選べる読み取り専用）", () => {
+    // given
+    const options = buildBadgeViewOptions(messagesFor("ja"));
+    // when / then: 読み取り専用サーフェスなので note.* に限定せず何でも通す
+    for (const option of options) {
+      expect(option.filter).toBeDefined();
+      const filter = option.filter!;
+      expect(filter("note.due" as BasesPropertyId)).toBe(true);
+      expect(filter("formula.score" as BasesPropertyId)).toBe(true);
+      expect(filter("file.mtime" as BasesPropertyId)).toBe(true);
+    }
+  });
+
+  it("buildBadgeViewOptions — displayName は渡した言語メッセージに追従する（en/ja で異なる）", () => {
+    const [enFirst] = buildBadgeViewOptions(messagesFor("en"));
+    const [jaFirst] = buildBadgeViewOptions(messagesFor("ja"));
+    expect(enFirst.displayName).not.toBe(jaFirst.displayName);
+  });
+});
+
+describe("buildCompletionViewOption（#105 F10: 完了プロパティセレクタ・note.* 限定＝軸と同型）", () => {
+  it("buildCompletionViewOption — 完了プロパティの property セレクタを返す（キーは resolveCompletionId が読むキーと一致）", () => {
+    // when
+    const option = buildCompletionViewOption(messagesFor("ja"));
+    // then
+    expect(option.key).toBe(COMPLETION_OPTION_KEY);
+    expect(option.type).toBe("property");
+    expect(option.displayName.length).toBeGreaterThan(0);
+  });
+
+  it("buildCompletionViewOption — filter は書き戻し可能な note.* のみ許可（軸と同じ制約・formula/file を弾く）", () => {
+    // given: 完了は書き戻す（true/false 書き込み）ため、軸と同じく note.* に限定する
+    const option = buildCompletionViewOption(messagesFor("ja"));
+    expect(option.filter).toBeDefined();
+    const filter = option.filter!;
+    expect(filter("note.done" as BasesPropertyId)).toBe(true);
+    expect(filter("formula.done" as BasesPropertyId)).toBe(false);
+    expect(filter("file.name" as BasesPropertyId)).toBe(false);
+    expect(filter("note." as BasesPropertyId)).toBe(false);
+    // 単一述語 isWritableAxisProperty を共有する（軸/読み書き 3 面と同じ真実源）
+    expect(filter("note.done" as BasesPropertyId)).toBe(isWritableAxisProperty("note.done" as BasesPropertyId));
+  });
+
+  it("buildCompletionViewOption — displayName は渡した言語メッセージに追従する（en/ja で異なる）", () => {
+    expect(buildCompletionViewOption(messagesFor("en")).displayName).not.toBe(
+      buildCompletionViewOption(messagesFor("ja")).displayName,
+    );
   });
 });

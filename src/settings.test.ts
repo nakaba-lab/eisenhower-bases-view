@@ -86,3 +86,97 @@ describe("mergeSettings — 既定補完（AC5 読み書き）", () => {
     expect(DEFAULT_SETTINGS.quadrantLabels.schedule).toBe("");
   });
 });
+
+describe("mergeSettings — 滞留しきい値 stagnationThresholdDays（#106 F9）", () => {
+  it("mergeSettings — 既定は 14 日（未保存・レガシー data.json でも補完）", () => {
+    // given / when / then: 初回・F6 時代の data.json（滞留フィールドを持たない）でも既定 14
+    expect(DEFAULT_SETTINGS.stagnationThresholdDays).toBe(14);
+    expect(mergeSettings({}).stagnationThresholdDays).toBe(14);
+    expect(
+      mergeSettings({ defaultUrgencyProperty: "due" }).stagnationThresholdDays,
+    ).toBe(14);
+  });
+
+  it("mergeSettings — 保存された有効な日数を復元する（0=オフ含む）", () => {
+    expect(mergeSettings({ stagnationThresholdDays: 30 }).stagnationThresholdDays).toBe(30);
+    expect(mergeSettings({ stagnationThresholdDays: 0 }).stagnationThresholdDays).toBe(0);
+  });
+
+  it("mergeSettings — 不正な日数（負・非数値・NaN）は既定 14 へフォールバック", () => {
+    // given / when / then: 手編集された data.json 等の不正値を弾く
+    expect(mergeSettings({ stagnationThresholdDays: -3 }).stagnationThresholdDays).toBe(14);
+    expect(mergeSettings({ stagnationThresholdDays: "21" }).stagnationThresholdDays).toBe(14);
+    expect(mergeSettings({ stagnationThresholdDays: Number.NaN }).stagnationThresholdDays).toBe(14);
+  });
+
+  it("mergeSettings — 小数の日数は floor して整数日にする", () => {
+    expect(mergeSettings({ stagnationThresholdDays: 20.7 }).stagnationThresholdDays).toBe(20);
+  });
+});
+
+describe("mergeSettings — カード追加プロパティ表示の設定（#104 F8）", () => {
+  it("DEFAULT_SETTINGS — 既定は表示 0 個・日付強調オフ（カード密度は現状維持・AC3）", () => {
+    expect(DEFAULT_SETTINGS.cardBadgeProperties).toEqual([]);
+    expect(DEFAULT_SETTINGS.emphasizePastDates).toBe(false);
+  });
+
+  it("mergeSettings — 空オブジェクトはバッジ設定も既定で埋める", () => {
+    const merged = mergeSettings({});
+    expect(merged.cardBadgeProperties).toEqual([]);
+    expect(merged.emphasizePastDates).toBe(false);
+  });
+
+  it("mergeSettings — cardBadgeProperties を保存値から復元（文字列配列）", () => {
+    const merged = mergeSettings({ cardBadgeProperties: ["note.due", "file.mtime"] });
+    expect(merged.cardBadgeProperties).toEqual(["note.due", "file.mtime"]);
+  });
+
+  it("mergeSettings — cardBadgeProperties の非文字列要素/非配列は弾いて既定へ倒す（手編集の防御）", () => {
+    // given / when / then: 配列でない・要素が非文字列は既定（空配列 or 文字列のみ）へ
+    expect(mergeSettings({ cardBadgeProperties: "note.due" }).cardBadgeProperties).toEqual([]);
+    expect(
+      mergeSettings({ cardBadgeProperties: ["note.due", 42, null, "note.tags"] })
+        .cardBadgeProperties,
+    ).toEqual(["note.due", "note.tags"]);
+  });
+
+  it("mergeSettings — emphasizePastDates を保存値から復元・不正値は既定 false", () => {
+    expect(mergeSettings({ emphasizePastDates: true }).emphasizePastDates).toBe(true);
+    expect(mergeSettings({ emphasizePastDates: "yes" }).emphasizePastDates).toBe(false);
+  });
+
+  it("mergeSettings — 返り値の cardBadgeProperties は新規配列（DEFAULT_SETTINGS を破壊しない）", () => {
+    const merged = mergeSettings({});
+    merged.cardBadgeProperties.push("note.x");
+    expect(DEFAULT_SETTINGS.cardBadgeProperties).toEqual([]);
+  });
+});
+
+describe("mergeSettings — カード上の完了トグルの設定（#105 F10）", () => {
+  it("DEFAULT_SETTINGS — 既定は完了プロパティ空（機能オフ＝opt-in）・淡色表示オフ", () => {
+    expect(DEFAULT_SETTINGS.completionProperty).toBe("");
+    expect(DEFAULT_SETTINGS.dimCompleted).toBe(false);
+  });
+
+  it("mergeSettings — 空オブジェクト・レガシー data.json でも完了設定を既定で埋める", () => {
+    const merged = mergeSettings({});
+    expect(merged.completionProperty).toBe("");
+    expect(merged.dimCompleted).toBe(false);
+    // F9 時代の data.json（完了フィールドを持たない）でも補完される
+    expect(mergeSettings({ stagnationThresholdDays: 30 }).completionProperty).toBe("");
+  });
+
+  it("mergeSettings — completionProperty を保存値から復元（プロパティ名文字列）", () => {
+    expect(mergeSettings({ completionProperty: "done" }).completionProperty).toBe("done");
+  });
+
+  it("mergeSettings — completionProperty の非文字列は既定（空文字＝オフ）へフォールバック", () => {
+    expect(mergeSettings({ completionProperty: 42 }).completionProperty).toBe("");
+    expect(mergeSettings({ completionProperty: null }).completionProperty).toBe("");
+  });
+
+  it("mergeSettings — dimCompleted を保存値から復元・不正値は既定 false", () => {
+    expect(mergeSettings({ dimCompleted: true }).dimCompleted).toBe(true);
+    expect(mergeSettings({ dimCompleted: "yes" }).dimCompleted).toBe(false);
+  });
+});

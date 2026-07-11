@@ -78,14 +78,27 @@ export interface Messages {
    * 無言の空表示を避ける（レビュー指摘）。
    */
   unclassifiedHidden(count: number): string;
+  /**
+   * 両軸が同一の書き戻し可能プロパティを指す設定ミスの警告バナー文言（#103 F7）。
+   * 原因（同一プロパティ名を名指し）＋直し方（別々のプロパティを指定）を平文で伝える。
+   */
+  diagSharedAxisWarning(sharedAxisKey: string): string;
+  /** 解決済みの緊急度／重要度軸名を控えめに提示する 1 行（空状態・未分類ヒント用・#103 F7）。 */
+  diagAxisNames(urgentAxis: string, importantAxis: string): string;
   /** 「ラベル（軸ラベル）」の言語別ジョイナ（英=半角括弧・日=全角括弧）。象限領域名・設定行名で共有。 */
   labelWithAxis(label: string, axisLabel: string): string;
   /** 非 boolean 軸値のため移動できないカードのアクセシブル名（データ破壊防止ガード）。 */
   cardLockedLabel: (title: string) => string;
+  /** 滞留カードの経過日数バッジ本文（例 英 "21d"／日 "21日"・#106）。 */
+  stagnantBadge: (days: number) => string;
+  /** 滞留バッジの aria-label（SR 読み上げ・経過日数を含む・#106）。 */
+  stagnantLabel: (days: number) => string;
   /** アダプタ層 Notice: 対象ファイルが見つからず移動できない。 */
   fileNotFoundForMove: string;
   /** アダプタ層 Notice: 対象ファイルが見つからず開けない。 */
   fileNotFoundForOpen: string;
+  /** アダプタ層 Notice: 対象ファイルが見つからず完了状態を変更できない（#105 F10）。 */
+  fileNotFoundForCompletion: string;
   /** アダプタ層 Notice: 書き戻せない軸（note. 以外）のため移動できない。 */
   axisNotWritable: string;
   /** アダプタ層 Notice: frontmatter 書き戻しに失敗（ロールバック）。 */
@@ -98,6 +111,20 @@ export interface Messages {
   settings: SettingsMessages;
   /** Bases Configure view の軸プロパティセレクタ displayName（viewOptions）。 */
   axisOption: { urgency: string; important: string };
+  /** Bases Configure view のカードバッジセレクタ displayName（#104 F8・番号付き `badgeProperty1..N`）。 */
+  badgeOption(index: number): string;
+  /** カード上の完了チェックボタンの aria-label（未完了→完了・#105 F10）。 */
+  completionToggle: string;
+  /** カード上の完了チェックボタンの aria-label（完了→未完了・双方向トグル・#105 F10）。 */
+  completionToggleDone: string;
+  /** 完了トグル成功のライブ通知（#105 F10）。 */
+  completionSucceeded(title: string): string;
+  /** 完了トグル失敗のライブ通知（#105 F10）。 */
+  completionFailed(title: string): string;
+  /** 非 boolean な完了値のため変更できない Notice（元値を破壊しない・#105 F10・AC2）。 */
+  completionUnsupported: string;
+  /** Bases Configure view の完了プロパティセレクタ displayName（#105 F10）。 */
+  completionOption: string;
 }
 
 /** 設定タブの i18n 文言（見出し・設定名・説明・ツールチップ）。 */
@@ -113,11 +140,31 @@ export interface SettingsMessages {
   quadrantHeading: string;
   quadrantRowDesc: string;
   resetTooltip: string;
+  /** 滞留しきい値（日数）設定の名前（#106）。 */
+  stagnationName: string;
+  /** 滞留しきい値設定の説明（mtime 近似の明示を含む・#106）。 */
+  stagnationDesc: string;
   languageHeading: string;
   languageName: string;
   languageDesc: string;
   /** 言語ドロップダウンの "Auto"（自動）選択肢ラベル。en/日 の endonym（English/日本語）は翻訳しない。 */
   languageAuto: string;
+  /** カード表示プロパティ設定の名前（#104 F8）。 */
+  cardBadgePropertiesName: string;
+  /** カード表示プロパティ設定の説明（#104 F8・読み取り専用＝formula/file も可を明示）。 */
+  cardBadgePropertiesDesc: string;
+  /** 期日強調トグルの名前（#104 F8）。 */
+  emphasizePastDatesName: string;
+  /** 期日強調トグルの説明（#104 F8）。 */
+  emphasizePastDatesDesc: string;
+  /** 完了プロパティ設定の名前（#105 F10）。 */
+  completionName: string;
+  /** 完了プロパティ設定の説明（boolean note.* 限定・Bases 委譲を明示・#105 F10）。 */
+  completionDesc: string;
+  /** 完了ノート淡色表示トグルの名前（#105 F10）。 */
+  dimCompletedName: string;
+  /** 完了ノート淡色表示トグルの説明（#105 F10）。 */
+  dimCompletedDesc: string;
 }
 
 const JA: Messages = {
@@ -162,10 +209,17 @@ const JA: Messages = {
   itemCount: (count) => `${count} 件`,
   unclassifiedHidden: (count) =>
     `${count} 件のノートが未分類です（未分類ゾーンは非表示設定です。設定で表示にするか、軸プロパティを確認してください）。`,
+  diagSharedAxisWarning: (sharedAxisKey) =>
+    `緊急度軸と重要度軸が同じプロパティ（${sharedAxisKey}）を指しています。ビュー options かプラグイン設定で、2 つの軸に別々のプロパティを指定してください。`,
+  diagAxisNames: (urgentAxis, importantAxis) =>
+    `緊急度: ${urgentAxis} ／ 重要度: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label}（${axisLabel}）`,
   cardLockedLabel: (title) => `「${title}」（移動不可: 対応していない軸の値）`,
+  stagnantBadge: (days) => `${days}日`,
+  stagnantLabel: (days) => `滞留: ${days}日更新なし`,
   fileNotFoundForMove: "対象ファイルが見つからないため移動できません。",
   fileNotFoundForOpen: "対象ファイルが見つからないため開けません。",
+  fileNotFoundForCompletion: "対象ファイルが見つからないため完了状態を変更できません。",
   axisNotWritable:
     "軸プロパティの設定が不正（note. 以外、または両軸に同じプロパティ）のため移動できません。",
   writeBackFailed: "書き戻しに失敗しました。元に戻します。",
@@ -180,6 +234,9 @@ const JA: Messages = {
     displayHeading: "表示",
     showUnclassifiedName: "欠損ノートを未分類に表示",
     showUnclassifiedDesc: "軸プロパティを持たないノートを未分類ゾーンに表示する。",
+    stagnationName: "滞留とみなす日数",
+    stagnationDesc:
+      "最終更新からこの日数を超えたカードに滞留マークを付ける（0 で無効）。編集だけでなく Linter・Templater・同期などの自動処理でも更新日時はリセットされる点に注意。",
     quadrantHeading: "象限ラベル・色",
     quadrantRowDesc: "象限のラベルとアクセント色（色未設定時はテーマのアクセント色を使用）。",
     resetTooltip: "既定に戻す（ラベル・色）",
@@ -187,8 +244,28 @@ const JA: Messages = {
     languageName: "表示言語",
     languageDesc: "「自動」は Obsidian の表示言語に追従します。",
     languageAuto: "自動",
+    cardBadgePropertiesName: "カードに表示するプロパティ",
+    cardBadgePropertiesDesc:
+      "カードにバッジ表示する追加プロパティを完全な propertyId（例: note.due）でカンマ区切り入力（最大 3 個）。読み取り専用のため、軸（書き戻し）と違い formula.* / file.* も選べます（表示のみ・書き換えません）。ビュー未設定時のデフォルト。",
+    emphasizePastDatesName: "期日を強調",
+    emphasizePastDatesDesc:
+      "厳格な ISO 日付（YYYY-MM-DD）が今日以前のバッジをアクセント色で強調します。",
+    completionName: "完了プロパティ",
+    completionDesc:
+      "カードのチェックで完了（true）を書き込む boolean プロパティ名（空で無効）。完了ノートを消す/残すは Base 側に「done != true」フィルタを張って委譲します（README 参照）。軸と同じプロパティは指定できません。",
+    dimCompletedName: "完了ノートを淡色表示",
+    dimCompletedDesc:
+      "完了（true）のカードを淡色で表示します（「done != true」フィルタを張らない場合の目印）。",
   },
   axisOption: { urgency: "緊急度軸プロパティ", important: "重要度軸プロパティ" },
+  badgeOption: (index) => `カード表示プロパティ ${index}`,
+  completionToggle: "完了にする",
+  completionToggleDone: "未完了に戻す",
+  completionSucceeded: (title) => `「${title}」の完了状態を更新しました。`,
+  completionFailed: (title) => `「${title}」の完了状態を変更できませんでした。`,
+  completionUnsupported:
+    "完了プロパティが boolean 型ではないため変更できません（日付などの既存の値を壊さないよう保護しました）。",
+  completionOption: "完了プロパティ",
 };
 
 const EN: Messages = {
@@ -233,10 +310,17 @@ const EN: Messages = {
   itemCount: (count) => `${count} ${count === 1 ? "item" : "items"}`,
   unclassifiedHidden: (count) =>
     `${count} ${count === 1 ? "note is" : "notes are"} unclassified (the unclassified zone is hidden). Enable it in settings, or check the axis properties.`,
+  diagSharedAxisWarning: (sharedAxisKey) =>
+    `The urgency and importance axes both point to the same property (${sharedAxisKey}). Set different properties for the two axes in the view options or plugin settings.`,
+  diagAxisNames: (urgentAxis, importantAxis) =>
+    `Urgency: ${urgentAxis} · Importance: ${importantAxis}`,
   labelWithAxis: (label, axisLabel) => `${label} (${axisLabel})`,
   cardLockedLabel: (title) => `"${title}" (not movable: unsupported axis value)`,
+  stagnantBadge: (days) => `${days}d`,
+  stagnantLabel: (days) => `Stale: not updated for ${days} days`,
   fileNotFoundForMove: "Target file not found; cannot move.",
   fileNotFoundForOpen: "Target file not found; cannot open.",
+  fileNotFoundForCompletion: "Target file not found; cannot change completion.",
   axisNotWritable:
     "Invalid axis configuration (not note.*, or both axes use the same property); cannot move.",
   writeBackFailed: "Failed to write back. Reverting.",
@@ -251,6 +335,9 @@ const EN: Messages = {
     displayHeading: "Display",
     showUnclassifiedName: "Show notes with missing axes as unclassified",
     showUnclassifiedDesc: "Show notes without axis properties in the unclassified zone.",
+    stagnationName: "Days until stale",
+    stagnationDesc:
+      "Mark cards not updated for more than this many days (0 disables). Note that automated processes (Linter, Templater, sync) also reset the modified time, not just manual edits.",
     quadrantHeading: "Quadrant labels & colors",
     quadrantRowDesc:
       "Label and accent color for the quadrant (uses the theme accent color when unset).",
@@ -259,8 +346,28 @@ const EN: Messages = {
     languageName: "Display language",
     languageDesc: "\"Auto\" follows Obsidian's display language.",
     languageAuto: "Auto",
+    cardBadgePropertiesName: "Properties to show on cards",
+    cardBadgePropertiesDesc:
+      "Extra properties shown as card badges — enter full property IDs (e.g. note.due), comma-separated (up to 3). These are read-only, so unlike the axes (write-back) you may also pick formula.* / file.* (display only; never written). Default when the view has none set.",
+    emphasizePastDatesName: "Emphasize due dates",
+    emphasizePastDatesDesc:
+      "Accent badges whose strict ISO date (YYYY-MM-DD) is today or earlier.",
+    completionName: "Completion property",
+    completionDesc:
+      "Boolean property written as done (true) when you check a card (empty to disable). To hide or keep completed notes, add a \"done != true\" filter to your Base (see the README). Can't be the same as an axis property.",
+    dimCompletedName: "Dim completed notes",
+    dimCompletedDesc:
+      "Show completed (true) cards dimmed — a cue when you don't add a \"done != true\" filter.",
   },
   axisOption: { urgency: "Urgency axis property", important: "Importance axis property" },
+  badgeOption: (index) => `Card property ${index}`,
+  completionToggle: "Mark done",
+  completionToggleDone: "Mark not done",
+  completionSucceeded: (title) => `Updated completion for "${title}".`,
+  completionFailed: (title) => `Couldn't change completion for "${title}".`,
+  completionUnsupported:
+    "The completion property isn't a boolean, so it can't be changed (its existing value, e.g. a date, was left intact).",
+  completionOption: "Completion property",
 };
 
 /** 言語別メッセージ束を返す。 */

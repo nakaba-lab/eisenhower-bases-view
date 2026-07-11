@@ -197,6 +197,11 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
 
     // 上書き前の両軸値を捕捉して undo 記録を組む（present/absent を区別・値は verbatim 保持）。
     // 書き込み成功後に UndoManager へ「直前 1 手」として保存する（undo・最小実装）。
+    // なお writeCompletion と違い、ここは非 boolean 実値の inline ガード（書込阻止）を持たない。これは
+    // 意図的な非対称: (1) 非 boolean 軸値のカードは render 時に hasUnsupportedAxisValue でロック＝ドラッグ
+    // 不可のため通常経路では到達しない。(2) 稀な in-flight ドラッグ中の外部書換で非 boolean 化しても、
+    // 上書き前の値をこの undo 記録が verbatim 捕捉するため復元可能。writeCompletion は undo を作らない
+    // ので元値保護を inline ガードで担う＝両経路は「undo 復元／書込阻止」で守り方が異なる（v0.2 レビュー）。
     let undoRecord: UndoRecord | null = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {

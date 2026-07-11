@@ -72,9 +72,15 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   dimCompleted: false,
 };
 
-/** `loadData()` 由来の値を文字列だけの配列に整える（非配列は空・非文字列要素は捨てる。手編集の防御）。 */
+/**
+ * `loadData()` 由来の値を文字列だけの配列に整える（非配列は空・非文字列/空文字要素は捨てる。手編集の防御）。
+ * 空文字も落とす: 残すと `resolveBadgePropertyIds` の dedup→slice で 1 枠を消費し実プロパティが押し出される
+ *（`readBadges` のコメント「空は mergeSettings が弾き済み」の不変条件を永続層でも守る・レビュー指摘）。
+ */
 function mergeStringArray(raw: unknown): string[] {
-  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(raw)
+    ? raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
 }
 
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];

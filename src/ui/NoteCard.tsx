@@ -36,14 +36,13 @@ function isCompletionToggleKey(event: DivKeyboardEvent): boolean {
  * AT ツリーから剥がれ独立到達不可のため、名前を汚さず description 経由で情報パリティを確保する・レビュー指摘）。
  * 期日らしい値（`emphasized`）はアクセント色で強調する（AC4）。
  */
-function NoteBadges({ badges }: { badges: MatrixEntry["badges"] }) {
-  // 値が空（absent／例外で退避＝AC2）のバッジはラベルだけの“壊れて見える”チップになるため描画しない
-  //（データ側は件数を保つ＝AC1・UI 側で空を省く＝frontend-reviewer should）。
-  const visible = badges?.filter((badge) => badge.text !== "");
-  if (!visible || visible.length === 0) return null;
+function NoteBadges({ badges }: { badges: NonNullable<MatrixEntry["badges"]> }) {
+  // 表示対象（`text !== ""`）の絞り込みは呼び出し側（NoteCard の `visibleBadges`）で一元化し、SR 要約
+  //（aria-describedby）と描画で同じ集合を使う（情報パリティ崩れを防ぐ二重実装の解消・レビュー指摘）。
+  if (badges.length === 0) return null;
   return (
     <div class="eisenhower-note-card__badges" aria-hidden="true">
-      {visible.map((badge, index) => (
+      {badges.map((badge, index) => (
         <span
           key={index}
           class={
@@ -91,7 +90,9 @@ function CompletionButton({
       type="button"
       class={"eisenhower-note-card__complete" + (completed ? " is-completed" : "")}
       aria-label={reason ?? label}
-      title={reason}
+      // title は有効時も操作ラベル（アイコンのみのボタンにマウスホバーのツールチップを出す＝発見性・レビュー指摘）。
+      // 無効時は保護理由（reason）を出す。
+      title={reason ?? label}
       disabled={unsupported}
       onClick={(event) => {
         // 開く導線（カードの onClick）へ伝播させない（AC5）。目的値は現状態の反転（双方向トグル）。
@@ -264,10 +265,13 @@ export function NoteCard({
   // SR 要約（#104/#106・レビュー指摘）: 視覚バッジ（滞留・追加プロパティ）は aria-hidden の装飾のため、
   // その情報を**カードの補足説明**として 1 つの視覚非表示テキストに集約し、`aria-describedby` で参照する。
   // カード名（aria-label＝title）は汚さず、期日・滞留という意思決定材料を SR/キーボード利用者へも届ける。
+  // 表示対象バッジ（値が空でないもの）を一度だけ絞り込み、描画（NoteBadges）と SR 要約で共有する
+  //（同じ絞り込みを 2 箇所に持たず情報パリティ崩れを防ぐ・レビュー指摘）。
+  const visibleBadges = (entry.badges ?? []).filter((badge) => badge.text !== "");
   const descriptionParts: string[] = [];
   if (stagnantDays !== null) descriptionParts.push((stagnantLabel ?? badgeText)(stagnantDays));
-  for (const badge of entry.badges ?? []) {
-    if (badge.text !== "") descriptionParts.push(`${badge.label} ${badge.text}`);
+  for (const badge of visibleBadges) {
+    descriptionParts.push(`${badge.label} ${badge.text}`);
   }
   const cardDescription = descriptionParts.join(", ");
   const descriptionId = useId();
@@ -373,7 +377,7 @@ export function NoteCard({
             </span>
             {stagnationBadge}
           </div>
-          <NoteBadges badges={entry.badges} />
+          <NoteBadges badges={visibleBadges} />
           {cardDescriptionNode}
         </div>
         {/* 完了ボタンはカード（role=button）の子ではなく兄弟に置き nested-interactive を避ける（レビュー指摘）。 */}
@@ -409,7 +413,7 @@ export function NoteCard({
           <span class="eisenhower-note-card__title">{entry.title}</span>
           {stagnationBadge}
         </div>
-        <NoteBadges badges={entry.badges} />
+        <NoteBadges badges={visibleBadges} />
         {cardDescriptionNode}
       </div>
       {/* 完了ボタンはドラッグ可能な role=button カードの子ではなく兄弟に置き、nested-interactive

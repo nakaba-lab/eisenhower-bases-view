@@ -466,10 +466,18 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   if (viewModel.state === "empty") {
     return (
       <section
+        ref={matrixSectionRef}
         class="eisenhower-matrix eisenhower-matrix--empty"
         role="group"
         aria-label={messages.matrixLabel}
+        tabIndex={-1}
       >
+        {/* 完了トグル等の結果アナウンスとフォーカス受け皿を**空状態にも**持たせる: 推奨の done!=true
+            フィルタ下で最後の 1 枚を完了にすると空へ遷移するため、ready 分岐にしか sr-status/ref が無いと
+            完了アナウンスが読み上げられずフォーカスが body へ落ちる（WCAG 4.1.3/2.4.3・レビュー指摘）。 */}
+        <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
+          {liveStatus}
+        </div>
         {diagnosticWarning}
         <p class="eisenhower-matrix__placeholder">{messages.empty}</p>
         {axisNames}

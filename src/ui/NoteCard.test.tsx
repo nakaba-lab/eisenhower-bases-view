@@ -512,6 +512,21 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
     expect(onCompletionUnsupported).toHaveBeenCalledWith("a.md");
   });
 
+  it("NoteCard_有効な完了ボタンも title（操作ラベル）を持つ（アイコンのみのボタンにマウスツールチップ・レビュー指摘）", () => {
+    // given: 有効（非 unsupported）な完了ボタン
+    render(
+      <NoteCard
+        entry={completionEntry()}
+        completionEnabled
+        completionLabel={completionLabel}
+        onToggleCompletion={vi.fn()}
+      />,
+    );
+    // then: aria-label と同じ操作ラベルを title にも出す（マウス利用者がアイコンの意味を確認できる）
+    const button = screen.getByRole("button", { name: "「タスクA」を完了にする" });
+    expect(button.getAttribute("title")).toBe("「タスクA」を完了にする");
+  });
+
   it("NoteCard_x キー_フォーカス中のカードで完了をトグルする（Space=掴む/Enter=開く と非衝突・AC1）", () => {
     // given
     const onToggleCompletion = vi.fn();

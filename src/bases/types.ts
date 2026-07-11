@@ -177,15 +177,12 @@ export interface MatrixCallbacks {
    * カードの完了状態をトグルする（#105 F10）。UI は目的値 `done`（`true`＝完了 / `false`＝未完了へ
    * 戻す・双方向・`delete` しない）を渡すだけで、`TFile` 解決・`processFrontMatter` での単一キー
    * 書き込み・undo 記録はアダプタ（`EisenhowerBasesView`）が担う（`onMoveCard` と同じ疎結合＝AC5）。
-   * **完了トグルは楽観オーバーレイを持たない**（`onMoveCard` と異なりカード状態は `onDataUpdated` 再描画で
-   * 最新化する）。書込失敗はアダプタが `Notice` で通知し reject するが、ロールバック対象が無いため
-   * 呼び出し側は reject を握りつぶしてよい。
-   */
-  /**
-   * 完了状態を書き戻す（#105 F10）。**解決値で「実際に書いたか」を返す**: `true`＝書込成功／
-   * `false`＝非 boolean 値を保護して書かなかった（TOCTOU＝描画後〜書込前に外部で非 boolean 化した稀ケース）。
-   * ハード失敗（ファイル欠落・書込例外）は reject する。UI（`MatrixView`）はこの区別で、保護時に誤って
-   * 「完了しました」ではなく「保護中」を読み上げる（aria-live へ偽成功を流さない・レビュー指摘）。
+   * **完了トグルは楽観オーバーレイを持たない**（`onMoveCard` と異なりカード状態は `onDataUpdated` 再描画で最新化）。
+   *
+   * **解決値で「実際に書いたか」を返す**: `true`＝書込成功／`false`＝非 boolean 値を保護して書かなかった
+   *（TOCTOU＝描画後〜書込前に外部で非 boolean 化した稀ケース）。ハード失敗（ファイル欠落・書込例外）は
+   * reject する（アダプタが `Notice` で通知。ロールバック対象は無い）。UI（`MatrixView`）はこの 3 分岐で、
+   * 保護時に誤って「完了しました」ではなく「保護中」を読み上げる（aria-live へ偽成功を流さない・レビュー指摘）。
    */
   onToggleCompletion?: (entryId: string, done: boolean) => Promise<boolean>;
   /**

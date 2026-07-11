@@ -799,3 +799,17 @@ describe("MatrixView — カードの aria-describedby 連結（DnD 操作説明
     expect(summary).toContain("due 2026-01-01");
   });
 });
+
+describe("MatrixView — 空状態にも sr-status とフォーカス受け皿を持つ（最後の1枚を完了→空遷移・レビュー指摘）", () => {
+  it("MatrixView_空状態_sr-status ライブ領域と tabIndex=-1 のフォーカス受け皿を持つ", () => {
+    const container = mountContainer();
+    render(container, { state: "empty", entries: [], placements: emptyPlacements() }, {});
+    // 完了/移動の結果アナウンスを載せる sr-status（aria-live=polite）が空状態にも存在する
+    const status = container.querySelector(".eisenhower-matrix__sr-status");
+    expect(status).not.toBeNull();
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+    // フォーカス受け皿（section が tabIndex=-1）＝カード消失時に body へ落とさない
+    const section = container.querySelector(".eisenhower-matrix--empty") as HTMLElement;
+    expect(section.tabIndex).toBe(-1);
+  });
+});

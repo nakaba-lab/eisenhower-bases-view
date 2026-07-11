@@ -501,6 +501,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
     : undefined;
   const handleToggleCompletion = toggleCompletionCallback
     ? (entryId: string, done: boolean) => {
+        // 完了トグルは move と**同じ UndoManager スロット**を上書きする（成功時）。残っている move の
+        // 「元に戻す」トーストは陳腐化し、その undo が move ではなく完了を巻き戻す（特に同一カードでは
+        // entryId ガードを通過する）ため、新しいドラッグ開始（handleDragStart）と同様にここで消す（レビュー指摘）。
+        dismissUndoToast();
         // タイトルは非同期解決の前に捕捉する（done:true は再クエリで entry が消え titleOf が id に退化しうる）。
         const title = titleOf(entryId);
         void toggleCompletionCallback(entryId, done).then(

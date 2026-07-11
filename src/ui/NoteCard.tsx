@@ -295,6 +295,15 @@ export function NoteCard({
   // Preact の div 属性型へ寄せて展開する（role/tabindex/aria-* とキーボード操作を付与＝AC5）。
   const dndAttributes = attributes as unknown as DivProps;
   const dndListeners = (listeners ?? {}) as unknown as DivProps;
+  // **dnd-kit は `aria-describedby` を設定する**（キーボード DnD の操作説明＝`screenReaderInstructions.draggable`
+  // ＋ #105 の `x` キー完了案内を指す隠しテキスト id）。自前のバッジ/滞留要約 id で**上書きすると**その操作説明が
+  // SR から消える（バッジ無しカードでは undefined で属性ごと消滅＝キーボード操作が発見不能になる回帰）。
+  // よって上書きではなく**両 id をスペース区切りで連結**する（`aria-describedby` は複数 id を許容・レビュー指摘 must）。
+  const dndDescribedBy = dndAttributes["aria-describedby"];
+  const describedByParts = [dndDescribedBy, describedBy].filter(
+    (part): part is string => typeof part === "string" && part.length > 0,
+  );
+  const mergedDescribedBy = describedByParts.length > 0 ? describedByParts.join(" ") : undefined;
   // KeyboardSensor の掴み（ドラッグ開始）listener。Enter 以外（Space 等）はこれへ委譲する。
   const dndKeyDown = dndListeners.onKeyDown;
 
@@ -387,10 +396,11 @@ export function NoteCard({
         // role="button" の非ロックカードのアクセシブル名を **title だけ**に固定する（レビュー指摘）。
         // 明示 aria-label が無いと accname の name-from-content で子（滞留バッジ・追加プロパティバッジ）が
         // 名前に流れ込み冗長化する（ロックカードは既に aria-label を持ち非対称だった）。バッジ/滞留の情報は
-        // aria-describedby（cardDescriptionNode）で補足として届ける。dndAttributes は aria-label/aria-describedby
-        // を含まないため spread の後に置いても衝突しない。
+        // aria-describedby で補足として届ける。**dndAttributes は aria-label は含まないが aria-describedby は
+        // 含む**（DnD 操作説明を指す）ため、上書きせず `mergedDescribedBy`（dnd の id＋自前の要約 id を連結）
+        // を渡す（spread の後に置いて後勝ちさせる＝レビュー指摘 must の回帰対策）。
         aria-label={entry.title}
-        aria-describedby={describedBy}
+        aria-describedby={mergedDescribedBy}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         onMouseEnter={handleMouseEnter}

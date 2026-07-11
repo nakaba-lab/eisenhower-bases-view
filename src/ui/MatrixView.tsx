@@ -145,6 +145,10 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // マトリクス領域の参照。トーストのボタンをキーボードで操作するとボタンが即アンマウントされ
   // フォーカスが body へ落ちるため、操作直後にこの安定した受け皿へフォーカスを戻す（a11y・レビュー指摘）。
   const matrixSectionRef = useRef<HTMLElement>(null);
+  // done:true 完了後、当該カードが Base フィルタで消えてフォーカスが body へ落ちたときだけ受け皿へ戻すため、
+  // 「消えたか」を再クエリ後（次の viewModel）に判定する保留（entryId＋目的 done）。dimCompleted をフィルタ有無の
+  // 代理に使うと『フィルタ無し＋dim 無し』でカードが残るのに焦点を奪う（レビュー指摘）ため、実際の存在で判定する。
+  const completionFocusPendingRef = useRef<{ entryId: string; done: boolean } | null>(null);
   // DragOverlay（position:fixed）の座標原点を、portal 先（body）の**実効的な包含ブロック原点**へ
   // 合わせて補正するためのオフセット。#43 の body portal は「body/html がビューポート原点 (0,0)」を
   // 前提に原点ずれを消すが、Obsidian のバージョン/OS/テーマによっては body や html に transform 等が
@@ -270,6 +274,44 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // 新しい viewModel（onDataUpdated 由来）が来たら、サーバ値が追いついた保留を解除する。
   useEffect(() => {
     reconcileNow();
+  }, [viewModel]);
+
+  // 完了(done:true)後の再クエリ（新 viewModel）で、当該カードが**実際に消えたか**を判定してフォーカスを扱う。
+  // 消えて（Base の done!=true フィルタ）フォーカスが body へ落ちたときだけ受け皿（section）へ戻し、カードが
+  // 残る構成（フィルタ無し）ではボタンにフォーカスを留める（dimCompleted 代理をやめ実存在で判定・レビュー指摘）。
+  // 書込 .then（microtask）で保留 entryId をセット→onDataUpdated（macrotask）の再描画後に本 effect が判定する。
+  useEffect(() => {
+    const pending = completionFocusPendingRef.current;
+    if (pending === null) return;
+    const entry = viewModel.entries.find((e) => e.id === pending.entryId);
+    if (entry === undefined) {
+      // カードが再クエリで消えた（Base の done!=true フィルタ）＝完了が反映された。フォーカスが body へ
+      // 落ちていれば受け皿（section）へ戻す（読み進め位置の喪失を防ぐ・WCAG 2.4.3）。判定後に保留を落とす。
+      completionFocusPendingRef.current = null;
+      const doc = matrixSectionRef.current?.ownerDocument;
+      if (doc && doc.activeElement === doc.body) matrixSectionRef.current?.focus();
+    } else if ((entry.completed ?? false) === pending.done) {
+      // カードが残ったまま再クエリで完了状態が反映された（フィルタ無し構成）＝フォーカスをボタンに留めて保留を落とす。
+      // まだ反映されていない（完了前の viewModel＝announce 再描画等）ときは保留を保ち、次の再クエリを待つ。
+      completionFocusPendingRef.current = null;
+    }
+  }, [viewModel]);
+
+  // 設定ミス警告バナー（両軸同一キー）が**動的に出現**したとき、その原因＋直し方を sr-status へ一度流す。
+  // バナー自体は role="note"（非ライブ）で自動読み上げされないため、ビューを開いたまま設定を壊した SR
+  // 利用者へ届かない（WCAG 4.1.3・レビュー指摘）。初回描画（前回値 null）では流さない＝初期表示は静か。
+  const prevSharedAxisRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const shared = viewModel.diagnostics?.axesShareWritableKey ?? false;
+    const prev = prevSharedAxisRef.current;
+    prevSharedAxisRef.current = shared;
+    if (prev === null) return; // 初期描画は announce しない（role=note の初期表示で足りる）
+    if (shared && !prev) {
+      const diagnostics = viewModel.diagnostics;
+      announce(
+        messages.diagSharedAxisWarning(diagnostics?.sharedAxisKey ?? diagnostics?.urgentAxis ?? ""),
+      );
+    }
   }, [viewModel]);
 
   const titleOf = (id: string): string =>
@@ -449,10 +491,18 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   if (viewModel.state === "empty") {
     return (
       <section
+        ref={matrixSectionRef}
         class="eisenhower-matrix eisenhower-matrix--empty"
         role="group"
         aria-label={messages.matrixLabel}
+        tabIndex={-1}
       >
+        {/* 完了トグル等の結果アナウンスとフォーカス受け皿を**空状態にも**持たせる: 推奨の done!=true
+            フィルタ下で最後の 1 枚を完了にすると空へ遷移するため、ready 分岐にしか sr-status/ref が無いと
+            完了アナウンスが読み上げられずフォーカスが body へ落ちる（WCAG 4.1.3/2.4.3・レビュー指摘）。 */}
+        <div class="eisenhower-matrix__sr-status" role="status" aria-live="polite">
+          {liveStatus}
+        </div>
         {diagnosticWarning}
         <p class="eisenhower-matrix__placeholder">{messages.empty}</p>
         {axisNames}
@@ -469,17 +519,74 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
   // ドラッグのような楽観オーバーレイは持たない（Bases 委譲＝最小実装）。
   const completionEnabled = viewModel.completionEnabled ?? false;
   const dimCompleted = viewModel.dimCompleted ?? false;
-  const completionLabel = (isCompleted: boolean) =>
-    isCompleted ? messages.completionToggleDone : messages.completionToggle;
+  // 完了ボタンの aria-label はノート名を含む（どのノートか SR で識別・レビュー指摘）。ラベルが操作を
+  // 表すため aria-pressed は付けない（NoteCard 側）。タイトルはカード単位のため NoteCard から渡される。
+  const completionLabel = (title: string, isCompleted: boolean) =>
+    isCompleted ? messages.completionToggleDone(title) : messages.completionToggle(title);
   // クロージャ内で narrow するためコールバックを const 捕捉する。完了トグルは楽観オーバーレイを
   // 持たない（カード状態は onDataUpdated 再描画で最新化）ため、書込失敗（アダプタが Notice 済み）の
   // reject は握りつぶして未処理 rejection を防ぐ（ロールバック対象が無い・レビュー指摘）。
   const toggleCompletionCallback = callbacks.onToggleCompletion;
+  // 非 boolean 完了値のカードへ x キー操作が来たら、保護中の旨を sr-status へ読み上げる（silent no-op を
+  // 避ける・レビュー指摘）。書き込みは起こさない（元値を破壊しない＝AC2）。完了機能が無効なら配線しない。
+  const handleCompletionUnsupported = toggleCompletionCallback
+    ? () => announce(messages.completionUnsupported)
+    : undefined;
   const handleToggleCompletion = toggleCompletionCallback
     ? (entryId: string, done: boolean) => {
-        void toggleCompletionCallback(entryId, done).catch(() => {});
+        // 完了トグルは move と**同じ UndoManager スロット**を上書きする（成功時）。残っている move の
+        // 「元に戻す」トーストは陳腐化し、その undo が move ではなく完了を巻き戻す（特に同一カードでは
+        // entryId ガードを通過する）ため、新しいドラッグ開始（handleDragStart）と同様にここで消す（レビュー指摘）。
+        dismissUndoToast();
+        // タイトルは非同期解決の前に捕捉する（done:true は再クエリで entry が消え titleOf が id に退化しうる）。
+        const title = titleOf(entryId);
+        void toggleCompletionCallback(entryId, done).then(
+          (written) => {
+            if (!mountedRef.current) return;
+            // 非 boolean 値を保護して書かなかった（TOCTOU）ときは「完了しました」ではなく「保護中」を読み上げる
+            //（aria-live へ偽成功を流さない・#4/WCAG 4.1.3）。書込は起きていないためフォーカスも動かさない。
+            if (!written) {
+              announce(messages.completionUnsupported);
+              return;
+            }
+            // 完了トグルの成否を、移動と同じ sr-status ライブ領域へ通知する（Obsidian の Notice は
+            // aria-live でなく SR に読まれないため、x キー経路の成否が無通知になるのを塞ぐ・#2/WCAG 4.1.3）。
+            // 結果状態（完了/未完了）を含めて読み上げる（move が象限を明示するのと対称・#3/WCAG 4.1.3）。
+            announce(messages.completionSucceeded(title, done));
+            // done:true は Base の done!=true フィルタで当該カードが再クエリ後に消えうる。消えるとフォーカスが
+            // body へ落ちるため受け皿（section）へ戻す。ただし**カードが残る構成では焦点をボタンに留める**必要が
+            // あり、dimCompleted はフィルタ有無の代理にならない（独立設定）ので、実際に消えたかを**再クエリ後の
+            // effect**で判定する（保留 entryId をセット・#3 の後段 useEffect・WCAG 2.4.3）。done:false は残るため対象外。
+            if (done) completionFocusPendingRef.current = { entryId, done };
+          },
+          () => {
+            if (!mountedRef.current) return;
+            announce(messages.completionFailed(title));
+          },
+        );
       }
     : undefined;
+  // 4 象限セルと未分類セルで**共通のカード関連 props を 1 箇所に集約**して両呼び出しへ spread する
+  //（両サイトに verbatim 重複させると、将来カード関連 prop を片方だけ足して未分類ゾーンのカードだけ挙動が
+  // 乖離する〔型エラー無し〕リスクがある・レビュー指摘）。サイト固有（quadrant/label/entries/variant/accentColor）
+  // のみ各呼び出しにインラインで残す。
+  const sharedCellProps = {
+    itemCountLabel: messages.itemCount,
+    lockedLabel: messages.cardLockedLabel,
+    stagnantBadge: messages.stagnantBadge,
+    stagnantLabel: messages.stagnantLabel,
+    badgeOverdueLabel: messages.badgeOverdue,
+    emptyText: messages.emptyQuadrant,
+    onOpenCard: callbacks.onOpenCard,
+    onHoverCard: callbacks.onHoverCard,
+    completionEnabled,
+    completionHint: messages.screenReaderCompletionHint,
+    completionLabel,
+    completionUnsupportedLabel: messages.completionUnsupportedLabel,
+    onToggleCompletion: handleToggleCompletion,
+    onCompletionUnsupported: handleCompletionUnsupported,
+    dimCompleted,
+  };
   return (
     <DndContext
       sensors={sensors}
@@ -488,7 +595,12 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
       onDragCancel={handleDragCancel}
       accessibility={{
         announcements,
-        screenReaderInstructions: { draggable: messages.screenReaderDraggable },
+        screenReaderInstructions: {
+          // 完了トグル有効時は x キーの操作説明を添える（カードフォーカス時に告知・レビュー指摘）。
+          draggable:
+            messages.screenReaderDraggable +
+            (completionEnabled ? " " + messages.screenReaderCompletionHint : ""),
+        },
       }}
     >
       <section
@@ -514,19 +626,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               label={quadrantLabels[key]}
               axisLabel={messages.axisLabels[key]}
               regionLabel={messages.labelWithAxis(quadrantLabels[key], messages.axisLabels[key])}
-              itemCountLabel={messages.itemCount}
-              lockedLabel={messages.cardLockedLabel}
-              stagnantBadge={messages.stagnantBadge}
-              stagnantLabel={messages.stagnantLabel}
               accentColor={quadrantColors?.[key]}
               entries={placements[key]}
-              emptyText={messages.emptyQuadrant}
-              onOpenCard={callbacks.onOpenCard}
-              onHoverCard={callbacks.onHoverCard}
-              completionEnabled={completionEnabled}
-              completionLabel={completionLabel}
-              onToggleCompletion={handleToggleCompletion}
-              dimCompleted={dimCompleted}
+              {...sharedCellProps}
             />
           ))}
         </div>
@@ -552,19 +654,9 @@ function MatrixView({ viewModel, callbacks }: MatrixViewProps) {
               messages.unclassifiedLabel,
               messages.unclassifiedAxisLabel,
             )}
-            itemCountLabel={messages.itemCount}
-            lockedLabel={messages.cardLockedLabel}
-            stagnantBadge={messages.stagnantBadge}
-            stagnantLabel={messages.stagnantLabel}
             entries={placements.unclassified}
-            emptyText={messages.emptyQuadrant}
             variant="unclassified"
-            onOpenCard={callbacks.onOpenCard}
-            onHoverCard={callbacks.onHoverCard}
-            completionEnabled={completionEnabled}
-            completionLabel={completionLabel}
-            onToggleCompletion={handleToggleCompletion}
-            dimCompleted={dimCompleted}
+            {...sharedCellProps}
           />
         )}
         {/* 移動成功直後の「元に戻す」トースト（undo・最小実装）。onUndoMove 配線時のみ。

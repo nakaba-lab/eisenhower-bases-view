@@ -2,8 +2,8 @@ import { PluginSettingTab, Setting, type App } from "obsidian";
 import type EisenhowerBasesViewPlugin from "./main";
 import { QUADRANT_KEYS } from "./logic/quadrant";
 import { messagesFor, resolveLanguage } from "./i18n";
-import { MAX_BADGE_PROPERTIES } from "./bases/readBadges";
-import { DEFAULT_STAGNATION_THRESHOLD_DAYS, type LanguageSetting } from "./settings";
+import { parseThresholdInput } from "./bases/stagnationThreshold";
+import { type LanguageSetting } from "./settings";
 
 /**
  * プラグイン設定タブ（#23 F6）。Obsidian 標準 `Setting` を使い `setHeading` で 4 区分
@@ -86,7 +86,8 @@ export class EisenhowerSettingTab extends PluginSettingTab {
         }),
       );
     // 滞留とみなす日数（0=オフ・#106 F9）。ビュー options 未設定時のグローバル既定。
-    // 非負整数のみ受け付け、不正入力は既定へフォールバックする（mergeSettings の読込側ガードと対称）。
+    // 空欄は「入力途中」であって無効化（0）でも既定復帰でもないため、空・非数値・負値は現在値を保持し、
+    // カスタム値を黙って既定（14）へ上書きしない（無効化は 0 を明示入力する・レビュー指摘）。
     new Setting(containerEl)
       .setName(messages.settings.stagnationName)
       .setDesc(messages.settings.stagnationDesc)
@@ -94,11 +95,10 @@ export class EisenhowerSettingTab extends PluginSettingTab {
         text
           .setValue(String(settings.stagnationThresholdDays))
           .onChange(async (value) => {
-            const parsed = Number.parseInt(value.trim(), 10);
-            settings.stagnationThresholdDays =
-              Number.isFinite(parsed) && parsed >= 0
-                ? parsed
-                : DEFAULT_STAGNATION_THRESHOLD_DAYS;
+            // 空欄・非数値・負値（null）は現在値を保持する（無効化は 0 を明示入力・純関数で単体固定）。
+            const days = parseThresholdInput(value);
+            if (days === null) return;
+            settings.stagnationThresholdDays = days;
             await this.plugin.saveSettings();
           }),
       );
@@ -112,13 +112,14 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           .setPlaceholder("note.due, note.tags")
           .setValue(settings.cardBadgeProperties.join(", "))
           .onChange(async (value) => {
-            // カンマ区切り→トリム→空除去→最大数で丸める（入口で正規化する。永続層の
-            // mergeStringArray は型フィルタのみのため、trim/空除去/丸めはここで行う）。
+            // 入口では**カンマ区切り→トリム→空除去のみ**行う。**重複除去と最大数の丸めは読み取り側の
+            // 権威的ガード `resolveBadgePropertyIds`（ビュー options も入力源になるため必須）に一本化**し、
+            // 同じ正規化を 2 箇所で二重管理しない（read 側が dedup→slice の順で行うため、ここで slice しても
+            // ならない＝重複が 1 枠を消費して別プロパティを押し出す。read へ委譲する・レビュー指摘）。
             settings.cardBadgeProperties = value
               .split(",")
               .map((item) => item.trim())
-              .filter((item) => item.length > 0)
-              .slice(0, MAX_BADGE_PROPERTIES);
+              .filter((item) => item.length > 0);
             await this.plugin.saveSettings();
           }),
       );

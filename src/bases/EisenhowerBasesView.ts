@@ -197,6 +197,11 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
 
     // 上書き前の両軸値を捕捉して undo 記録を組む（present/absent を区別・値は verbatim 保持）。
     // 書き込み成功後に UndoManager へ「直前 1 手」として保存する（undo・最小実装）。
+    // なお writeCompletion と違い、ここは非 boolean 実値の inline ガード（書込阻止）を持たない。これは
+    // 意図的な非対称: (1) 非 boolean 軸値のカードは render 時に hasUnsupportedAxisValue でロック＝ドラッグ
+    // 不可のため通常経路では到達しない。(2) 稀な in-flight ドラッグ中の外部書換で非 boolean 化しても、
+    // 上書き前の値をこの undo 記録が verbatim 捕捉するため復元可能。writeCompletion は undo を作らない
+    // ので元値保護を inline ガードで担う＝両経路は「undo 復元／書込阻止」で守り方が異なる（v0.2 レビュー）。
     let undoRecord: UndoRecord | null = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
@@ -229,7 +234,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
    * `UndoManager` へ「直前 1 手」として保存し、成功/失敗/非対応を `Notice` で通知する。完了ノートの
    * 表示/非表示は Base の `done != true` フィルタ（+ `onDataUpdated` 再クエリ）に委譲する。
    */
-  private async writeCompletion(entryId: string, done: boolean): Promise<void> {
+  private async writeCompletion(entryId: string, done: boolean): Promise<boolean> {
     const messages = this.getMessages();
     const completionKey = resolveCompletionKey(this.config, this.getSettings());
     if (completionKey === null) {
@@ -270,11 +275,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     }
     if (unsupported) {
       // 非 boolean を検出して書き込まなかった（元値を破壊していない）。undo 記録も作らない。
+      // `false`（＝保護・未書込）を返し、呼び出し側が「完了しました」ではなく「保護中」を通知できるようにする
+      //（aria-live へ偽成功を流さない・レビュー指摘）。
       new Notice(`Eisenhower Matrix: ${messages.completionUnsupported}`);
-      return;
+      return false;
     }
     if (undoRecord) this.undoManager?.record(undoRecord);
-    new Notice(`Eisenhower Matrix: ${messages.completionSucceeded(file.basename)}`);
+    new Notice(`Eisenhower Matrix: ${messages.completionSucceeded(file.basename, done)}`);
+    return true;
   }
 
   /**

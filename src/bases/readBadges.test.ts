@@ -101,6 +101,30 @@ describe("resolveBadgePropertyIds — ビュー options 主・設定デフォル
     expect(resolveBadgePropertyIds(null, settings)).toEqual(["note.a", "note.b", "note.c"]);
   });
 
+  it("resolveBadgePropertyIds — 同一プロパティの重複を除去する（options 経路・二重表示防止＝レビュー指摘）", () => {
+    // given: 2 スロットに同じ note.due を指定（同じバッジが 2 個出る設定ミス）
+    const config = mockConfig({
+      badgeProperty1: "note.due" as BasesPropertyId,
+      badgeProperty2: "note.due" as BasesPropertyId,
+    });
+    // when / then: 重複は 1 個に畳まれ、3 個枠を無駄に消費しない
+    expect(resolveBadgePropertyIds(config, DEFAULT_SETTINGS)).toEqual(["note.due"]);
+  });
+
+  it("resolveBadgePropertyIds — 設定デフォルト経路でも重複を除去し順序を保つ（レビュー指摘）", () => {
+    // given: 設定に重複を含む（丸めの前に dedup する＝重複で 3 枠が埋まらない）
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      cardBadgeProperties: ["note.due", "note.due", "note.tags", "note.project"],
+    };
+    // when / then: dedup 後に丸める＝note.due/note.tags/note.project の 3 個（順序保持）
+    expect(resolveBadgePropertyIds(null, settings)).toEqual([
+      "note.due",
+      "note.tags",
+      "note.project",
+    ]);
+  });
+
   it("resolveBadgePropertyIds — getAsPropertyId が throw しても落ちず既定/空へ倒す（Bases 境界防御）", () => {
     const throwingConfig = {
       getAsPropertyId: () => {

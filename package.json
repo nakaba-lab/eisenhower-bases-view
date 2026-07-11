@@ -1,6 +1,6 @@
 {
   "name": "eisenhower-bases-view",
-  "version": "0.1.7",
+  "version": "0.2.1",
   "description": "Display notes from a Base as an Eisenhower matrix and drag cards to update their properties.",
   "main": "main.js",
   "scripts": {

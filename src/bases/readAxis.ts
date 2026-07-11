@@ -44,6 +44,27 @@ function toNotePropertyId(name: string): BasesPropertyId {
   return `note.${name}` as BasesPropertyId;
 }
 
+/**
+ * churn 対象の Bases 接触点（`getAsPropertyId`／`getValue`／`config.get`）の失敗を、
+ * キー（propertyId／option キー）単位で**一度だけ** `console.error` する共有ヘルパ。
+ * `resolveAxisPropertyIds`／`toViewModel` は再描画毎に呼ばれるため、throw が続くと同一キーの
+ * ログでコンソールを埋める。log-once 規律を 1 箇所に集約し、各境界ガード（`safeGetAsPropertyId`／
+ * `readAxisValueSafely`／`readBadges` の `readBadgeText`／`stagnationThreshold` の `safeGetOption`）が
+ * これへ委譲することで、観測性ポリシーの変更（warn への格下げ・リセット等）が全接触点へ一斉に効く
+ *（レビュー指摘: 境界ガードの log-once 複製を単一化）。try/catch と戻り値センチネルは用途ごとに
+ * 異なるため各ガードに残し、**ログ方針だけ**を共有する。
+ */
+export function logChurnFailureOnce(
+  seen: Set<string>,
+  key: string,
+  message: string,
+  error: unknown,
+): void {
+  if (seen.has(key)) return;
+  seen.add(key);
+  console.error(`[Eisenhower Matrix] ${message}`, error);
+}
+
 /** `note.` 接頭辞。書き戻し可能なのはこの名前空間（frontmatter）のプロパティのみ。 */
 const NOTE_PROPERTY_PREFIX = "note.";
 
@@ -92,7 +113,7 @@ export function toFrontmatterKey(propertyId: BasesPropertyId): string | null {
  */
 const loggedGetAsPropertyIdFailures = new Set<string>();
 
-function safeGetAsPropertyId(
+export function safeGetAsPropertyId(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   key: string,
 ): BasesPropertyId | null {
@@ -100,10 +121,12 @@ function safeGetAsPropertyId(
   try {
     return config.getAsPropertyId(key);
   } catch (error) {
-    if (!loggedGetAsPropertyIdFailures.has(key)) {
-      loggedGetAsPropertyIdFailures.add(key);
-      console.error("[Eisenhower Matrix] config.getAsPropertyId failed; using default axis", error);
-    }
+    logChurnFailureOnce(
+      loggedGetAsPropertyIdFailures,
+      key,
+      "config.getAsPropertyId failed; using default axis",
+      error,
+    );
     return null;
   }
 }
@@ -163,30 +186,16 @@ export function resolveWritableAxisKeys(
  * `resolveWritableAxisKeys` の `urgent === important` ガードで毎回 `null`→Notice→ロールバックになる
  *（「掴めるのに必ず失敗する」壊れた UI 状態）。UI 側で当該ビューの全カードをドラッグ不可（`locked`）に
  * するために、`toViewModel` がこの述語で検出する（書き込み前ガードと対称の読み取り側ガード・レビュー指摘）。
+ *
+ * 2 軸の直接比較で判定する（両軸とも書き戻し可能な `note.*` で同一キー）。かつて N キー汎用ヘルパへ
+ * 一般化したが、本番は 2 キー固定のみ・軸×完了の衝突は {@link resolveCompletionId} が pairwise で別途
+ * 判定するため、汎用化は使われず YAGNI だった（v0.2 レビューで 2 軸直接比較へ戻した）。
  */
 export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
-  return firstSharedWritableKey([ids.urgent, ids.important]) !== null;
-}
-
-/**
- * 与えた propertyId 群のうち、**書込可能な `note.*` キーの最初の重複**を返す（無ければ null）。
- *
- * #105 で 2 軸固定の {@link axesShareWritableKey} を N キーへ一般化した。非 `note.*`
- *（`formula.*`／`file.*`）・`null` は書き戻せないため衝突対象外（`toFrontmatterKey` が `null`）。
- * 軸×軸（F7 診断）と軸×完了（F10・{@link resolveCompletionId}）の設定ミス検出を単一述語で共有する。
- */
-export function firstSharedWritableKey(
-  ids: readonly (BasesPropertyId | null | undefined)[],
-): string | null {
-  const seen = new Set<string>();
-  for (const id of ids) {
-    if (id == null) continue;
-    const key = toFrontmatterKey(id);
-    if (key === null) continue;
-    if (seen.has(key)) return key;
-    seen.add(key);
-  }
-  return null;
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  // 両軸とも書き戻し可能（非 null）で同一キーのときだけ衝突（非 note.* は書けないため衝突対象外）。
+  return urgent !== null && urgent === important;
 }
 
 /**
@@ -194,11 +203,16 @@ export function firstSharedWritableKey(
  * 設定デフォルト（`note.<completionProperty>`）。次のとき **`null`（機能オフ）**:
  * ① 未設定（`completionProperty` 空 かつ options 未設定）② 非 `note.*`（書き戻せない）
  * ③ 完了キーが緊急/重要軸のいずれかと同一（3 キー衝突ガード・AC3＝完了書き込みが軸値を巻き添えに壊す）。
+ *
+ * `axes` を渡すと 3 キー衝突ガードの軸解決に再利用する（`toViewModel` は既に `resolveAxisPropertyIds` を
+ * 済ませているため、渡さないと 1 レンダーで軸の `getAsPropertyId` を 2 度引く冗長解決になる・レビュー指摘）。
+ * 省略時は従来どおり内部で解決する（書き戻し経路 {@link resolveCompletionKey} は解決済み軸を持たないため）。
  */
-export function resolveCompletionId(
+function resolveCompletion(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   settings: EisenhowerSettings,
-): BasesPropertyId | null {
+  axes?: AxisPropertyIds,
+): { id: BasesPropertyId; key: string } | null {
   const fromConfig = safeGetAsPropertyId(config, COMPLETION_OPTION_KEY);
   const id =
     fromConfig ??
@@ -207,20 +221,34 @@ export function resolveCompletionId(
   const key = toFrontmatterKey(id);
   if (key === null) return null; // 非 note.*（formula/file）は書き戻せないので無効
   // 3 キー衝突ガード（AC3）: 完了キーが軸キーと同一なら無効（チェックボタンを出さない）。
-  const axes = resolveAxisPropertyIds(config, settings);
-  if (key === toFrontmatterKey(axes.urgent) || key === toFrontmatterKey(axes.important)) {
+  // 解決済み軸があれば再利用し、無ければ解決する（冗長な二重解決を避ける・レビュー指摘）。
+  const resolvedAxes = axes ?? resolveAxisPropertyIds(config, settings);
+  if (
+    key === toFrontmatterKey(resolvedAxes.urgent) ||
+    key === toFrontmatterKey(resolvedAxes.important)
+  ) {
     return null;
   }
-  return id;
+  return { id, key };
 }
 
-/** 完了プロパティの frontmatter 書き戻しキー（#105 F10）。無効時は `null`（{@link resolveCompletionId}）。 */
+export function resolveCompletionId(
+  config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
+  settings: EisenhowerSettings,
+  axes?: AxisPropertyIds,
+): BasesPropertyId | null {
+  return resolveCompletion(config, settings, axes)?.id ?? null;
+}
+
+/**
+ * 完了プロパティの frontmatter 書き戻しキー（#105 F10）。無効時は `null`（{@link resolveCompletionId}）。
+ * `id` から `key` を再計算せず、内部 `resolveCompletion` が検証時に組んだ `key` を再利用する（レビュー指摘）。
+ */
 export function resolveCompletionKey(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   settings: EisenhowerSettings,
 ): string | null {
-  const id = resolveCompletionId(config, settings);
-  return id === null ? null : toFrontmatterKey(id);
+  return resolveCompletion(config, settings)?.key ?? null;
 }
 
 /** 完了プロパティの読み取り結果（#105 F10）。 */
@@ -296,11 +324,13 @@ function readAxisValueSafely(entry: BasesEntry, id: BasesPropertyId): AxisReadRe
   try {
     return { ok: true, value: entry.getValue(id) };
   } catch (error) {
-    const key = id as unknown as string;
-    if (typeof key !== "string" || !loggedGetValueFailures.has(key)) {
-      if (typeof key === "string") loggedGetValueFailures.add(key);
-      console.error("[Eisenhower Matrix] entry.getValue failed", error);
-    }
+    const raw = id as unknown as string;
+    logChurnFailureOnce(
+      loggedGetValueFailures,
+      typeof raw === "string" ? raw : String(raw),
+      "entry.getValue failed",
+      error,
+    );
     return { ok: false };
   }
 }

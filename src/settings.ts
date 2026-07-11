@@ -6,6 +6,7 @@
  * #23（F6）で設定タブから編集する `language`／`quadrantLabels`／`quadrantColors` を追加した。
  */
 import { mapQuadrantKeys, type QuadrantKey } from "./logic/quadrant";
+import { toThresholdDays } from "./bases/stagnationThreshold";
 
 /** 表示言語の設定値。`auto` は Obsidian のアプリ言語に追従する（解決は `src/i18n.ts`）。 */
 export type LanguageSetting = "auto" | "en" | "ja";
@@ -71,9 +72,29 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   dimCompleted: false,
 };
 
-/** `loadData()` 由来の値を文字列だけの配列に整える（非配列は空・非文字列要素は捨てる。手編集の防御）。 */
+/**
+ * `loadData()` 由来の値を文字列だけの配列に整える（非配列は空・非文字列/空文字要素は捨てる。手編集の防御）。
+ * 空文字も落とす: 残すと `resolveBadgePropertyIds` の dedup→slice で 1 枠を消費し実プロパティが押し出される
+ *（`readBadges` のコメント「空は mergeSettings が弾き済み」の不変条件を永続層でも守る・レビュー指摘）。
+ */
 function mergeStringArray(raw: unknown): string[] {
-  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(raw)
+    ? raw
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        // 生き残る要素も**トリムする**（設定タブのライブ編集 `settingsTab` と同じ正規化を永続復元経路にも
+        // 適用＝手編集の " note.due " が propertyId 完全一致で解決されず無言で非表示になるのを防ぐ・レビュー指摘）。
+        .filter((item) => item.length > 0)
+    : [];
+}
+
+/**
+ * `loadData()` 由来の frontmatter プロパティ名（軸・完了）を復元する。**前後空白をトリムする**
+ *（設定タブの入力時トリム `settingsTab` と一致させ、手編集の `"done "` 等が propertyId 完全一致で解決されず
+ * 書き戻しが空白付きのゴミキー〔`frontmatter["done "]`〕へ流れるのを防ぐ・レビュー指摘）。非文字列は既定へ。
+ */
+function mergePropertyName(raw: unknown, fallback: string): string {
+  return typeof raw === "string" ? raw.trim() : fallback;
 }
 
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];
@@ -87,14 +108,12 @@ function isLanguageSetting(value: unknown): value is LanguageSetting {
 
 /**
  * `loadData()` 由来の滞留しきい値日数を検証して整数へ正規化する（欠損・不正値は既定へ）。
- * 有効値は「有限・0 以上の数値」で、小数は `floor` して整数日にする（`0` はオフの有効値）。
- * 負・非数値・NaN は手編集された `data.json` 等の不正値として既定（14）へフォールバックする。
+ * 正規化規則は options 解決側と共有の {@link toThresholdDays}（有限・0 以上・小数は floor・`0` はオフ）。
+ * 不正（負・非数値・NaN）は `null` が返るため手編集された `data.json` 等の不正値として既定（14）へ倒す。
+ * `toThresholdDays(0)` は `0` を返し `0 ?? DEFAULT === 0`（`??` は `0` を保持）＝オフ設定は既定に潰れない。
  */
 function mergeStagnationThresholdDays(raw: unknown): number {
-  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) {
-    return Math.floor(raw);
-  }
-  return DEFAULT_STAGNATION_THRESHOLD_DAYS;
+  return toThresholdDays(raw) ?? DEFAULT_STAGNATION_THRESHOLD_DAYS;
 }
 
 /** `loadData()` 由来の Record<QuadrantKey,string> を既定（空文字）で補完する（欠損キー対策）。 */
@@ -116,14 +135,14 @@ function mergeQuadrantRecord(raw: unknown): Record<QuadrantKey, string> {
 export function mergeSettings(loaded: unknown): EisenhowerSettings {
   const data = (loaded ?? {}) as Partial<Record<keyof EisenhowerSettings, unknown>>;
   return {
-    defaultUrgencyProperty:
-      typeof data.defaultUrgencyProperty === "string"
-        ? data.defaultUrgencyProperty
-        : DEFAULT_SETTINGS.defaultUrgencyProperty,
-    defaultImportanceProperty:
-      typeof data.defaultImportanceProperty === "string"
-        ? data.defaultImportanceProperty
-        : DEFAULT_SETTINGS.defaultImportanceProperty,
+    defaultUrgencyProperty: mergePropertyName(
+      data.defaultUrgencyProperty,
+      DEFAULT_SETTINGS.defaultUrgencyProperty,
+    ),
+    defaultImportanceProperty: mergePropertyName(
+      data.defaultImportanceProperty,
+      DEFAULT_SETTINGS.defaultImportanceProperty,
+    ),
     showUnclassified:
       typeof data.showUnclassified === "boolean"
         ? data.showUnclassified
@@ -139,10 +158,10 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
       typeof data.emphasizePastDates === "boolean"
         ? data.emphasizePastDates
         : DEFAULT_SETTINGS.emphasizePastDates,
-    completionProperty:
-      typeof data.completionProperty === "string"
-        ? data.completionProperty
-        : DEFAULT_SETTINGS.completionProperty,
+    completionProperty: mergePropertyName(
+      data.completionProperty,
+      DEFAULT_SETTINGS.completionProperty,
+    ),
     dimCompleted:
       typeof data.dimCompleted === "boolean"
         ? data.dimCompleted

@@ -63,7 +63,8 @@ function NoteBadges({ badges }: { badges: NonNullable<MatrixEntry["badges"]> }) 
  *（完了時は常時可視・CSS）。クリック（またはカードフォーカス中の `x` キー）で完了をトグルする。
  * click-to-open と `PointerSensor(distance:5)` に対し `stopPropagation` して開く/掴むと衝突させない
  *（AC5）。非 boolean 完了値（`unsupported`）は `disabled` で押下を塞ぎ元値を守る（AC2）。
- * アイコンは装飾（`aria-hidden`）で、状態別 `aria-label` と `aria-pressed` を SR に届ける。
+ * アイコンは装飾（`aria-hidden`）で、状態別 `aria-label`（ノート名＋操作）を SR に届ける。完了状態は
+ * `is-completed` クラス（可視）で示し、`aria-pressed` は付けない（APG のトグル指針＝可変ラベルとの併用を避ける）。
  */
 function CompletionButton({
   completed,

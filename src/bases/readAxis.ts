@@ -199,9 +199,10 @@ export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
 }
 
 /**
- * 完了プロパティ（#105 F10）の propertyId を解決する（opt-in）。ビュー options（config）主・
- * 設定デフォルト（`note.<completionProperty>`）。次のとき **`null`（機能オフ）**:
- * ① 未設定（`completionProperty` 空 かつ options 未設定）② 非 `note.*`（書き戻せない）
+ * 完了プロパティ（#105 F10）の propertyId を解決する（既定 `done`＝初期状態で有効・空で opt-out）。
+ * ビュー options（config）主・設定デフォルト（`note.<completionProperty>`）。次のとき **`null`（機能オフ）**:
+ * ① 空（`completionProperty` を明示的に空へ＝opt-out。既定は `done`）かつ options 未設定
+ * ② 非 `note.*`（書き戻せない）
  * ③ 完了キーが緊急/重要軸のいずれかと同一（3 キー衝突ガード・AC3＝完了書き込みが軸値を巻き添えに壊す）。
  *
  * `axes` を渡すと 3 キー衝突ガードの軸解決に再利用する（`toViewModel` は既に `resolveAxisPropertyIds` を
@@ -217,7 +218,7 @@ function resolveCompletion(
   const id =
     fromConfig ??
     (settings.completionProperty ? toNotePropertyId(settings.completionProperty) : null);
-  if (id === null) return null; // 未設定＝opt-in オフ
+  if (id === null) return null; // 空＝無効（既定 done を明示的に空へ＝opt-out）
   const key = toFrontmatterKey(id);
   if (key === null) return null; // 非 note.*（formula/file）は書き戻せないので無効
   // 3 キー衝突ガード（AC3）: 完了キーが軸キーと同一なら無効（チェックボタンを出さない）。

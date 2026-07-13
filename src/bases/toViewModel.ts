@@ -114,7 +114,7 @@ export function toViewModel(
   // 軸解決と診断は notes 有無に依らず行う（空状態でも軸名・設定ミスを提示する＝#103 F7）。
   const ids = resolveAxisPropertyIds(config, settings);
   const diagnostics = buildDiagnostics(ids);
-  // カード上の完了トグル（#105 F10）: 完了プロパティを解決する（opt-in・非 note.*/軸衝突は null＝無効）。
+  // カード上の完了トグル（#105 F10）: 完了プロパティを解決する（既定 done で有効・非 note.*/軸衝突/明示空は null＝無効）。
   // 有効なら UI がチェックボタンを描画する（completionEnabled）。null のときは機能オフ。
   // 解決済み ids を渡して 3 キー衝突ガードの軸再解決（1 レンダーでの二重解決）を避ける（レビュー指摘）。
   const completionId = resolveCompletionId(config, settings, ids);

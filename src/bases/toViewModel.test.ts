@@ -754,11 +754,21 @@ describe("toViewModel — カード上の完了トグル（#105 F10）", () => {
     ...over,
   });
 
-  it("toViewModel — 完了プロパティ未設定（既定）は completionEnabled を立てず、カードに完了状態を付けない（opt-in）", () => {
-    // given: 既定（completionProperty=""）
+  it("toViewModel — 既定（completionProperty='done'）は completionEnabled=true・done:true に completed を付ける（初期状態で有効）", () => {
+    // given: 既定（completionProperty="done" ＝初期状態で有効）
     const entries = [completionEntry("done.md", new BooleanValue(true))];
     // when
     const viewModel = toViewModel(entries, null, DEFAULT_SETTINGS);
+    // then: 既定で機能オン＝チェックボタンを描画・done:true は completed
+    expect(viewModel.completionEnabled).toBe(true);
+    expect(viewModel.entries[0].completed).toBe(true);
+  });
+
+  it("toViewModel — completionProperty を明示的に空にすると機能オフ（opt-out）", () => {
+    // given: 利用者が完了プロパティを明示的に空へ（既定 done を無効化）
+    const entries = [completionEntry("done.md", new BooleanValue(true))];
+    // when
+    const viewModel = toViewModel(entries, null, withCompletion({ completionProperty: "" }));
     // then: 機能オフ＝チェックボタンを出さない・completed も付かない
     expect(viewModel.completionEnabled).toBeFalsy();
     expect(viewModel.entries[0].completed).toBeUndefined();

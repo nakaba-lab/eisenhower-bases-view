@@ -153,26 +153,31 @@ describe("mergeSettings — カード追加プロパティ表示の設定（#104
 });
 
 describe("mergeSettings — カード上の完了トグルの設定（#105 F10）", () => {
-  it("DEFAULT_SETTINGS — 既定は完了プロパティ空（機能オフ＝opt-in）・淡色表示オフ", () => {
-    expect(DEFAULT_SETTINGS.completionProperty).toBe("");
+  it("DEFAULT_SETTINGS — 既定は完了プロパティ done（初期状態で有効）・淡色表示オフ", () => {
+    expect(DEFAULT_SETTINGS.completionProperty).toBe("done");
     expect(DEFAULT_SETTINGS.dimCompleted).toBe(false);
   });
 
-  it("mergeSettings — 空オブジェクト・レガシー data.json でも完了設定を既定で埋める", () => {
+  it("mergeSettings — 空オブジェクト・レガシー data.json でも完了設定を既定（done）で埋める", () => {
     const merged = mergeSettings({});
-    expect(merged.completionProperty).toBe("");
+    expect(merged.completionProperty).toBe("done");
     expect(merged.dimCompleted).toBe(false);
-    // F9 時代の data.json（完了フィールドを持たない）でも補完される
-    expect(mergeSettings({ stagnationThresholdDays: 30 }).completionProperty).toBe("");
+    // F9 時代の data.json（完了フィールドを持たない）でも既定 done で補完される
+    expect(mergeSettings({ stagnationThresholdDays: 30 }).completionProperty).toBe("done");
   });
 
-  it("mergeSettings — completionProperty を保存値から復元（プロパティ名文字列）", () => {
-    expect(mergeSettings({ completionProperty: "done" }).completionProperty).toBe("done");
+  it("mergeSettings — completionProperty を保存値から復元（既定と別のプロパティ名で保存値優先を確認）", () => {
+    expect(mergeSettings({ completionProperty: "completed" }).completionProperty).toBe("completed");
   });
 
-  it("mergeSettings — completionProperty の非文字列は既定（空文字＝オフ）へフォールバック", () => {
-    expect(mergeSettings({ completionProperty: 42 }).completionProperty).toBe("");
-    expect(mergeSettings({ completionProperty: null }).completionProperty).toBe("");
+  it("mergeSettings — 明示的な空文字は尊重して機能オフを維持（既定 done への変更後も opt-out を壊さない）", () => {
+    // 既定を done にしても、利用者が明示的に空へした設定は上書きせず無効のまま残す（移行保護）。
+    expect(mergeSettings({ completionProperty: "" }).completionProperty).toBe("");
+  });
+
+  it("mergeSettings — completionProperty の非文字列は既定（done）へフォールバック", () => {
+    expect(mergeSettings({ completionProperty: 42 }).completionProperty).toBe("done");
+    expect(mergeSettings({ completionProperty: null }).completionProperty).toBe("done");
   });
 
   it("mergeSettings — dimCompleted を保存値から復元・不正値は既定 false", () => {

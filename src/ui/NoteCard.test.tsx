@@ -334,7 +334,7 @@ describe("NoteCard — カード上の完了トグル（#105 F10 AC1/AC4/AC5）"
     expect(screen.getByRole("button", { name: "「タスクA」を完了にする" })).toBeTruthy();
   });
 
-  it("NoteCard_完了プロパティ無効時_チェックボタンを描画しない（opt-in）", () => {
+  it("NoteCard_完了プロパティ無効時_チェックボタンを描画しない（completionEnabled 未指定＝無効）", () => {
     // given / when: completionEnabled を渡さない
     render(<NoteCard entry={completionEntry()} onToggleCompletion={vi.fn()} />);
     // then

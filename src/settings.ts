@@ -39,8 +39,10 @@ export interface EisenhowerSettings {
   emphasizePastDates: boolean;
   /**
    * カード上の完了トグル（#105 F10）の完了プロパティ名（boolean の `note.*`）。
-   * 既定は空文字＝**機能オフの opt-in**（例 `done`）。ビュー options 未設定時のデフォルト
-   *（軸プロパティと同じハイブリッド）。空・非 boolean・軸と同一キーは実行時に無効化される。
+   * 既定は `done`＝**初期状態で有効**（軸プロパティが `urgent`/`important` を既定に持つのと同型で、
+   * 設定なしでもカードに完了ボタンが出る）。ビュー options 未設定時のデフォルト（軸プロパティと同じ
+   * ハイブリッド）。**明示的に空文字にすると機能オフ（opt-out）**。空・非 boolean・軸と同一キーは
+   * 実行時に無効化される。
    */
   completionProperty: string;
   /**
@@ -68,7 +70,7 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   stagnationThresholdDays: DEFAULT_STAGNATION_THRESHOLD_DAYS,
   cardBadgeProperties: [],
   emphasizePastDates: false,
-  completionProperty: "",
+  completionProperty: "done",
   dimCompleted: false,
 };
 

@@ -133,7 +133,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
-    // カード上の完了トグル（#105 F10）: 完了プロパティ名（boolean note.*・空で無効＝opt-in）。
+    // カード上の完了トグル（#105 F10）: 完了プロパティ名（boolean note.*・既定 `done`＝初期有効・空で無効化＝opt-out）。
     // 完了ノートの表示/非表示は Base の done!=true フィルタに委譲する（README 参照）。ビュー options が主。
     new Setting(containerEl)
       .setName(messages.settings.completionName)

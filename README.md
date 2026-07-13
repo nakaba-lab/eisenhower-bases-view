@@ -22,9 +22,9 @@ _The interface language follows Obsidian automatically, or can be forced to Engl
 
 ### Daily operation (v0.2)
 
-These are all **off / empty by default**, so cards look and behave exactly as before until you opt in.
+Property badges are **off / empty by default** (unchanged until you opt in); the completion toggle and the stagnation indicator are **on by default** (completion writes the `done` property; stagnation flags cards idle for more than 14 days), while the setup diagnostics surface only on misconfiguration. All are configurable — or can be disabled — in settings.
 
-- **Completion toggle** — set a boolean *completion property* (e.g. `done`) in settings. When set, each card shows a check button; click it (or press `x` while the card is focused) to write `done: true` without opening the note. Let a Base filter decide whether finished notes disappear: add **`done != true`** to the Base and completed cards drop out automatically; if you keep them, the "dim completed notes" option marks them instead. Toggling flips completion on/off, and the last toggle can be reverted with the same **Undo** as a drag. Cards whose completion property holds a non-boolean value (e.g. a date) disable the check to protect the existing value.
+- **Completion toggle** — each card shows a check button (the *completion property* defaults to the boolean `done`; change it to another boolean property or clear it in settings to disable). Click it (or press `x` while the card is focused) to write `done: true` without opening the note. Let a Base filter decide whether finished notes disappear: add **`done != true`** to the Base and completed cards drop out automatically; if you keep them, the "dim completed notes" option marks them instead. Toggling flips completion on/off, and the last toggle can be reverted with the same **Undo** as a drag. Cards whose completion property holds a non-boolean value (e.g. a date) disable the check to protect the existing value.
 - **Property badges** — show up to 3 read-only badges (due date, tags, project, …) under each card title, chosen per view (with a settings default). Because they're read-only, `formula` and `file.*` properties can be shown too. An optional toggle emphasizes due-like values (`YYYY-MM-DD` on or before today).
 - **Stagnation indicator** — cards untouched for longer than a threshold (14 days by default; change, or disable with 0, in the settings tab) get a subtle stagnation badge (clock icon + elapsed days). It is a read-only marker based on last-modified time (`mtime`), so automated processing (Linters, Templater, sync) also resets it — noted in the settings.
 - **Setup diagnostics** — if you assign the same property to both axes (which locks every card 🔒), an in-view banner explains the cause and the fix. A one-line hint also shows which urgency / importance properties are currently resolving the classification when everything falls to Uncategorized.
@@ -61,9 +61,9 @@ Obsidian の Bases（コアのデータベース機能）の**カスタムビュ
 
 ### 日常運用（v0.2）
 
-いずれも**既定はオフ / 空**なので、オプトインするまでカードの見た目・挙動は従来どおり。
+追加プロパティバッジは**既定オフ（空）**でオプトインするまで従来どおり。完了トグルと滞留インジケータは**既定で有効**（完了トグル＝プロパティ `done`、滞留＝14 日）で、診断バナーは設定ミス時のみ出る。いずれも設定で変更・無効化できる。
 
-- **完了トグル** — 設定で boolean の*完了プロパティ*（例 `done`）を指定すると、各カードにチェックボタンが出る。クリック（またはカードにフォーカス中に `x` キー）でノートを開かずに `done: true` を書き込める。完了ノートを消すか残すかは Base 側のフィルタに委ねる方針で、Base に **`done != true`** を張れば完了カードは自動で消える。残す場合は「完了ノートを淡色表示」オプションで目印にできる。チェックは押すたびに完了 / 未完了を切り替えられ、直前の 1 手はドラッグ移動と同じ**「元に戻す」**で戻せる。完了プロパティが日付など boolean 以外の値を持つカードは、既存の値を守るためチェックを無効化する。
+- **完了トグル** — 各カードにチェックボタンが出る（*完了プロパティ*は既定で boolean の `done`。設定で別の boolean プロパティ名に変えたり、空にして無効化できる）。クリック（またはカードにフォーカス中に `x` キー）でノートを開かずに `done: true` を書き込める。完了ノートを消すか残すかは Base 側のフィルタに委ねる方針で、Base に **`done != true`** を張れば完了カードは自動で消える。残す場合は「完了ノートを淡色表示」オプションで目印にできる。チェックは押すたびに完了 / 未完了を切り替えられ、直前の 1 手はドラッグ移動と同じ**「元に戻す」**で戻せる。完了プロパティが日付など boolean 以外の値を持つカードは、既存の値を守るためチェックを無効化する。
 - **追加プロパティバッジ** — カードのタイトル下に、期日・タグ・プロジェクトなどを**読み取り専用のバッジ**で最大 3 個表示できる（ビューごと＋設定で既定を選択）。読み取り専用なので数式や `file.*` 系プロパティも表示できる。期日らしい値（`YYYY-MM-DD` で今日以前）を強調するトグルも用意した。
 - **滞留インジケータ** — 最終更新から一定日数（既定 14 日・設定タブで変更、0 で無効）を超えて動いていないカードに、控えめな滞留バッジ（時計アイコン＋経過日数）を付ける。最終更新日時（`mtime`）に基づく読み取り専用の目印で、Linter・Templater・同期などの自動処理でも更新日時はリセットされる点に注意（設定画面に明記）。
 - **設定ミス診断バナー** — 緊急度軸と重要度軸に同じプロパティを割り当てて全カードが移動不可（🔒）になったとき、原因と直し方をビュー内バナーで説明する。全ノートが未分類に落ちたときは、いまどの緊急度 / 重要度プロパティで分類しているかを 1 行で示す。

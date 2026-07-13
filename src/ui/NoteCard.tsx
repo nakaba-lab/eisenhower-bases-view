@@ -155,7 +155,7 @@ export interface NoteCardProps {
   badgeOverdueLabel?: string;
   /**
    * 完了トグル（#105 F10）が有効か。true のときのみカードにチェックボタンを描画し、`x` キーでトグルする
-   *（`MatrixViewModel.completionEnabled` を上流から渡す）。省略/false のときはボタンを出さない（opt-in）。
+   *（`MatrixViewModel.completionEnabled` を上流から渡す）。省略/false のときはボタンを出さない（完了プロパティは既定 `done`＝初期有効・空で無効化）。
    */
   completionEnabled?: boolean;
   /**

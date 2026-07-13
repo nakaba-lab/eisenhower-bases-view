@@ -3,7 +3,7 @@ title: Bases アダプタ層 設計
 area: bases
 status: active
 relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106]
-updated: 2026-07-13
+updated: 2026-07-14
 kind: api
 ---
 
@@ -203,7 +203,7 @@ interface UndoRecord { entryId; title; entries: UndoEntry[]; … }
 - **挙動を変えない内部リファクタ**（2 軸移動＝2 要素で従来と同一の復元）。既存 `undo.test.ts`／`undoWriteBack` の振る舞いを保ちつつ、新規に「単一キー完了トグルの undo」テストを足す。#93 多段 undo・#88 数値軸・#98 複数選択の共通基盤になる（今回は 1 手保持のまま）。
 - **却下**（設計オプション比較）: ① 基盤 Issue 先行切り出し＝#105 が直列依存でブロック・プロセス増／③ 完了トグル専用の別 undo＝2 機構が「直前 1 手」を奪い合い drift・#93/#88/#98 で結局一般化が要る。2 つ目の具体ユースケース（#105）を得た今が一般化の好機、かつ #105 を自己完結（`> 依存:` 追加なし）に保てる本案（②→採択の① 本 Issue 内一般化）を採る。
 
-**3 キー衝突ガード（AC3）**: 完了プロパティが緊急/重要のどちらかと同一 `note.*` キーだと、完了書き込みが軸値を巻き添えに壊す/象限が飛ぶ。**軸×軸の衝突は `axesShareWritableKey(ids)` が 2 軸を直接比較**（両軸とも書込可能な `note.*` で同一キー＝F7 診断バナーの経路）、**軸×完了の衝突は `resolveCompletionId` が pairwise `===` 比較**（完了キー == 緊急キー or == 重要キー）で検出し `null` を返して**完了トグルを静かに無効化**する（チェックボタンを出さない）。※#105 で一時 N キー版 `firstSharedWritableKey` へ一般化したが、本番は 2 キー固定・軸×完了は pairwise（`[u,i,c]` の 3 要素重複判定では `u===i` のとき完了が別キーでも無効化され意味が異なる＝単純置換不可）で N 化が使われなかったため、v0.2 レビューで 2 軸直接比較へ戻した。`resolveCompletionId(config, settings, axes?)` は**解決済み軸を任意引数で受け取り、衝突判定に再利用する**（`toViewModel` は既に `resolveAxisPropertyIds` を済ませているため、渡さないと 1 レンダーで軸の `getAsPropertyId` を 2 度引く冗長解決になる・v0.2 レビュー。省略時は従来どおり内部解決＝書き戻し経路 `resolveCompletionKey` は解決済み軸を持たないため）。`resolveCompletionId`／`resolveCompletionKey` は**内部 `resolveCompletion`（`{ id, key }` を 1 度だけ組む）へ委譲**し、`key` を `id` から再計算しない（`resolveCompletionId` が検証時に組んだ `key` を `resolveCompletionKey` が再利用・v0.2 レビュー）。**実行時の Notice/診断バナーは持たない**（全カードをロックする軸×軸の設定ミスと違い影響が opt-in 機能に限定されるため）＝設定ミスの気づきは設定タブの説明文（`completionDesc`＝軸と同一キー不可）で config 時に伝える（`ui.md` 同名節）。
+**3 キー衝突ガード（AC3）**: 完了プロパティが緊急/重要のどちらかと同一 `note.*` キーだと、完了書き込みが軸値を巻き添えに壊す/象限が飛ぶ。**軸×軸の衝突は `axesShareWritableKey(ids)` が 2 軸を直接比較**（両軸とも書込可能な `note.*` で同一キー＝F7 診断バナーの経路）、**軸×完了の衝突は `resolveCompletionId` が pairwise `===` 比較**（完了キー == 緊急キー or == 重要キー）で検出し `null` を返して**完了トグルを静かに無効化**する（チェックボタンを出さない）。※#105 で一時 N キー版 `firstSharedWritableKey` へ一般化したが、本番は 2 キー固定・軸×完了は pairwise（`[u,i,c]` の 3 要素重複判定では `u===i` のとき完了が別キーでも無効化され意味が異なる＝単純置換不可）で N 化が使われなかったため、v0.2 レビューで 2 軸直接比較へ戻した。`resolveCompletionId(config, settings, axes?)` は**解決済み軸を任意引数で受け取り、衝突判定に再利用する**（`toViewModel` は既に `resolveAxisPropertyIds` を済ませているため、渡さないと 1 レンダーで軸の `getAsPropertyId` を 2 度引く冗長解決になる・v0.2 レビュー。省略時は従来どおり内部解決＝書き戻し経路 `resolveCompletionKey` は解決済み軸を持たないため）。`resolveCompletionId`／`resolveCompletionKey` は**内部 `resolveCompletion`（`{ id, key }` を 1 度だけ組む）へ委譲**し、`key` を `id` から再計算しない（`resolveCompletionId` が検証時に組んだ `key` を `resolveCompletionKey` が再利用・v0.2 レビュー）。**実行時の Notice/診断バナーは持たない**（全カードをロックする軸×軸の設定ミスと違い影響が（完了プロパティを軸と同一キーに設定した利用者に）限定されるため）＝設定ミスの気づきは設定タブの説明文（`completionDesc`＝軸と同一キー不可）で config 時に伝える（`ui.md` 同名節）。
 
 **非 boolean 完了値のガード（`isUnsupportedAxisValue` 流用・AC2）**: Obsidian は完了を日付型（`completed: 2026-07-06`）で持つ運用が多く、非 boolean への `true` 上書きはデータ破壊。完了キー軸の値を `readAxisValueSafely`＋`isUnsupportedAxisValue` で判定し、非 boolean（`getValue` の throw も安全側で）なら `MatrixEntry.completionUnsupported=true` を立てて UI がチェックボタンを**無効化**（押下＝書き込み経路自体を塞ぐ）。既存 `isUnsupportedOnWritableAxis`（軸ロック）と同型の per-card 判定を完了キーにも敷く。
 

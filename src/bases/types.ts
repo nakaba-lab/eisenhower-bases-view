@@ -116,7 +116,7 @@ export interface MatrixViewModel {
   diagnostics?: MatrixDiagnostics;
   /**
    * カード上の完了トグル（#105 F10）が有効か（完了プロパティが書き戻し可能 `note.*` に解決＝
-   * チェックボタンを描画する）。省略/false のとき UI はチェックボタンを出さない（opt-in）。
+   * チェックボタンを描画する）。省略/false のとき UI はチェックボタンを出さない（完了プロパティは既定 `done`＝初期状態で有効・空で無効化）。
    */
   completionEnabled?: boolean;
   /** 完了ノートをカードで淡色表示するか（設定 `dimCompleted` の反映・#105 F10）。 */

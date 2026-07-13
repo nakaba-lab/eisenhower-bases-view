@@ -3,7 +3,7 @@ title: UI 設計
 area: ui
 status: active
 relatedIssues: [18, 19, 20, 22, 23, 33, 34, 43, 44, 103, 104, 105, 106]
-updated: 2026-07-13
+updated: 2026-07-14
 kind: ui
 ---
 
@@ -382,7 +382,7 @@ stateDiagram-v2
   完了ノートを淡色表示       [ ──○ OFF ]     ← #105。Base に done!=true を張らない人向け
 ```
 
-**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle(title)`／`completionToggleDone(title)`＝「「タスクA」を完了にする」/「未完了に戻す」＝ノート名を含む・367 行）・押下結果アナウンス（`completionSucceeded(title, done)`＝結果状態〔完了/未完了〕を含む／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。**軸同一キーの衝突（3 キーガード）は実行時 Notice/診断バナーを持たず、`resolveCompletionKey` が `null` を返して静かに完了トグルを無効化する**（＝チェックボタンを出さない）。設定ミスの気づきは**設定タブの説明文**（`completionDesc`＝「軸と同じプロパティは指定できません」/ "Can't be the same as an axis property"）で config 時に伝える（opt-in 機能の設定衝突は影響が限定的なため、全ロック時の F7 診断バナーのような実行時提示は持たない）。
+**i18n（`src/i18n.ts` 拡張・両言語で欠けなし＝`i18n.test.ts`・AC6）**: チェックボタンの状態別ラベル（`completionToggle(title)`／`completionToggleDone(title)`＝「「タスクA」を完了にする」/「未完了に戻す」＝ノート名を含む・367 行）・押下結果アナウンス（`completionSucceeded(title, done)`＝結果状態〔完了/未完了〕を含む／`completionFailed(title)`）・非 boolean 弾き Notice（`completionUnsupported`）・設定行（`completionName`/`completionDesc`/`dimCompletedName`/`dimCompletedDesc`）・Configure view セレクタ displayName（`completionOption`）を en/ja に追加する。**軸同一キーの衝突（3 キーガード）は実行時 Notice/診断バナーを持たず、`resolveCompletionKey` が `null` を返して静かに完了トグルを無効化する**（＝チェックボタンを出さない）。設定ミスの気づきは**設定タブの説明文**（`completionDesc`＝「軸と同じプロパティは指定できません」/ "Can't be the same as an axis property"）で config 時に伝える（完了×軸の設定衝突は利用者が完了プロパティを軸と同一キーに設定した場合に限られ影響が限定的なため、全ロック時の F7 診断バナーのような実行時提示は持たない）。
 
 **ViewModel 追加（契約の正は `bases.md`）**: `MatrixEntry.completed?`（`done:true`＝淡色＋☑ 状態）・`MatrixEntry.completionUnsupported?`（非 boolean done＝ボタン無効）、`MatrixViewModel.completionEnabled?`（完了プロパティが有効に解決＝チェックボタンを描画）・`dimCompleted?`（淡色オプション）。`MatrixCallbacks.onToggleCompletion?(entryId, done)`。
 

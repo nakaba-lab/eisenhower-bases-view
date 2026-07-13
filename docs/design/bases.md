@@ -3,7 +3,7 @@ title: Bases アダプタ層 設計
 area: bases
 status: active
 relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106]
-updated: 2026-07-11
+updated: 2026-07-13
 kind: api
 ---
 
@@ -182,7 +182,7 @@ sequenceDiagram
 
 Do のライフサイクル（分類→着手→完了）をビュー内で閉じる。完了は **boolean 単一プロパティ書き込み**で v1 の「boolean 軸限定」制約と同じ型面に収まり、既存の書き戻し（`writeBackAxes`）・locked 機構・境界防御をそのまま流用する。
 
-**完了プロパティの解決（軸と同型のハイブリッド）**: 設定 `completionProperty: string`（既定 `""`＝機能オフの opt-in）＋ビュー option `COMPLETION_OPTION_KEY = "completionProperty"`。**設定の読込（`mergeSettings`）は書き戻しに使うプロパティ名（軸・完了）を `mergePropertyName` で前後トリム**する（設定タブの入力時トリムと一致させ、手編集 data.json の `"done "` 等が propertyId 完全一致で解決されず `frontmatter["done "]` のような空白付きゴミキーへ書き込まれるのを防ぐ・v0.2 レビュー）。`resolveCompletionKey(config, settings)` が `config.getAsPropertyId` 主・設定デフォルトで解決し、**書き戻し可能な `note.<key>` のみ**（`isWritableAxisProperty` を共有）frontmatter キーを返す。空・非 `note.*`・軸と衝突（下記 3 キーガード）なら `null`＝機能無効（チェックボタンを出さない）。Configure view セレクタは `buildCompletionViewOption(messages)`（`buildAxisViewOptions` と同型・`filter: isWritableAxisProperty`）。
+**完了プロパティの解決（軸と同型のハイブリッド）**: 設定 `completionProperty: string`（**既定 `"done"`＝初期状態で有効**。軸が `urgent`/`important` を既定に持つのと同型で、設定なしでも完了ボタンが出る。明示的な空文字で opt-out）＋ビュー option `COMPLETION_OPTION_KEY = "completionProperty"`。**設定の読込（`mergeSettings`）は書き戻しに使うプロパティ名（軸・完了）を `mergePropertyName` で前後トリム**する（設定タブの入力時トリムと一致させ、手編集 data.json の `"done "` 等が propertyId 完全一致で解決されず `frontmatter["done "]` のような空白付きゴミキーへ書き込まれるのを防ぐ・v0.2 レビュー）。`resolveCompletionKey(config, settings)` が `config.getAsPropertyId` 主・設定デフォルトで解決し、**書き戻し可能な `note.<key>` のみ**（`isWritableAxisProperty` を共有）frontmatter キーを返す。空・非 `note.*`・軸と衝突（下記 3 キーガード）なら `null`＝機能無効（チェックボタンを出さない）。Configure view セレクタは `buildCompletionViewOption(messages)`（`buildAxisViewOptions` と同型・`filter: isWritableAxisProperty`）。
 
 **単一キー書き戻し（`writeCompletion`）**: `EisenhowerBasesView.writeCompletion(entryId, done)` が `resolveCompletionKey` でキーを解決し、共通 `resolveTargetFile` で `TFile` を解決、`processFrontMatter(file, fm => { …capture…; fm[key] = done })` で**単一 boolean を明示書き込み**（`true`⇄`false`・`delete` しない＝AC1/AC4）。`onDataUpdated` 自動再発火で反映。失敗は `Notice`＋reject（UI は楽観状態をロールバック）。読み取り（`getValue`）とは別系統なのは既存書き戻しと同じ。
 

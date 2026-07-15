@@ -354,9 +354,9 @@ flowchart LR
 - **流用（変更なし）** `src/logic/undo.ts`（`AxisWrite`／`UndoEntry`／`buildUndoEntries`）・`src/logic/quadrant.ts`（象限ロジック）。
 - アダプタ（`src/bases/*`）・UI（`src/ui/*`）は #120 のスコープ外（UI 変更なし＝`frontend-reviewer` 対象外）。数値/選択/タグ各軸のアダプタ配線は後続 L2。
 
-## 数値しきい値軸アダプタ配線（#121 v0.3-1a・`status: draft`）
+## 数値しきい値軸アダプタ配線（#121 v0.3-1a・`status: active`）
 
-> **実装前設計の draft（2026-07-15・#121 で `AskUserQuestion` により設計承認済み）**。本節は v0.3 の数値しきい値軸の **読み取り/表示（locked 段階）**（#121 1a）を、#120 の純ロジック（`interpretAxis`）にアダプタ（`src/bases`）を配線する設計。**書き戻し（ドラッグ解禁）＋undo は #122 1b** のスコープ。実装完了後に本節を現状へ確定し `status: draft`→`active` に更新する。
+> **#121 を実装し `status: active` に確定した（2026-07-15・人間承認済み）**。本節は v0.3 の数値しきい値軸の **読み取り/表示（locked 段階）**（#121 1a）を、#120 の純ロジック（`interpretAxis`）にアダプタ（`src/bases`）を配線した現状の設計。**書き戻し（ドラッグ解禁）＋undo は #122 1b** のスコープ。実装中に確定した論点（`ErrorValue` 未 export → 未対応型の既定ロックで吸収）は下記「主要な設計判断」に記録した。
 
 ### 責務（このユニットは何をするか）
 
@@ -392,14 +392,14 @@ flowchart TD
 - **`Number(v.toString())` で読む（公開 API・`.data` に非依存）**: `NumberValue` は `instanceof` で判定し `Number(value.toString())` で数値化する（churn 耐性＝内部 `.data` に触れない・Issue 明記の S0）。非有限（`NaN`/`±Inf`）は `interpretAxis` の number 分岐が `undefined/locked` に落とす。
 - **kind-aware locked 述語**: v1 の `isUnsupportedAxisValue`（非 boolean を一律ロック）を、上記の読み取り経路が返す per-axis `AxisReading.locked` に置き換え、`hasUnsupportedAxisValue` 相当をカード単位で合流させる（`readAxisValues` と 2 度読みしていた getValue を 1 経路へ寄せる方向で整理）。`ErrorValue`・`getValue` throw は安全側ロック（AC2）。
 
-### 新規/変更モジュール（#121・予定）
+### 新規/変更モジュール（#121・実装済み）
 
-- **変更** `src/bases/readAxis.ts`＝`toAxisRaw`（`Value`→`AxisRaw` の `instanceof` 振り分け）と、`interpretAxis` へ配線した per-axis 読み取り（`side`＋`locked` を返す）。`isUnsupportedAxisValue`/`hasUnsupportedAxisValue` を kind-aware 化。`NumberValue`・`ErrorValue` を obsidian から値 import（esbuild external）。
+- **変更** `src/bases/readAxis.ts`＝`toAxisRaw`（`Value`→`AxisRaw` の `instanceof` 振り分け）と、`interpretAxis` へ配線した per-axis 読み取り（`side`＋`locked` を返す）。`isUnsupportedAxisValue`/`hasUnsupportedAxisValue` を kind-aware 化。`NumberValue`・`StringValue` を obsidian から値 import（esbuild external）。**`ErrorValue` は obsidian 1.13.x が型定義を export しない（`getValue` の JSDoc が `@link ErrorValue` と言及するのみ）ため import/`instanceof` せず、`toAxisRaw` が既知型（Boolean/Number/String/Null）に一致しない Value を一律「未対応＝ロック」に倒すことで実機の ErrorValue も安全側で吸収する（#121 実装中に確定・下記「主要な設計判断」）。**
 - **新規** `src/bases/numberThreshold.ts`（滞留 `stagnationThreshold.ts` と対称）＝`URGENT_NUMBER_THRESHOLD_OPTION_KEY`/`IMPORTANT_NUMBER_THRESHOLD_OPTION_KEY`・`toNumberThreshold(raw): number|null`（finite のみ有効）・`resolveNumberThresholds(config, settings)`。
 - **変更** `src/settings.ts`＝`defaultUrgencyThreshold`/`defaultImportanceThreshold`（`string`・既定 `""`＝オフ）を追加し `mergeSettings` に復元規律を足す。
 - **変更** `src/settingsTab.ts`＝しきい値のグローバル既定入力（主動線・滞留の入力と同型。parse は単体固定）。
 - **変更** `src/bases/toViewModel.ts`＝`resolveNumberThresholds` を 1 度解決し読み取りへ注入（全カード共通）。
-- **変更** `src/test-support/obsidianStub.ts`＝`ErrorValue` を追加（`NumberValue` は既存。`toString()` が実機表現＝数値文字列を返すこと・`instanceof` 成立を担保。AC4）。
+- **変更** `src/test-support/obsidianStub.ts`＝`ErrorValue` を追加（`NumberValue` は既存。`NumberValue.toString()` が数値文字列を返し `Number(v.toString())` で読み戻せること・`instanceof` 成立を担保。AC4）。**`ErrorValue` は「アダプタが特定認識しない未対応 Value 型の代表」**として置き、テストは stub から直接 import して default-lock を検証する（obsidian が実 `ErrorValue` を export しないため「stub＝実機の同値性」は他 Value 型と同じく単体では検証不能＝`scripts/e2e` 側の限界を踏襲）。
 - **UI（`src/ui/*`）は変更なし**＝locked 表示は既存 `NoteCard` locked を流用（`frontend-reviewer` 対象外の見込み。差分に `src/ui` が入らないことを「ビジュアル/UX 確認」タスクで `git diff --name-only` で確認）。
 
 ### 主要な設計判断（現行の理由）
@@ -410,6 +410,7 @@ flowchart TD
 - **per-axis しきい値（global 単一にしない）**: 緊急度と重要度は別の数値規約（例: 期日までの日数 / 優先度スコア）を取りうるため、軸名（`defaultUrgencyProperty`/`defaultImportanceProperty`）が per-axis なのに合わせ、しきい値も per-axis にする。
 - **GUI コントロール未登録（`.base` 手置き＋設定既定が主動線）**: 滞留しきい値 v1 と同じ割り切り。Bases の数値オプション round-trip 実機スパイク後に GUI を別途足す（CLAUDE.md「着手前スパイク必須」）。
 - **`Number(v.toString())`（公開 API・`.data` 非依存）**: churn 対象の内部表現に触れず、`instanceof NumberValue`＋文字列化で数値を得る（S0 確定）。
+- **未対応 Value 型は既定でロック（`ErrorValue` を含む・#121 実装中に確定）**: obsidian 1.13.x は `ErrorValue`（formula エラー等の値）の型定義を export しない（`getValue` の JSDoc が `@link ErrorValue` と言及するのみで実クラスは未 export）。ゆえに production は `ErrorValue` を import/`instanceof` できない。`toAxisRaw` は既知型（Boolean/Number/String/Null）のみを振り分け、**それ以外（実機の `ErrorValue`・`ListValue`・`DateValue`・`ObjectValue`・未知の新型すべて）を一律「未対応＝安全側ロック（未分類＋ドラッグ不可）」に倒す**。これで AC2 の「`ErrorValue` は安全側ロック」を、脆い名前判定（`constructor.name`＝#33 の教訓で minify に弱い）に頼らず churn 耐性を保って満たす。tag（`ListValue`）は #125 でこの既定ロックから正の許可リストへ引き上げる。`AskUserQuestion` で確認済み（#121・2026-07-15）。
 
 ### テスト方針（TDD 対象）
 

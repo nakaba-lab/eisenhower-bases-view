@@ -154,6 +154,14 @@ export interface SettingsMessages {
   urgencyDesc: string;
   importanceName: string;
   importanceDesc: string;
+  /** 緊急度しきい値（数値軸）設定の名前（#121 v0.3-1a）。 */
+  urgencyThresholdName: string;
+  /** 緊急度しきい値設定の説明（`value >= しきい値` で緊急側・空で無効・1a は表示のみ＝ドラッグ不可・#121）。 */
+  urgencyThresholdDesc: string;
+  /** 重要度しきい値（数値軸）設定の名前（#121 v0.3-1a）。 */
+  importanceThresholdName: string;
+  /** 重要度しきい値設定の説明（#121）。 */
+  importanceThresholdDesc: string;
   displayHeading: string;
   showUnclassifiedName: string;
   showUnclassifiedDesc: string;
@@ -252,6 +260,12 @@ const JA: Messages = {
     urgencyDesc: "ビュー未設定時に使う緊急度軸の frontmatter プロパティ名。",
     importanceName: "重要度プロパティ",
     importanceDesc: "ビュー未設定時に使う重要度軸の frontmatter プロパティ名。",
+    urgencyThresholdName: "緊急度しきい値（数値軸）",
+    urgencyThresholdDesc:
+      "緊急度軸を数値で判定するときのしきい値（値がこの値以上なら緊急側）。空で無効（boolean 軸のまま）。数値軸のカードは現在ドラッグできません（表示のみ・書き戻しは今後対応）。ビュー未設定時のデフォルト。",
+    importanceThresholdName: "重要度しきい値（数値軸）",
+    importanceThresholdDesc:
+      "重要度軸を数値で判定するときのしきい値（値がこの値以上なら重要側）。空で無効。数値軸のカードは現在ドラッグできません（表示のみ）。ビュー未設定時のデフォルト。",
     displayHeading: "表示",
     showUnclassifiedName: "欠損ノートを未分類に表示",
     showUnclassifiedDesc: "軸プロパティを持たないノートを未分類ゾーンに表示する。",
@@ -358,6 +372,12 @@ const EN: Messages = {
     urgencyDesc: "Frontmatter property for the urgency axis when the view has none set.",
     importanceName: "Importance property",
     importanceDesc: "Frontmatter property for the importance axis when the view has none set.",
+    urgencyThresholdName: "Urgency threshold (numeric axis)",
+    urgencyThresholdDesc:
+      "Threshold for treating the urgency axis as numeric (urgent when the value is at or above it). Empty disables it (stays a boolean axis). Numeric-axis cards can't be dragged yet (display only; write-back is coming). Default when the view has none set.",
+    importanceThresholdName: "Importance threshold (numeric axis)",
+    importanceThresholdDesc:
+      "Threshold for treating the importance axis as numeric (important when the value is at or above it). Empty disables it. Numeric-axis cards can't be dragged yet (display only). Default when the view has none set.",
     displayHeading: "Display",
     showUnclassifiedName: "Show notes with missing axes as unclassified",
     showUnclassifiedDesc: "Show notes without axis properties in the unclassified zone.",

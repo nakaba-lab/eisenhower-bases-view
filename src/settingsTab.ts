@@ -73,6 +73,27 @@ export class EisenhowerSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+    // 数値しきい値軸（#121 v0.3-1a）: 空＝未設定（boolean 軸のまま）。設定すると当該軸の数値を
+    // value>=threshold で配置する（数値軸カードは 1a では表示のみ＝ドラッグ不可・書き戻しは #122 1b）。
+    // 設定は raw 文字列で持ち（"" = オフ）、数値解釈は resolveNumberThresholds に一本化する（プロパティ名入力と同型）。
+    new Setting(containerEl)
+      .setName(messages.settings.urgencyThresholdName)
+      .setDesc(messages.settings.urgencyThresholdDesc)
+      .addText((text) =>
+        text.setValue(settings.defaultUrgencyThreshold).onChange(async (value) => {
+          settings.defaultUrgencyThreshold = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
+    new Setting(containerEl)
+      .setName(messages.settings.importanceThresholdName)
+      .setDesc(messages.settings.importanceThresholdDesc)
+      .addText((text) =>
+        text.setValue(settings.defaultImportanceThreshold).onChange(async (value) => {
+          settings.defaultImportanceThreshold = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
 
     // ▸ 表示
     new Setting(containerEl).setName(messages.settings.displayHeading).setHeading();

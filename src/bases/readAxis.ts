@@ -404,6 +404,8 @@ export function readAxisReadings(
 /**
  * 1 エントリの両軸の**配置側**（absent を区別した {@link AxisValues}）を返す。数値しきい値軸は
  * `thresholds` を渡すと `value >= threshold` で配置側へ、未指定（既定）は boolean 軸扱い（v1・#34 回帰）。
+ * 本番の描画経路（`toViewModel`）は {@link readAxisReadings} を直接使い**配置側とロックを 1 度に**得る＝
+ * 本関数は「配置側だけ」を要する呼び出し・boolean 回帰テスト向けの薄い委譲（単一情報源は `readAxisReadings`）。
  */
 export function readAxisValues(
   entry: BasesEntry,
@@ -436,6 +438,8 @@ export function isUnsupportedAxisValue(value: Value | null): boolean {
  * UI（`NoteCard`）でドラッグ不可にし、ドロップの両軸上書きによるデータ破壊・未実装経路を封じる。真に absent・
  * boolean のカードは `false`（ドラッグして分類できる）。判定は {@link readAxisReadings} に一本化する（配置側の
  * 解釈と同じ経路＝二重管理を無くす）。`thresholds` 未指定は boolean 軸扱い（v1・#34 の回帰）。
+ * 本番の描画経路（`toViewModel`）は {@link readAxisReadings} の `locked` を直接見る＝本関数は「ロックだけ」を
+ * 要する呼び出し・回帰テスト向けの薄い委譲（単一情報源は `readAxisReadings`）。
  */
 export function hasUnsupportedAxisValue(
   entry: BasesEntry,

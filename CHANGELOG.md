@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 内部整理（挙動不変）: 軸を boolean 固定から一般化する純ロジック基盤（`AxisSpec`／`AxisRaw`／`interpretAxis`／`planAxisWrite`＝`src/logic/axis.ts`）を追加した。数値/選択/タグ軸の土台で、利用者向けの挙動変更はない（軸タイプが出荷される段で利用者向け文言を追記する）。
+
 ## [0.2.2] - 2026-07-14
 
 ### Changed

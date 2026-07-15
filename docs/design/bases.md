@@ -2,7 +2,7 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120]
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 124]
 updated: 2026-07-15
 kind: api
 ---
@@ -353,6 +353,64 @@ flowchart LR
 - **新規** `src/logic/axis.test.ts`＝§3.3 表（kind×raw のテーブル駆動 27＋非有限 3）・planAxisWrite の null 温存/代表値/tag add-remove（非破壊）/boolean 挙動不変を赤→緑で固定（計 50 ケース）。
 - **流用（変更なし）** `src/logic/undo.ts`（`AxisWrite`／`UndoEntry`／`buildUndoEntries`）・`src/logic/quadrant.ts`（象限ロジック）。
 - アダプタ（`src/bases/*`）・UI（`src/ui/*`）は #120 のスコープ外（UI 変更なし＝`frontend-reviewer` 対象外）。数値/選択/タグ各軸のアダプタ配線は後続 L2。
+
+## 同一キーガードの kind-aware 化（タグ軸基盤・#124・`status: active`）
+
+> **#124（v0.3-3a）で `axesShareWritableKey` を kind を考慮した判定へ改修し `status: active` に確定した（2026-07-15・実装前設計で人間承認済み）**。親 #3「タグ軸の成立条件」に寄与。依存 #120（AxisSpec 基盤）。タグ軸の本命ユースケース「`tags` 1 本に urgent/important の 2 タグ」は**同一キー・異 tagName だが合法**で、現行の 2 軸キー直接比較ガードが設定ミスとして全面ブロックしてしまう問題を解く（外すとタグ軸の価値が半減する）。
+
+### 責務（このユニットは何をするか）
+
+両軸が同一の書き戻し可能 `note.*` キーを指す「設定ミス」検出（`axesShareWritableKey`＝`toViewModel` が全カードをロックする読み取り側ガード）を、**kind＋tagName を考慮した判定**に一般化する。boolean/number/select は「同一キー＝設定ミス」を維持し、**tag×tag は同一キーでも tagName が異なれば合法**（ロックしない）。純度の高い述語（`readAxis.ts`）で、既存の 3 キー衝突ガード（軸×完了＝`resolveCompletionId` の pairwise 判定）とは独立・非回帰に保つ。
+
+### 判定規則（同一キー時の kind×tagName 表）
+
+**前提**: 両軸とも書き戻し可能な `note.*`（`toFrontmatterKey` が非 null）で**同一キー**のときだけ以下を評価する。キーが異なる／片方でも非 `note.*`（`formula.*`／`file.*`＝`toFrontmatterKey` が `null`）なら衝突対象外＝`false`（書けない軸は別ガードが弾く＝現行不変）。
+
+| urgent kind ＼ important kind | tag（同 tagName） | tag（異 tagName） | boolean/number/select |
+|---|---|---|---|
+| **tag（同 tagName）** | **衝突（true）**・AC2 | — | — |
+| **tag（異 tagName）** | — | **合法（false）**・AC1 | — |
+| **boolean/number/select** | — | — | **衝突（true）**・AC3 回帰 |
+
+- **合法は tag∧tag∧異 tagName のときだけ**（決定・人間承認）。それ以外の同一キー（tag×tag×同 tagName／非 tag 同 kind／**異 kind 同一キー**〔例 tag×boolean〕）は**全て衝突**＝ロック。frontmatter の 1 キーは 1 値型しか持てず共存不能で、タグ配列の別タグ同居だけが唯一の安全な共有形だから。
+- **tagName の一致は完全一致・大文字小文字を区別**（決定・人間承認）。`interpretAxis` の `raw.value.includes(spec.tag)`（完全一致・大小区別）と同一意味論に揃え、ガードと解釈層の乖離を防ぐ。
+
+### 設計方式（採択案 A: AxisSpec を渡す・optional・boolean 既定）
+
+`axesShareWritableKey` を **AxisSpec（`src/logic/axis.ts` の正準型・kind＋tag を持つ）を任意引数で受け取る**形へ拡張する。spec 省略時は両軸 boolean 既定として扱い、**既存の boolean 呼び出し（`buildDiagnostics(ids)`）は挙動不変**（同一キー boolean → 従来どおり衝突）。
+
+```ts
+// 拡張後シグネチャ（案 A）。specs 省略時は {kind:"boolean"} 既定＝現行呼び出しは無改修で挙動不変。
+export function axesShareWritableKey(
+  ids: AxisPropertyIds,
+  specs: { urgent: AxisSpec; important: AxisSpec } = {
+    urgent: { kind: "boolean" },
+    important: { kind: "boolean" },
+  },
+): boolean {
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  if (urgent === null || urgent !== important) return false; // 異キー／非 note.* は衝突対象外
+  // 同一の書き戻し可能キー: tag∧tag∧異 tagName のみ合法、他は全て衝突。
+  if (specs.urgent.kind === "tag" && specs.important.kind === "tag") {
+    return specs.urgent.tag === specs.important.tag; // 同 tagName→衝突 / 異 tagName→合法
+  }
+  return true; // 非 tag 同一キー（異 kind 含む）は衝突
+}
+```
+
+### 主要な設計判断（現行の理由）
+
+- **採択 A（AxisSpec を渡す）・却下 B/C**: kind/tagName の**真実源を `AxisSpec` に一本化**し、将来のアダプタ側 AxisSpec 解決器（後続 v0.3 L2）が確定した spec をそのまま渡せる形にする。**却下 B（最小 `{key,kind,tagName}` ディスクリプタ）**＝ AxisSpec の kind/tag と重複する並行型が増え、解決器の出力（AxisSpec）から射影する変換が要る。**却下 C（N 軸汎用 kind-aware ヘルパ）**＝ v0.2 で「本番 2 キー固定・YAGNI」として `firstSharedWritableKey` を撤去した判断（本節上流・`resolveCompletionId` 節）に逆行。**2 軸直接比較を維持**する。
+- **optional・boolean 既定で非回帰**: 現行 call site（`toViewModel.buildDiagnostics`）は propertyId しか持たず、アダプタ側の AxisSpec 解決はまだ無い（後続 L2）。spec 省略＝両軸 boolean 既定にすることで、本 Issue は**述語のみを kind-aware 化**し、boolean 固定の現行経路を無改修・挙動不変に保つ（タグ軸の合法化は単体テストが述語を直接叩いて先行検証）。
+- **完了トグルの 3 キー衝突ガードと独立・非回帰**: 軸×完了は引き続き `resolveCompletionId` の pairwise `===` 比較が担う（本 Issue は触らない）。`axesShareWritableKey` は軸×軸のみを判定するという役割分担を維持する。
+- **書き込み側との対称化は後続 L2（前方整合の注意）**: 本 Issue は**読み取り側**述語 `axesShareWritableKey` のみを kind-aware 化した。**書き込み側** `resolveWritableAxisKeys` は kind 非依存で同一キーを一律 `null`（ブロック）のまま（出荷軸 boolean では両者が等価なため現時点は不整合なし）。タグ軸アダプタを配線する後続 L2 では、書き込み側も tag×tag×異 tagName を合法化（別タグの add/remove を許す）よう同期しないと、読み取り側 unlock・書き込み側は必ず失敗という「掴めるのに必ず失敗する」状態を書き込み側で再現する。この書き込み側 kind-aware 化を**後続 L2 の作業項目**とする（コード側は `readAxis.ts` の両述語 docstring に前方注意を明記済み）。
+
+### 新規/変更モジュール（#124・実装済み）
+
+- **変更** `src/bases/readAxis.ts`＝`axesShareWritableKey` を AxisSpec 任意引数付き（`specs` 省略時は両軸 boolean 既定）・kind-aware 判定へ拡張（`AxisSpec` を `../logic/axis` から `import type`）。2 軸直接比較は維持。
+- **変更** `src/bases/readAxis.test.ts`＝AC1（tag×tag×異 tagName→false）・AC2（tag×tag×同 tagName→true）・AC3 回帰（boolean/number/select 同一キー→true）・異 kind 同一キー→true（対称）・tagName 大小区別→false・異キー→false・非 note.* →false・specs 省略の挙動不変→true の 10 ケースを赤→緑固定。
+- **不変** `src/bases/toViewModel.ts`（`buildDiagnostics` は `axesShareWritableKey(ids)` を boolean 既定で呼び続ける＝挙動不変）・`src/logic/axis.ts`（`AxisSpec` 型を流用・変更なし）・UI（UI 変更なし＝`frontend-reviewer` 対象外）。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

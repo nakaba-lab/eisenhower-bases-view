@@ -32,10 +32,10 @@ export class NullValue {
 
 /**
  * boolean 軸の値（実機 `BooleanValue extends PrimitiveValue<boolean>` 相当・#34）。
- * v1 は boolean 軸限定のため、`readAxis.normalizeAxis` は **`instanceof BooleanValue` の値だけ**
- * を `isTruthy()` で boolean 化する。`readAxis.ts` が値 import する型はこのスタブへ解決される。
- * ⚠️ 単体では「スタブ＝実機の BooleanValue」の同値性は検証できない（`NullValue` と同型の限界。
- * 実機での `instanceof BooleanValue` 成立は `scripts/e2e` の placements 検証で担保する）。
+ * `readAxis.toAxisRaw` が `instanceof BooleanValue` を boolean 軸として振り分け、`interpretAxis` が
+ * `isTruthy()` で配置側を決める（配置・非ロック＝#34 の挙動を #121 でも維持）。`readAxis.ts` が値 import する
+ * 型はこのスタブへ解決される。⚠️ 単体では「スタブ＝実機の BooleanValue」の同値性は検証できない（`NullValue` と
+ * 同型の限界。実機での `instanceof BooleanValue` 成立は `scripts/e2e` の placements 検証で担保する）。
  */
 export class BooleanValue {
   constructor(private readonly value: boolean) {}
@@ -48,8 +48,10 @@ export class BooleanValue {
 }
 
 /**
- * 数値軸の値（実機 `NumberValue extends PrimitiveValue<number>` 相当・#34 の型ガード検証用）。
- * v1 boolean 軸限定では非 boolean のため未分類へ退避される（`instanceof BooleanValue` に一致しない）。
+ * 数値軸の値（実機 `NumberValue extends PrimitiveValue<number>` 相当）。#121 v0.3-1a で数値しきい値軸の一次値に
+ * なり、`readAxis.toAxisRaw` が公開 API `Number(toString())` で数値化し `interpretAxis` が `value >= threshold` で
+ * 配置側を決める（1a では常に locked）。threshold 未設定の軸では未分類へ退避する（`instanceof BooleanValue` 不一致）。
+ * `toString()` は数値文字列を返し `Number()` で読み戻せる（非有限も round-trip する）実機表現に合わせる。
  */
 export class NumberValue {
   constructor(private readonly value: number) {}
@@ -62,8 +64,10 @@ export class NumberValue {
 }
 
 /**
- * 文字列軸の値（実機 `StringValue extends PrimitiveValue<string>` 相当・#34 の型ガード検証用）。
- * v1 boolean 軸限定では非 boolean のため未分類へ退避される（`instanceof BooleanValue` に一致しない）。
+ * 文字列軸の値（実機 `StringValue extends PrimitiveValue<string>` 相当・#34／#121 の型ガード検証用）。
+ * boolean/数値いずれの軸 spec でも型不一致のため `readAxis` は未分類＋ロックへ倒す（`instanceof BooleanValue`
+ * 不一致・`toAxisRaw` は string へ振り分け→boolean spec で locked）。select 軸（文字列 trueValue/falseValue）は
+ * 後続 L2（#123）で正の許可リストへ引き上げる。
  */
 export class StringValue {
   constructor(private readonly value: string) {}
@@ -72,6 +76,24 @@ export class StringValue {
   }
   isTruthy(): boolean {
     return this.value.length > 0;
+  }
+}
+
+/**
+ * formula エラー等を表す値（実機 `ErrorValue` 相当・#121 v0.3-1a）。数値しきい値軸では
+ * 「present だが解釈できない値」として**安全側でロック**（未分類＋ドラッグ不可）に落とす対象。
+ * `readAxis.toAxisRaw` は既知の Value 型（Boolean/Number/String/Null）に一致しないものを一律
+ * 「未対応＝ロック」に倒すため、本スタブは他の Value 型と `instanceof` で区別できれば足りる。
+ * ⚠️ スタブ＝実機の同値性は単体では検証不能（`NullValue`/`NumberValue` と同型の限界。実機表現の
+ * 追随は `scripts/e2e` のプローブで担保する）。
+ */
+export class ErrorValue {
+  constructor(private readonly message: string = "error") {}
+  toString(): string {
+    return this.message;
+  }
+  isTruthy(): boolean {
+    return false;
   }
 }
 

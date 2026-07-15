@@ -50,6 +50,15 @@ export interface EisenhowerSettings {
    * 張らない利用者向けの表示のみのオプション（消す/残すの本体は Bases 委譲）。
    */
   dimCompleted: boolean;
+  /**
+   * 緊急度軸を**数値しきい値軸**として扱うときのしきい値（#121 v0.3-1a）。**空文字＝未設定（数値軸オフ・
+   * v1 の boolean 軸挙動を維持）**。設定時は当該軸の `NumberValue` を `value >= threshold` で緊急側へ配置する
+   * （数値軸カードは 1a では常に locked＝表示のみ・書き戻しは #122 1b）。ビュー options 未設定時のグローバル
+   * 既定（軸プロパティ・滞留と同じハイブリッド）。`0` は有効なしきい値のため、オフは別 sentinel（空文字）で表す。
+   */
+  defaultUrgencyThreshold: string;
+  /** 重要度軸の数値しきい値（#121 v0.3-1a）。**空文字＝未設定**。設定時は `value >= threshold` で重要側へ配置。 */
+  defaultImportanceThreshold: string;
 }
 
 /** 全象限を空文字で初期化した Record（ラベル/色の既定＝「未カスタム」を表す）。 */
@@ -72,6 +81,8 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   emphasizePastDates: false,
   completionProperty: "done",
   dimCompleted: false,
+  defaultUrgencyThreshold: "",
+  defaultImportanceThreshold: "",
 };
 
 /**
@@ -97,6 +108,18 @@ function mergeStringArray(raw: unknown): string[] {
  */
 function mergePropertyName(raw: unknown, fallback: string): string {
   return typeof raw === "string" ? raw.trim() : fallback;
+}
+
+/**
+ * `loadData()` 由来の数値しきい値（#121 v0.3-1a）を文字列へ整える。設定は string（`""`＝未設定＝オフ）で
+ * 持ち、前後空白をトリムする（設定タブのライブ編集と一致させる）。手編集で number が入っていても文字列へ
+ * 寄せ（`3`→`"3"`）、非文字列・非数値（オブジェクト等）や欠損は既定（空文字＝オフ）へ倒す。実際の数値解釈は
+ * 解決側 `numberThreshold.toNumberThreshold`（有限数のみ有効・空/不正は未設定）に一本化する。
+ */
+function mergeThresholdString(raw: unknown): string {
+  if (typeof raw === "string") return raw.trim();
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+  return "";
 }
 
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];
@@ -168,5 +191,7 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
       typeof data.dimCompleted === "boolean"
         ? data.dimCompleted
         : DEFAULT_SETTINGS.dimCompleted,
+    defaultUrgencyThreshold: mergeThresholdString(data.defaultUrgencyThreshold),
+    defaultImportanceThreshold: mergeThresholdString(data.defaultImportanceThreshold),
   };
 }

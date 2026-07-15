@@ -1,29 +1,35 @@
 /**
- * 軸プロパティの解決と、1 軸値の absent/非 boolean/true/false 正規化
- * （#19 F2・#33 で absent 判定を是正・#34 で boolean 軸限定の型ガードに狭める）。
+ * 軸プロパティの解決（ビュー options 主・設定デフォルト）と、1 軸値の kind-aware 読み取り
+ * （#19 F2・#33 で absent 判定を是正・#34 で boolean 軸限定に狭め・#121 v0.3-1a で数値しきい値軸へ一般化）。
  *
- * Bases API 接触（`config.getAsPropertyId`／`entry.getValue`）をアダプタ層に閉じ込める。
- * v1 は **boolean 軸限定**のため、`normalizeAxis` は **値の型が `BooleanValue` の軸だけ**を
- * `isTruthy()` で boolean 化し、それ以外（absent＝`NullValue`・非 boolean＝`NumberValue`／
- * `StringValue` 等）は `undefined`（未分類）へ退避する（正の許可リスト `instanceof BooleanValue`・#34）。
- * これにより非 boolean の `note.*` 軸が 4 象限に並んでドラッグ→両軸 `true/false` 上書きで
- * 元の数値/文字列を破壊する事故（データ損失）を防ぐ。absent（`NullValue`）も非 `BooleanValue` として
- * 自然に未分類へ落ちるため、#33 の absent 区別（欠損を最低象限 Delete に誤分類しない）を包含する。
+ * Bases API 接触（`config.getAsPropertyId`／`entry.getValue`）をアダプタ層に閉じ込める。読み取りは
+ * `toAxisRaw`（Obsidian `Value` を `instanceof` で {@link AxisRaw} へ振り分け）→ `interpretAxis`（純ロジック #120）
+ * の経路で、各軸の**配置側（`side`）とロック（`locked`）**を求める（{@link readSingleAxisReading}／{@link readAxisReadings}）:
+ * - **boolean 軸**（値が `BooleanValue`）は `isTruthy()` で配置・非ロック（#34 の挙動を維持＝回帰不変）。
+ * - **数値しきい値軸**（当該軸に threshold あり・値が `NumberValue`）は `value >= threshold` で配置側を決めるが、
+ *   1a では書き戻し未実装のため**常に locked**（掴めない＝データ破壊経路を作らない・#122 1b で解禁）。threshold
+ *   未設定の軸の `NumberValue` は v1 のまま未分類＋locked（不意の配置を防ぐ off-sentinel ゲート）。
+ * - **absent**（`NullValue`）は未分類・非ロック（欠損は分類として新規に書けるため破壊しない・#33 の区別を包含）。
+ * - **未対応 Value 型**（数値軸への文字列＝型不一致・`ErrorValue`・`ListValue` 等 `toAxisRaw` が `null` を返すもの）・
+ *   `getValue` 例外は安全側で未分類＋locked（非 boolean を両軸 `true/false` 上書きで破壊する事故を防ぐ）。
  *
  * 型同一性（instanceof）で判定するのは #33 の知見による: 旧実装の `toString()===null` は実機の
  * `NullValue.toString()` が文字列 "null" を返す（型契約どおり string）ため機能せず、`constructor.name`
  * も実機は minify 済み（`"t"`）で壊れる。instanceof は prototype チェーンで成立し文字列表現・minify に依存しない。
  *
- * `BooleanValue`（値）は obsidian から import する（実機は外部提供・esbuild external）。型は `import type`、
- * 単体テストは vitest が obsidian の値 import を `src/test-support/obsidianStub.ts`（`BooleanValue`／
- * `NullValue`／`NumberValue`／`StringValue` を提供）へ解決する。⚠️ スタブ＝実機の同値性は単体では
- * 検証不能（`instanceof BooleanValue` の実機成立は `scripts/e2e` の placements 検証で担保）。
+ * Value クラス（`BooleanValue`／`NullValue`／`NumberValue`／`StringValue`）は obsidian から値 import する
+ * （実機は外部提供・esbuild external）。型は `import type`、単体テストは vitest が obsidian の値 import を
+ * `src/test-support/obsidianStub.ts` へ解決する。⚠️ スタブ＝実機の同値性は単体では検証不能（`instanceof` の
+ * 実機成立は `scripts/e2e` の placements 検証で担保）。`ErrorValue` は obsidian が型を export しないため
+ * `toAxisRaw` の既定ロック（未対応型）で吸収し、個別 `instanceof` はしない（設計は `docs/design/bases.md`）。
  */
-import { BooleanValue, NullValue } from "obsidian";
+import { BooleanValue, NullValue, NumberValue, StringValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import type { AxisValues } from "../logic/quadrant";
-import type { AxisSpec } from "../logic/axis";
+import { interpretAxis } from "../logic/axis";
+import type { AxisRaw, AxisReading, AxisSpec } from "../logic/axis";
+import type { NumberThresholds } from "./numberThreshold";
 
 /**
  * Bases ビュー options のキー。F4（#21）の軸プロパティ設定 UI がこのキーに書き込み、
@@ -73,7 +79,7 @@ const NOTE_PROPERTY_PREFIX = "note.";
  * 「書き戻せる `note.*` 軸か」を判定する単一述語（軸許容ルールの真実源・#21 F4）。
  *
  * `note.<key>`（非空キー）のみ true を返し、`formula.*`／`file.*`／空キー（bare `note.`）を弾く。
- * options の `filter`（選択時に弾く＝`viewOptions.buildAxisViewOptions`）・読み取り（{@link readSingleAxis}）・
+ * options の `filter`（選択時に弾く＝`viewOptions.buildAxisViewOptions`）・読み取り（{@link readSingleAxisReading}）・
  * 書き戻し（{@link toFrontmatterKey}／`EisenhowerBasesView.writeBackAxes`）の 3 面がこの述語を共有し、
  * 「選べるのに壊れる／読めるのに書けない」非対称を防ぐ。
  */
@@ -298,7 +304,7 @@ export interface CompletionState {
  * 完了プロパティ軸の値を読み、完了状態を返す（#105 F10）。`BooleanValue` は `isTruthy()` で
  * completed に、非 boolean（`getValue` の throw を含む）は `unsupported=true`（`true` 上書きで元値を
  * 破壊しないよう無効化・AC2）、absent（`NullValue`）は未完了（新規に書ける）。軸ロック
- *（{@link isUnsupportedOnWritableAxis}）と同型の per-card 判定を完了キーに敷く。
+ *（{@link hasUnsupportedAxisValue}）と同型の per-card 判定を完了キーに敷く。
  */
 export function readCompletionState(
   entry: BasesEntry,
@@ -314,20 +320,23 @@ export function readCompletionState(
 }
 
 /**
- * 1 軸の Value を boolean | undefined に正規化する（v1 は boolean 軸限定・#34）。
- * `getValue` 自体の null と、値の型が `BooleanValue` でないもの（absent＝`NullValue`・
- * 非 boolean＝`NumberValue`／`StringValue` 等）を `undefined`（未分類）へ退避し、
- * `BooleanValue` の値だけ `isTruthy()` で boolean 化する（正の許可リスト＝型同一性 `instanceof`）。
- * 非 boolean は `isTruthy()` の真偽ではなく**型**で退避する（falsy な数値 0・空文字を `false`＝Delete 象限に
- * 落とさない）。未知/新規の Value 型も既定で未分類になり（安全側）、v2 は許可リストに型別ブランチを足す。
- * 本関数は**値の型だけ**を見る（propertyId の `note.*` 判定は呼び出し側 {@link readSingleAxis} が担う）。
+ * Obsidian `Value` を純ロジック層の {@link AxisRaw}（型タグ付き生値）へ振り分ける（#121 v0.3-1a）。
+ *
+ * 既知型（`NullValue`＝absent／`BooleanValue`／`NumberValue`／`StringValue`）だけを分類し、
+ * それ以外（実機の `ErrorValue`＝formula エラー・`ListValue`・`DateValue`・`ObjectValue`・未知の新型 等）は
+ * **`null` を返す**＝呼び出し側が「未対応＝安全側ロック（未分類＋ドラッグ不可）」に倒す。obsidian 1.13.x は
+ * `ErrorValue` の型を export しない（`getValue` の JSDoc が `@link ErrorValue` と言及するのみ）ため個別
+ * `instanceof` はできず、この既定ロックで吸収する（脆い `constructor.name` 判定＝#33 の minify 教訓を避ける。
+ * 設計は `docs/design/bases.md`「数値しきい値軸アダプタ配線」）。`NumberValue` は公開 API `Number(v.toString())`
+ * で数値化する（`.data` 等の内部表現に触れない＝churn 耐性・S0）。非有限（`NaN`/`±Inf`）はそのまま数値に
+ * 落ち、`interpretAxis` の number 分岐が未分類＋ロックへ倒す。tag（`ListValue`）は #125 で正の許可リストへ引き上げる。
  */
-function normalizeAxis(value: Value | null): boolean | undefined {
-  if (value == null) return undefined; // getValue 自体の null（防御）
-  // BooleanValue 以外（NullValue=absent・NumberValue・StringValue 等）は未分類へ退避し、
-  // 非 boolean をドラッグ→両軸 true/false 上書き（データ破壊）させない（#34）。
-  if (!(value instanceof BooleanValue)) return undefined;
-  return value.isTruthy();
+function toAxisRaw(value: Value | null): AxisRaw | null {
+  if (value == null || value instanceof NullValue) return { kind: "absent" };
+  if (value instanceof BooleanValue) return { kind: "boolean", value: value.isTruthy() };
+  if (value instanceof NumberValue) return { kind: "number", value: Number(value.toString()) };
+  if (value instanceof StringValue) return { kind: "string", value: value.toString() };
+  return null; // ErrorValue / ListValue / 未対応型 → 呼び出し側が安全側ロック
 }
 
 /**
@@ -370,39 +379,83 @@ function readAxisValueSafely(entry: BasesEntry, id: BasesPropertyId): AxisReadRe
   }
 }
 
-/**
- * 1 軸を読む。書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は **absent 扱い（undefined）**にして
- * 4 象限へ配置しない（未分類・ドロップ不可）。読み取り側を書き戻し側（{@link toFrontmatterKey}）と
- * 対称にし、「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない（レビュー指摘）。
- * 非 `note.*` 軸が設定されたときの本格的な UX（ドラッグ無効化・ビュー全体の警告）は F4（#21）で扱う。
- * `getValue` が throw した軸は **absent 相当（undefined）＝配置は未分類**へ倒す（安全側）。
- */
-function readSingleAxis(
-  entry: BasesEntry,
-  id: BasesPropertyId,
-): boolean | undefined {
-  if (toFrontmatterKey(id) === null) return undefined;
-  const result = readAxisValueSafely(entry, id);
-  return result.ok ? normalizeAxis(result.value) : undefined;
+/** 1 エントリの両軸の {@link AxisReading}（配置側 `side` ＋ ロック `locked`）。 */
+export interface AxisReadings {
+  urgent: AxisReading;
+  important: AxisReading;
 }
 
-/** 1 エントリの両軸値を読み、absent を区別した {@link AxisValues} を返す。 */
-export function readAxisValues(
+/** しきい値未指定（両軸 boolean 扱い＝v1）の既定。従来 2 引数呼び出し・boolean 軸の回帰用。 */
+const NO_THRESHOLDS: NumberThresholds = { urgent: null, important: null };
+
+/**
+ * 1 軸を読み、配置側（`side`）とロック（`locked`）を返す（#121 v0.3-1a・{@link interpretAxis} へ配線）。
+ *
+ * - 書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は未分類・**非ロック**（書き戻し経路が無く破壊しない＝
+ *   読み書き対称。「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない）。
+ * - `getValue` 例外・未対応 Value 型（`ErrorValue` 等 {@link toAxisRaw} が `null` を返すもの）は**安全側で
+ *   未分類＋locked**（型を確証できないまま上書きさせない・churn 耐性）。
+ * - 数値（当該軸に `threshold` あり・値が `NumberValue`）は `interpretAxis` で `value >= threshold` の配置側を決め、
+ *   **1a では常に `locked`**（書き戻し未実装＝#122 1b までデータ破壊経路を作らない）。非有限（`NaN`/`±Inf`）は
+ *   `interpretAxis` の number 分岐が未分類＋locked へ倒す。
+ * - `threshold` 未設定（`null`）の軸の `NumberValue` は v1 のまま未分類＋locked（不意の配置を防ぐ off-sentinel ゲート）。
+ * - boolean/absent/文字列等は boolean spec 経由で v1 と同じ解釈（配置・非ロック／文字列は未分類＋locked＝#34 不変）。
+ */
+function readSingleAxisReading(
+  entry: BasesEntry,
+  id: BasesPropertyId,
+  threshold: number | null,
+): AxisReading {
+  if (toFrontmatterKey(id) === null) return { side: undefined, locked: false };
+  const result = readAxisValueSafely(entry, id);
+  if (!result.ok) return { side: undefined, locked: true };
+  const raw = toAxisRaw(result.value);
+  if (raw === null) return { side: undefined, locked: true }; // 未対応 Value 型（ErrorValue 等）
+  if (raw.kind === "number") {
+    // off-sentinel ゲート: しきい値未設定の軸は数値を配置せず v1（未分類＋locked）を維持する。
+    if (threshold === null) return { side: undefined, locked: true };
+    // 1a: 有限数は配置側を決めるが常に locked（書き戻しは 1b）。非有限は interpretAxis が side=undefined を返す。
+    const reading = interpretAxis(raw, { kind: "number", threshold });
+    return { side: reading.side, locked: true };
+  }
+  // boolean/absent/string 等は boolean spec で v1 と同じ解釈（#34 不変）。
+  return interpretAxis(raw, { kind: "boolean" });
+}
+
+/** 1 エントリの両軸を読み、配置側＋ロックを返す（数値しきい値軸対応・#121）。 */
+export function readAxisReadings(
   entry: BasesEntry,
   ids: AxisPropertyIds,
-): AxisValues {
+  thresholds: NumberThresholds,
+): AxisReadings {
   return {
-    urgent: readSingleAxis(entry, ids.urgent),
-    important: readSingleAxis(entry, ids.important),
+    urgent: readSingleAxisReading(entry, ids.urgent, thresholds.urgent),
+    important: readSingleAxisReading(entry, ids.important, thresholds.important),
   };
 }
 
 /**
- * 値が「present だが boolean でない」（数値/文字列等）＝ドロップの両軸 `true/false` 上書きで
- * **破壊される**値かを判定する。`null`・absent（`NullValue`）は `false`（欠損は上書きで破壊せず、
- * 分類として新規に書けるため）。`BooleanValue` も `false`（boolean→boolean は再分類で破壊でない）。
- * `normalizeAxis`（値を undefined へ潰す）と違い、**absent と「非 boolean が入っている」を区別する**
- * ための述語（前者はドラッグ可・後者はドラッグ不可にする）。
+ * 1 エントリの両軸の**配置側**（absent を区別した {@link AxisValues}）を返す。数値しきい値軸は
+ * `thresholds` を渡すと `value >= threshold` で配置側へ、未指定（既定）は boolean 軸扱い（v1・#34 回帰）。
+ * 本番の描画経路（`toViewModel`）は {@link readAxisReadings} を直接使い**配置側とロックを 1 度に**得る＝
+ * 本関数は「配置側だけ」を要する呼び出し・boolean 回帰テスト向けの薄い委譲（単一情報源は `readAxisReadings`）。
+ */
+export function readAxisValues(
+  entry: BasesEntry,
+  ids: AxisPropertyIds,
+  thresholds: NumberThresholds = NO_THRESHOLDS,
+): AxisValues {
+  const readings = readAxisReadings(entry, ids, thresholds);
+  return { urgent: readings.urgent.side, important: readings.important.side };
+}
+
+/**
+ * 値が「present だが boolean でない」（数値/文字列等）＝boolean 単一プロパティ書き戻しで**破壊される**値かを
+ * 判定する（**boolean 前提の書き戻し先向けの述語**）。`null`・absent（`NullValue`）は `false`（欠損は上書きで
+ * 破壊せず、分類として新規に書けるため）。`BooleanValue` も `false`（boolean→boolean は再分類で破壊でない）。
+ * **absent と「非 boolean が入っている」を区別する**述語で、完了トグル（#105 F10・boolean 単一プロパティ）の
+ * {@link readCompletionState} が非 boolean な完了値（日付等）を保護（トグル無効化）するのに使う。軸の kind-aware な
+ * ロック判定は {@link readSingleAxisReading}（数値しきい値軸を含む・#121）が担い、本述語は boolean 前提の完了軸に閉じる。
  */
 export function isUnsupportedAxisValue(value: Value | null): boolean {
   if (value == null) return false;
@@ -410,36 +463,22 @@ export function isUnsupportedAxisValue(value: Value | null): boolean {
   return !(value instanceof BooleanValue);
 }
 
-/** 書込可能な `note.*` 軸に限り、その軸値が非 boolean（破壊対象）かを見る。 */
-function isUnsupportedOnWritableAxis(
-  entry: BasesEntry,
-  id: BasesPropertyId,
-): boolean {
-  // 非 note.*（formula/file）軸は書き戻し自体が `resolveWritableAxisKeys` で弾かれ破壊経路が無いため対象外。
-  if (!isWritableAxisProperty(id)) return false;
-  const result = readAxisValueSafely(entry, id);
-  // getValue が throw した書込可能 note.* 軸は **安全側でロック**する（レビュー指摘 #2）。読み取り（getValue）と
-  // 書き戻し（processFrontMatter）は別系統で、書き戻しは getValue を経由せず生 frontmatter を true/false 上書き
-  // するため、値の型を boolean と確証できないままドラッグを許すと元の数値/文字列を破壊しうる。throw を absent と
-  // 同一視して未ロック（ドラッグ可）にすると #34/#3 が塞いだ非 boolean 破壊経路を再開する。
-  if (!result.ok) return true;
-  return isUnsupportedAxisValue(result.value);
-}
-
 /**
- * エントリのどちらかの軸が「書込可能 `note.*` 上の非 boolean 値」を持つか（#34 で未分類化した
- * カードのうち、ドロップで両軸を `true/false` 上書きすると元の数値/文字列を破壊するもの）。
+ * エントリのどちらかの軸が「ドラッグ不可（locked）」か（#34 の非 boolean 破壊ガードを #121 で kind-aware 化）。
  *
- * `true` のカードは UI（`NoteCard`）で**未分類ゾーンでもドラッグ不可**にして誤ドロップによる
- * データ破壊を防ぐ（#34 が読み取り側で塞げなかった「未分類からの手動ドラッグ」経路の封鎖）。
- * 真に absent なカード（欠損）は `false`＝ドラッグして分類できる（破壊しない）ため区別する。
+ * 書込可能 `note.*` 上の非 boolean 値（数値/文字列・未対応 Value 型＝`ErrorValue` 等・`getValue` 例外）に加え、
+ * **数値しきい値軸のカード（配置されても 1a では書き戻し未実装のため常に locked）**も含む。`true` のカードは
+ * UI（`NoteCard`）でドラッグ不可にし、ドロップの両軸上書きによるデータ破壊・未実装経路を封じる。真に absent・
+ * boolean のカードは `false`（ドラッグして分類できる）。判定は {@link readAxisReadings} に一本化する（配置側の
+ * 解釈と同じ経路＝二重管理を無くす）。`thresholds` 未指定は boolean 軸扱い（v1・#34 の回帰）。
+ * 本番の描画経路（`toViewModel`）は {@link readAxisReadings} の `locked` を直接見る＝本関数は「ロックだけ」を
+ * 要する呼び出し・回帰テスト向けの薄い委譲（単一情報源は `readAxisReadings`）。
  */
 export function hasUnsupportedAxisValue(
   entry: BasesEntry,
   ids: AxisPropertyIds,
+  thresholds: NumberThresholds = NO_THRESHOLDS,
 ): boolean {
-  return (
-    isUnsupportedOnWritableAxis(entry, ids.urgent) ||
-    isUnsupportedOnWritableAxis(entry, ids.important)
-  );
+  const readings = readAxisReadings(entry, ids, thresholds);
+  return readings.urgent.locked || readings.important.locked;
 }

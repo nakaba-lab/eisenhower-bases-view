@@ -4,8 +4,7 @@ import { classifyQuadrant } from "../logic/quadrant";
 import { messagesFor, type Messages } from "../i18n";
 import {
   axesShareWritableKey,
-  hasUnsupportedAxisValue,
-  readAxisValues,
+  readAxisReadings,
   readCompletionState,
   resolveAxisPropertyIds,
   resolveCompletionId,
@@ -15,6 +14,7 @@ import {
 import { readBadges, resolveBadgePropertyIds } from "./readBadges";
 import { resolvePresentation } from "./presentation";
 import { resolveStagnationThresholdDays } from "./stagnationThreshold";
+import { resolveNumberThresholds } from "./numberThreshold";
 import { evaluateStagnation } from "../logic/stagnation";
 import type {
   MatrixDiagnostics,
@@ -140,9 +140,14 @@ export function toViewModel(
   // 滞留しきい値を解決する（ビュー options 主・設定既定フォールバック＝ハイブリッド・#106 F9）。
   // 全カードで共通のため map の外で 1 度だけ解決する（0 は機能オフ）。
   const stagnationThresholdDays = resolveStagnationThresholdDays(config, settings);
+  // 数値しきい値軸（#121 v0.3-1a）: per-axis しきい値を 1 度解決する（ビュー options 主・設定既定＝ハイブリッド）。
+  // 全カードで共通のため map の外で 1 度だけ（null＝当該軸の数値軸オフ＝v1 挙動）。
+  const numberThresholds = resolveNumberThresholds(config, settings);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
-    const axis = readAxisValues(entry, ids);
+    // 両軸を 1 経路で読み、配置側（side）とロック（locked）を同時に得る（#121）。
+    const readings = readAxisReadings(entry, ids, numberThresholds);
+    const axis = { urgent: readings.urgent.side, important: readings.important.side };
     const quadrant = classifyQuadrant(axis);
     const matrixEntry: MatrixEntry = {
       id: entry.file.path,
@@ -150,9 +155,11 @@ export function toViewModel(
       urgent: axis.urgent,
       important: axis.important,
     };
-    // 書込可能 note.* 軸に非 boolean 値を持つカード、または両軸が同一キー設定のカードは、ドロップの
-    // 両軸 true/false 上書きが破壊/必ず失敗になるためドラッグ不可にする（UI が印を付ける）。
-    if (sameAxisKey || hasUnsupportedAxisValue(entry, ids)) matrixEntry.locked = true;
+    // ドラッグ不可条件（UI が印を付ける）: 両軸同一キー設定、または軸の読み取りが locked
+    //（書込可能 note.* の非 boolean 値・未対応 Value 型・数値軸カード＝1a は書き戻し未実装で常に locked）。
+    if (sameAxisKey || readings.urgent.locked || readings.important.locked) {
+      matrixEntry.locked = true;
+    }
     // 滞留判定（#106 F9・読み取り専用）: mtime が読め、しきい値超過なら滞留フラグと経過日数を載せる。
     // 非滞留・mtime 欠落は付けない（`locked?` と同じ optional 流儀）。
     const mtime = readMtime(entry);

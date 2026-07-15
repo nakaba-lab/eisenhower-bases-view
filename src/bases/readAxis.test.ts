@@ -9,6 +9,7 @@ import {
   axesShareWritableKey,
   hasUnsupportedAxisValue,
   isUnsupportedAxisValue,
+  readAxisReadings,
   readAxisValues,
   readCompletionState,
   resolveAxisPropertyIds,
@@ -18,6 +19,11 @@ import {
   toFrontmatterKey,
   type AxisPropertyIds,
 } from "./readAxis";
+// ErrorValue は obsidian 1.13.x が型定義を export しない（getValue の JSDoc が @link ErrorValue と
+// 言及するのみ）ため "obsidian" からは import できない。stub が提供する「アダプタが特定認識しない
+// 未対応 Value 型の代表」を直接 import して default-lock を検証する（#121・AC2/AC4）。
+import { ErrorValue } from "../test-support/obsidianStub";
+// AxisSpec は #124（タグ軸基盤）で kind-aware 化した axesShareWritableKey のテストが使う（develop 側）。
 import type { AxisSpec } from "../logic/axis";
 
 /**
@@ -665,5 +671,192 @@ describe("readCompletionState（#105 F10 完了状態の読み取り・非 boole
     } as unknown as BasesEntry;
     // when / then: throw を absent と同一視せず、書き込み経路を塞ぐ（非 boolean 破壊の再開を防ぐ）
     expect(readCompletionState(entry, DONE_ID)).toEqual({ completed: false, unsupported: true });
+  });
+});
+
+describe("readAxisReadings — 数値しきい値軸の kind-aware 読み取り（#121 v0.3-1a）", () => {
+  const ids: AxisPropertyIds = {
+    urgent: "note.urgent" as BasesPropertyId,
+    important: "note.important" as BasesPropertyId,
+  };
+  // urgent 軸だけ threshold=5 を設定（important は未設定=null＝数値軸オフ）。
+  const thresholds = { urgent: 5, important: null };
+
+  it("AC1 — 有限数 >= threshold は true 側へ配置（境界ちょうども true 側）", () => {
+    // given: 緊急軸に数値 5（threshold=5・境界ちょうど）
+    const entry = mockEntry({ "note.urgent": new NumberValue(5), "note.important": TRUE });
+    // when
+    const readings = readAxisReadings(entry, ids, thresholds);
+    // then: 5>=5 で true 側
+    expect(readings.urgent.side).toBe(true);
+  });
+
+  it("AC1 — 有限数 < threshold は false 側へ配置", () => {
+    const entry = mockEntry({ "note.urgent": new NumberValue(3), "note.important": TRUE });
+    const readings = readAxisReadings(entry, ids, thresholds);
+    expect(readings.urgent.side).toBe(false); // 3<5
+  });
+
+  it("AC1 — 負値・小数のしきい値でも value>=threshold で配置する（toNumberThreshold が許容する非整数の end-to-end 固定）", () => {
+    const read = (value: number, threshold: number) =>
+      readAxisReadings(
+        mockEntry({ "note.urgent": new NumberValue(value), "note.important": TRUE }),
+        ids,
+        { urgent: threshold, important: null },
+      ).urgent.side;
+    // 小数しきい値（2.5）: 境界ちょうど 2.5>=2.5→true 側 / 2<2.5→false 側
+    expect(read(2.5, 2.5)).toBe(true);
+    expect(read(2, 2.5)).toBe(false);
+    // 負のしきい値（-1）: 0>=-1→true 側 / -2<-1→false 側
+    expect(read(0, -1)).toBe(true);
+    expect(read(-2, -1)).toBe(false);
+  });
+
+  it("AC1+AC5 — 有限数の数値軸カードは配置されるが locked（書き戻し未実装・1a）", () => {
+    // given: 緊急軸に数値 9（threshold=5）
+    const entry = mockEntry({ "note.urgent": new NumberValue(9), "note.important": TRUE });
+    // when
+    const readings = readAxisReadings(entry, ids, thresholds);
+    // then: 正しい象限側に置かれる（配置）と同時に locked（掴めない＝1a はデータ破壊経路を作らない）
+    expect(readings.urgent.side).toBe(true);
+    expect(readings.urgent.locked).toBe(true);
+  });
+
+  it("AC2 — 非有限数（NaN/±Inf）は未分類＋locked", () => {
+    for (const nonFinite of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const entry = mockEntry({
+        "note.urgent": new NumberValue(nonFinite),
+        "note.important": TRUE,
+      });
+      const reading = readAxisReadings(entry, ids, thresholds).urgent;
+      expect(reading.side).toBeUndefined();
+      expect(reading.locked).toBe(true);
+    }
+  });
+
+  it("AC2 — 型不一致（数値軸に文字列）は未分類＋locked（既存値を保護）", () => {
+    const entry = mockEntry({ "note.urgent": new StringValue("high"), "note.important": TRUE });
+    const reading = readAxisReadings(entry, ids, thresholds).urgent;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(true);
+  });
+
+  it("AC2 — ErrorValue（未対応 Value 型の代表）は安全側で未分類＋locked", () => {
+    // given: 数値軸に ErrorValue（formula エラー等）。obsidian は実 ErrorValue を export しないため
+    // アダプタは既知型に一致しない Value を一律ロックに倒す（default-lock）。stub の ErrorValue は
+    // obsidian の Value 構造（equals/looseEquals/renderTo）を持たないため、未対応 Value 型として Value へキャストする。
+    const entry = mockEntry({
+      "note.urgent": new ErrorValue("formula error") as unknown as Value,
+      "note.important": TRUE,
+    });
+    const reading = readAxisReadings(entry, ids, thresholds).urgent;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(true);
+  });
+
+  it("AC2 — getValue が throw したら安全側で未分類＋locked（churn 耐性）", () => {
+    const entry = {
+      file: { path: "a.md", basename: "a" },
+      getValue: (id: BasesPropertyId) => {
+        if (id === "note.urgent") throw new Error("boom");
+        return TRUE;
+      },
+    } as unknown as BasesEntry;
+    const reading = readAxisReadings(entry, ids, thresholds).urgent;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(true);
+  });
+
+  it("ゲート — threshold 未設定（null）の軸では数値も v1 のまま未分類＋locked（不意の配置を防ぐ）", () => {
+    // given: important 軸は threshold=null。数値でも配置せず v1（未分類＋locked）を維持する。
+    const entry = mockEntry({ "note.urgent": TRUE, "note.important": new NumberValue(3) });
+    const reading = readAxisReadings(entry, ids, thresholds).important;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(true);
+  });
+
+  it("AC3 — boolean 軸は挙動不変（threshold 有無に依らず配置・非ロック）", () => {
+    // given: 緊急軸に数値（threshold あり）、重要軸は boolean false
+    const entry = mockEntry({ "note.urgent": new NumberValue(9), "note.important": FALSE });
+    const readings = readAxisReadings(entry, ids, thresholds);
+    // then: boolean 軸は boolean として扱う（配置・非ロック）
+    expect(readings.important.side).toBe(false);
+    expect(readings.important.locked).toBe(false);
+  });
+
+  it("AC3 — absent は未分類・非ロック（欠損は分類として新規に書ける・不変）", () => {
+    const entry = mockEntry({ "note.urgent": ABSENT, "note.important": FALSE });
+    const reading = readAxisReadings(entry, ids, thresholds).urgent;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(false);
+  });
+
+  it("非 note.*（formula/file）軸は数値でも未分類・非ロック（書込経路が無い・読み書き対称の不変）", () => {
+    // given: 緊急軸を書き戻し不可な formula.* に（threshold を付けても）
+    const mixedIds: AxisPropertyIds = {
+      urgent: "formula.score" as BasesPropertyId,
+      important: "note.important" as BasesPropertyId,
+    };
+    const entry = mockEntry({ "formula.score": new NumberValue(9), "note.important": TRUE });
+    const reading = readAxisReadings(entry, mixedIds, { urgent: 5, important: null }).urgent;
+    // then: formula は書込不可のためロック対象外（既存の非対称と対称・Notice 経路に委ねる）
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(false);
+  });
+});
+
+describe("readAxisValues / hasUnsupportedAxisValue — threshold 引数で数値軸を認識（#121）", () => {
+  const ids: AxisPropertyIds = {
+    urgent: "note.urgent" as BasesPropertyId,
+    important: "note.important" as BasesPropertyId,
+  };
+
+  it("readAxisValues — threshold 設定時、有限数を配置 side（value>=threshold）へ正規化する", () => {
+    const entry = mockEntry({
+      "note.urgent": new NumberValue(9),
+      "note.important": new NumberValue(1),
+    });
+    // 9>=5 → true / 1<5 → false
+    expect(readAxisValues(entry, ids, { urgent: 5, important: 5 })).toEqual({
+      urgent: true,
+      important: false,
+    });
+  });
+
+  it("readAxisValues — threshold 未指定（従来呼び出し）は数値を未分類化する（v1・AC3 回帰）", () => {
+    const entry = mockEntry({ "note.urgent": new NumberValue(9), "note.important": TRUE });
+    expect(readAxisValues(entry, ids)).toEqual({ urgent: undefined, important: true });
+  });
+
+  it("hasUnsupportedAxisValue — threshold 設定時も数値軸カードは locked（1a・書き戻し未実装）", () => {
+    const entry = mockEntry({ "note.urgent": new NumberValue(9), "note.important": TRUE });
+    expect(hasUnsupportedAxisValue(entry, ids, { urgent: 5, important: null })).toBe(true);
+  });
+
+  it("hasUnsupportedAxisValue — threshold 設定でも boolean/absent のみのカードは非ロック（回帰）", () => {
+    const entry = mockEntry({ "note.urgent": TRUE, "note.important": ABSENT });
+    expect(hasUnsupportedAxisValue(entry, ids, { urgent: 5, important: 5 })).toBe(false);
+  });
+});
+
+describe("obsidianStub — NumberValue/ErrorValue の整合（#121 AC4）", () => {
+  it("NumberValue は toString で数値文字列を返し Number() で読み戻せる・instanceof 成立", () => {
+    const value = new NumberValue(3.5);
+    expect(value instanceof NumberValue).toBe(true);
+    expect(Number(value.toString())).toBe(3.5);
+  });
+
+  it("NumberValue の非有限（NaN/Inf）も toString→Number で round-trip する（Number.isFinite で弾ける形）", () => {
+    expect(Number.isFinite(Number(new NumberValue(Number.NaN).toString()))).toBe(false);
+    expect(Number.isFinite(Number(new NumberValue(Number.POSITIVE_INFINITY).toString()))).toBe(
+      false,
+    );
+  });
+
+  it("ErrorValue は instanceof が成立し他の Value 型と区別される（未対応型の代表）", () => {
+    const errorValue = new ErrorValue("boom");
+    expect(errorValue instanceof ErrorValue).toBe(true);
+    expect(errorValue instanceof NumberValue).toBe(false);
+    expect(errorValue instanceof BooleanValue).toBe(false);
   });
 });

@@ -6,9 +6,10 @@
  * `toAxisRaw`（Obsidian `Value` を `instanceof` で {@link AxisRaw} へ振り分け）→ `interpretAxis`（純ロジック #120）
  * の経路で、各軸の**配置側（`side`）とロック（`locked`）**を求める（{@link readSingleAxisReading}／{@link readAxisReadings}）:
  * - **boolean 軸**（値が `BooleanValue`）は `isTruthy()` で配置・非ロック（#34 の挙動を維持＝回帰不変）。
- * - **数値しきい値軸**（当該軸に threshold あり・値が `NumberValue`）は `value >= threshold` で配置側を決めるが、
- *   1a では書き戻し未実装のため**常に locked**（掴めない＝データ破壊経路を作らない・#122 1b で解禁）。threshold
- *   未設定の軸の `NumberValue` は v1 のまま未分類＋locked（不意の配置を防ぐ off-sentinel ゲート）。
+ * - **数値しきい値軸**（当該軸に threshold あり・値が `NumberValue`）は `value >= threshold` で配置側を決め、
+ *   有限数は**非ロック（掴める）**＝#122 1b で書き戻しを解禁した（書き戻しは `writeBackAxes`→`planWriteBack`。
+ *   非有限〔NaN・±Inf〕は `interpretAxis` が未分類＋locked に倒す）。threshold 未設定の軸の `NumberValue` は
+ *   v1 のまま未分類＋locked（不意の配置を防ぐ off-sentinel ゲート）。
  * - **absent**（`NullValue`）は未分類・非ロック（欠損は分類として新規に書けるため破壊しない・#33 の区別を包含）。
  * - **未対応 Value 型**（数値軸への文字列＝型不一致・`ErrorValue`・`ListValue` 等 `toAxisRaw` が `null` を返すもの）・
  *   `getValue` 例外は安全側で未分類＋locked（非 boolean を両軸 `true/false` 上書きで破壊する事故を防ぐ）。
@@ -389,15 +390,15 @@ export interface AxisReadings {
 const NO_THRESHOLDS: NumberThresholds = { urgent: null, important: null };
 
 /**
- * 1 軸を読み、配置側（`side`）とロック（`locked`）を返す（#121 v0.3-1a・{@link interpretAxis} へ配線）。
+ * 1 軸を読み、配置側（`side`）とロック（`locked`）を返す（#121 v0.3-1a→#122 1b・{@link interpretAxis} へ配線）。
  *
  * - 書き戻し可能な `note.*` 以外（`formula.*`／`file.*`）は未分類・**非ロック**（書き戻し経路が無く破壊しない＝
  *   読み書き対称。「4 象限に並ぶのにドラッグすると必ず失敗するカード」を作らない）。
  * - `getValue` 例外・未対応 Value 型（`ErrorValue` 等 {@link toAxisRaw} が `null` を返すもの）は**安全側で
  *   未分類＋locked**（型を確証できないまま上書きさせない・churn 耐性）。
  * - 数値（当該軸に `threshold` あり・値が `NumberValue`）は `interpretAxis` で `value >= threshold` の配置側を決め、
- *   **1a では常に `locked`**（書き戻し未実装＝#122 1b までデータ破壊経路を作らない）。非有限（`NaN`/`±Inf`）は
- *   `interpretAxis` の number 分岐が未分類＋locked へ倒す。
+ *   有限数は**非ロック（掴める）**＝#122 1b で書き戻しを解禁した（書き戻しは `writeBackAxes`→`planWriteBack`）。
+ *   非有限（`NaN`/`±Inf`）は `interpretAxis` の number 分岐が未分類＋locked へ倒す（掴ませない）。
  * - `threshold` 未設定（`null`）の軸の `NumberValue` は v1 のまま未分類＋locked（不意の配置を防ぐ off-sentinel ゲート）。
  * - boolean/absent/文字列等は boolean spec 経由で v1 と同じ解釈（配置・非ロック／文字列は未分類＋locked＝#34 不変）。
  */
@@ -414,9 +415,10 @@ function readSingleAxisReading(
   if (raw.kind === "number") {
     // off-sentinel ゲート: しきい値未設定の軸は数値を配置せず v1（未分類＋locked）を維持する。
     if (threshold === null) return { side: undefined, locked: true };
-    // 1a: 有限数は配置側を決めるが常に locked（書き戻しは 1b）。非有限は interpretAxis が side=undefined を返す。
-    const reading = interpretAxis(raw, { kind: "number", threshold });
-    return { side: reading.side, locked: true };
+    // 1b（#122 で書き戻しを解禁）: 有限数は unlock（掴める＝ドラッグ書き戻しへ）＝interpretAxis の結果を
+    // そのまま返す。有限→象限配置＋非ロック（ドラッグ可）／非有限（NaN・±Inf）→ interpretAxis が
+    // 未分類＋locked に倒す（掴ませない）。数値の書き戻し経路は `writeBackAxes`→`planWriteBack`（#120/#122）。
+    return interpretAxis(raw, { kind: "number", threshold });
   }
   // boolean/absent/string 等は boolean spec で v1 と同じ解釈（#34 不変）。
   return interpretAxis(raw, { kind: "boolean" });
@@ -466,11 +468,12 @@ export function isUnsupportedAxisValue(value: Value | null): boolean {
 /**
  * エントリのどちらかの軸が「ドラッグ不可（locked）」か（#34 の非 boolean 破壊ガードを #121 で kind-aware 化）。
  *
- * 書込可能 `note.*` 上の非 boolean 値（数値/文字列・未対応 Value 型＝`ErrorValue` 等・`getValue` 例外）に加え、
- * **数値しきい値軸のカード（配置されても 1a では書き戻し未実装のため常に locked）**も含む。`true` のカードは
- * UI（`NoteCard`）でドラッグ不可にし、ドロップの両軸上書きによるデータ破壊・未実装経路を封じる。真に absent・
- * boolean のカードは `false`（ドラッグして分類できる）。判定は {@link readAxisReadings} に一本化する（配置側の
- * 解釈と同じ経路＝二重管理を無くす）。`thresholds` 未指定は boolean 軸扱い（v1・#34 の回帰）。
+ * 書込可能 `note.*` 上の**解釈できない値**＝型不一致の文字列・未対応 Value 型（`ErrorValue` 等）・`getValue`
+ * 例外・非有限数（`NaN`/`±Inf`）・off-sentinel（threshold 未設定）の数値を含む。`true` のカードは UI
+ *（`NoteCard`）でドラッグ不可にし、ドロップの両軸上書きによるデータ破壊を封じる。真に absent・boolean・
+ * **有限数の数値軸（#122 1b で書き戻し解禁＝掴める）**のカードは `false`（ドラッグして分類できる）。判定は
+ * {@link readAxisReadings} に一本化する（配置側の解釈と同じ経路＝二重管理を無くす）。`thresholds` 未指定は
+ * boolean 軸扱い（v1・#34 の回帰）。
  * 本番の描画経路（`toViewModel`）は {@link readAxisReadings} の `locked` を直接見る＝本関数は「ロックだけ」を
  * 要する呼び出し・回帰テスト向けの薄い委譲（単一情報源は `readAxisReadings`）。
  */

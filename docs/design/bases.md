@@ -388,9 +388,9 @@ export function axesShareWritableKey(
     important: { kind: "boolean" },
   },
 ): boolean {
-  const urgentKey = toFrontmatterKey(ids.urgent);
-  const importantKey = toFrontmatterKey(ids.important);
-  if (urgentKey === null || urgentKey !== importantKey) return false; // 異キー／非 note.* は衝突対象外
+  const urgent = toFrontmatterKey(ids.urgent);
+  const important = toFrontmatterKey(ids.important);
+  if (urgent === null || urgent !== important) return false; // 異キー／非 note.* は衝突対象外
   // 同一の書き戻し可能キー: tag∧tag∧異 tagName のみ合法、他は全て衝突。
   if (specs.urgent.kind === "tag" && specs.important.kind === "tag") {
     return specs.urgent.tag === specs.important.tag; // 同 tagName→衝突 / 異 tagName→合法

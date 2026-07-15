@@ -2,7 +2,7 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120]
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121]
 updated: 2026-07-15
 kind: api
 ---
@@ -353,6 +353,70 @@ flowchart LR
 - **新規** `src/logic/axis.test.ts`＝§3.3 表（kind×raw のテーブル駆動 27＋非有限 3）・planAxisWrite の null 温存/代表値/tag add-remove（非破壊）/boolean 挙動不変を赤→緑で固定（計 50 ケース）。
 - **流用（変更なし）** `src/logic/undo.ts`（`AxisWrite`／`UndoEntry`／`buildUndoEntries`）・`src/logic/quadrant.ts`（象限ロジック）。
 - アダプタ（`src/bases/*`）・UI（`src/ui/*`）は #120 のスコープ外（UI 変更なし＝`frontend-reviewer` 対象外）。数値/選択/タグ各軸のアダプタ配線は後続 L2。
+
+## 数値しきい値軸アダプタ配線（#121 v0.3-1a・`status: draft`）
+
+> **実装前設計の draft（2026-07-15・#121 で `AskUserQuestion` により設計承認済み）**。本節は v0.3 の数値しきい値軸の **読み取り/表示（locked 段階）**（#121 1a）を、#120 の純ロジック（`interpretAxis`）にアダプタ（`src/bases`）を配線する設計。**書き戻し（ドラッグ解禁）＋undo は #122 1b** のスコープ。実装完了後に本節を現状へ確定し `status: draft`→`active` に更新する。
+
+### 責務（このユニットは何をするか）
+
+数値軸（`note.*` の `NumberValue`）を **読んで正しい象限に見せる**が、**まだ掴めない（locked）**段階を実現する。`readAxis` の boolean 固定（#34）を `AxisSpec` 対応の kind-aware 読み取りへ広げ、`interpretAxis(raw, spec)`（#120）へ配線する。**書き戻し経路（`processFrontMatter`）は 1a では一切触らない**＝数値軸カードは常に locked にし、**データ破壊経路を作らない**（AC5）。boolean 軸の読み取り・配置・ロックは**完全に不変**（AC3・回帰）。
+
+### spec の供給源（決定: per-axis しきい値ハイブリッド・kind は値型推論）
+
+`interpretAxis` の `spec`（number の `threshold`）を**アダプタが per-axis で解決**する。既存の滞留しきい値（#106）・軸プロパティ（#21）と同じ **ビュー options 主＋設定既定のハイブリッド**を数値しきい値へも敷く:
+
+- **設定タブ（主動線）**: `EisenhowerSettings.defaultUrgencyThreshold` / `defaultImportanceThreshold`（新規）。**既定は「未設定（オフ）」**（下記 off-sentinel）。
+- **`.base` ビュー options（Base 単位の上書き）**: `config.get(URGENT_NUMBER_THRESHOLD_OPTION_KEY)` / `IMPORTANT_NUMBER_THRESHOLD_OPTION_KEY`（新規キー）。**専用 GUI コントロールは 1a では未登録**（滞留しきい値 v1 と同じ＝Bases の数値オプション UI 実機スパイク後に別途。`.base` の view config に手で置けば効く）。
+- **解決**: `resolveNumberThresholds(config, settings) → { urgent: number | null, important: number | null }`（滞留の `resolveStagnationThresholdDays` と対称の numeric 版）。`config.get`（主）→設定既定の順。`null`＝当該軸のしきい値が未設定。
+
+- **kind は値型から推論**（既存 `instanceof` 許可リスト哲学に一致）: 軸の値が `NumberValue` なら number spec、`BooleanValue` なら boolean spec として扱う。**明示的な「軸 kind」設定は持たない**（1a）。
+- **off-sentinel によるゲーティング（v1→v0.3 の不意の挙動変化を防ぐ）**: `threshold` が `null`（設定タブ空＋ビュー options 未設定）の軸では、`NumberValue` を **number 配置しない**＝v1 と同じく **未分類＋locked** のまま（既存の非 boolean ロックを踏襲）。しきい値が設定された軸でのみ number 配置が有効になる。滞留の `0`＝オフ・完了の `""`＝オフと同型の「未設定＝機能オフ」規律。`threshold` は負値・小数も許容するため（滞留の非負整数と異なる）、`0` はオフ sentinel に使えず「未設定」を別途 sentinel にする（設定は文字列 `""`＝未設定・`config.get`/設定値の finite 数のみ有効）。
+
+### 読み取り経路（Value → AxisRaw → interpretAxis → 1a locked ポリシー）
+
+```mermaid
+flowchart TD
+  V["entry.getValue(note.axis)<br/>Value | null（throw は境界退避）"] --> RAW["toAxisRaw（instanceof 振り分け）<br/>Bool→boolean / Number→number（Number(v.toString())・公開 API）<br/>Null→absent / String→string / List→array / Error・不明→unsupported"]
+  RAW -->|"number かつ threshold=null"| V1["未分類＋locked（v1 踏襲・ゲート off）"]
+  RAW -->|"unsupported（Error 等）/ getValue throw"| LK["未分類＋locked（安全側・AC2）"]
+  RAW -->|"それ以外"| SPEC["specFor(raw, threshold)<br/>number→{number,threshold} / boolean→{boolean}<br/>string・array→{boolean}（interpretAxis で型不一致ロック）"]
+  SPEC --> IA["interpretAxis(raw, spec)（#120・不変）"]
+  IA --> POL{"spec.kind==number ?"}
+  POL -->|"yes（1a: 書き戻し未実装）"| NUM["side は温存・**locked=true 強制**<br/>有限→象限配置(locked)・AC1/AC5 / 非有限→未分類(locked)・AC2"]
+  POL -->|"no"| PASS["reading をそのまま（boolean=配置・非ロック / string・array=未分類+locked）"]
+```
+
+- **1a の locked ポリシー**: `interpretAxis` は number+有限で `locked:false` を返すが、**アダプタが number-kind の reading を一律 `locked:true` に上書き**する（書き戻し未実装のため掴ませない）。`interpretAxis`（#120）自体は変更しない。1b で number の常時ロックを外し `planAxisWrite` を配線する。
+- **配置と locked は独立**: `MatrixEntry.locked` は既存どおりカード単位（いずれかの軸が locked ならカード locked）。有限数カードは `placements[quadrant]` に載る（配置）と同時に `locked`（掴めない）＝既存の「sameAxisKey で配置されるが locked」と同じ二層構造を流用。
+- **`Number(v.toString())` で読む（公開 API・`.data` に非依存）**: `NumberValue` は `instanceof` で判定し `Number(value.toString())` で数値化する（churn 耐性＝内部 `.data` に触れない・Issue 明記の S0）。非有限（`NaN`/`±Inf`）は `interpretAxis` の number 分岐が `undefined/locked` に落とす。
+- **kind-aware locked 述語**: v1 の `isUnsupportedAxisValue`（非 boolean を一律ロック）を、上記の読み取り経路が返す per-axis `AxisReading.locked` に置き換え、`hasUnsupportedAxisValue` 相当をカード単位で合流させる（`readAxisValues` と 2 度読みしていた getValue を 1 経路へ寄せる方向で整理）。`ErrorValue`・`getValue` throw は安全側ロック（AC2）。
+
+### 新規/変更モジュール（#121・予定）
+
+- **変更** `src/bases/readAxis.ts`＝`toAxisRaw`（`Value`→`AxisRaw` の `instanceof` 振り分け）と、`interpretAxis` へ配線した per-axis 読み取り（`side`＋`locked` を返す）。`isUnsupportedAxisValue`/`hasUnsupportedAxisValue` を kind-aware 化。`NumberValue`・`ErrorValue` を obsidian から値 import（esbuild external）。
+- **新規** `src/bases/numberThreshold.ts`（滞留 `stagnationThreshold.ts` と対称）＝`URGENT_NUMBER_THRESHOLD_OPTION_KEY`/`IMPORTANT_NUMBER_THRESHOLD_OPTION_KEY`・`toNumberThreshold(raw): number|null`（finite のみ有効）・`resolveNumberThresholds(config, settings)`。
+- **変更** `src/settings.ts`＝`defaultUrgencyThreshold`/`defaultImportanceThreshold`（`string`・既定 `""`＝オフ）を追加し `mergeSettings` に復元規律を足す。
+- **変更** `src/settingsTab.ts`＝しきい値のグローバル既定入力（主動線・滞留の入力と同型。parse は単体固定）。
+- **変更** `src/bases/toViewModel.ts`＝`resolveNumberThresholds` を 1 度解決し読み取りへ注入（全カード共通）。
+- **変更** `src/test-support/obsidianStub.ts`＝`ErrorValue` を追加（`NumberValue` は既存。`toString()` が実機表現＝数値文字列を返すこと・`instanceof` 成立を担保。AC4）。
+- **UI（`src/ui/*`）は変更なし**＝locked 表示は既存 `NoteCard` locked を流用（`frontend-reviewer` 対象外の見込み。差分に `src/ui` が入らないことを「ビジュアル/UX 確認」タスクで `git diff --name-only` で確認）。
+
+### 主要な設計判断（現行の理由）
+
+- **1a は number を常時 locked（書き戻しを 1b へ分離）**: 読み取り/表示だけを先に出荷可能にし、書き戻し（`processFrontMatter`）が無いままドラッグを許して連続値を `true/false` で潰す破壊経路を作らない（AC5）。`interpretAxis` は不変で、常時ロックはアダプタ層のポリシーに閉じる。
+- **kind は値型推論・明示 kind 設定を持たない（1a）**: `readAxis` 既存の `instanceof` 許可リスト哲学に一致し、設定面を最小化する。select/tag は後続 L2（#123/#125）で同経路に足す。
+- **off-sentinel でゲート（未設定＝v1 踏襲）**: しきい値未設定の数値軸を勝手に配置せず、v1 の未分類＋locked を維持することで、v0.3 アップグレード時に既存の数値 `note.*` プロパティが不意に象限へ現れる驚きを防ぐ。設定した軸でのみ number 配置が有効（滞留 `0`＝オフ・完了 `""`＝オフと同型）。
+- **per-axis しきい値（global 単一にしない）**: 緊急度と重要度は別の数値規約（例: 期日までの日数 / 優先度スコア）を取りうるため、軸名（`defaultUrgencyProperty`/`defaultImportanceProperty`）が per-axis なのに合わせ、しきい値も per-axis にする。
+- **GUI コントロール未登録（`.base` 手置き＋設定既定が主動線）**: 滞留しきい値 v1 と同じ割り切り。Bases の数値オプション round-trip 実機スパイク後に GUI を別途足す（CLAUDE.md「着手前スパイク必須」）。
+- **`Number(v.toString())`（公開 API・`.data` 非依存）**: churn 対象の内部表現に触れず、`instanceof NumberValue`＋文字列化で数値を得る（S0 確定）。
+
+### テスト方針（TDD 対象）
+
+- 単体（`src/bases/readAxis.test.ts`）: 数値軸（threshold 設定あり）× `NumberValue`（有限・境界ちょうど・非有限）→ 配置 side＋`locked=true`。型不一致（`StringValue`）・`ErrorValue`・`getValue` throw → 未分類＋locked。threshold=null（未設定）× `NumberValue` → v1（未分類＋locked）。**boolean 軸の回帰**（配置・非ロック不変・AC3）。
+- 単体（`src/bases/numberThreshold.test.ts`）: `toNumberThreshold`（finite のみ有効・空/非数値/`NaN`→null）・`resolveNumberThresholds`（options 主・設定既定フォールバック・per-axis）。
+- 単体（`src/settings.test.ts`）: `mergeSettings` のしきい値復元（既定・不正値の防御）。
+- スタブ整合（AC4）: `obsidianStub` の `NumberValue.toString()`＝数値文字列・`ErrorValue` の `instanceof` 成立（⚠️ スタブ＝実機の同値性は単体では検証不能・`scripts/e2e` の placements 検証で担保する既存の限界を踏襲）。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

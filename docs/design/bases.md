@@ -2,7 +2,7 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121, 124]
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121, 122, 124]
 updated: 2026-07-15
 kind: api
 ---
@@ -418,6 +418,78 @@ flowchart TD
 - 単体（`src/bases/numberThreshold.test.ts`）: `toNumberThreshold`（finite のみ有効・空/非数値/`NaN`→null）・`resolveNumberThresholds`（options 主・設定既定フォールバック・per-axis）。
 - 単体（`src/settings.test.ts`）: `mergeSettings` のしきい値復元（既定・不正値の防御）。
 - スタブ整合（AC4）: `obsidianStub` の `NumberValue.toString()`＝数値文字列・`ErrorValue` の `instanceof` 成立（⚠️ スタブ＝実機の同値性は単体では検証不能・`scripts/e2e` の placements 検証で担保する既存の限界を踏襲）。
+
+## 数値しきい値軸 書き戻し＋undo（#122 v0.3-1b・`status: active`）
+
+> **#122（v0.3-1b）で数値しきい値軸のドラッグ書き戻し＋undo を解禁し `status: active` に確定した（実装前設計で人間承認済み・2026-07-15、`AskUserQuestion`）。** 親 #3「数値軸（1 番目）」に寄与。依存 #121（1a・読み取り/表示）はマージ済み（PR #138・`744a78d`）。1a で「読めるが掴めない（locked）」だった数値軸カードを、#120 の純ロジック `planAxisWrite` にアダプタ（`writeBackAxes`）を配線して**掴んでドロップで書き戻せる**ようにした。設計原則は Issue の**「同じ側なら書かない・越境時のみ代表値」**（連続値のニュアンスを温存）。
+
+### 責務（このユニットは何をするか）
+
+1a の**読み取りロックを解除**（有限数カードをドラッグ可能に）し、ドロップの書き戻しを `planAxisWrite`（#120）へ配線する。**越境時のみ代表値を書き、同じ側なら書かない（数値温存）**。undo は #105 の keylist 機構（`buildUndoEntries`／`applyUndo`／`isUndoApplicable`・verbatim `wrote`）を**拡張なしで流用**し、**書いた軸だけを記録・照合**する。boolean 軸は従来どおり両軸 `true/false` を無条件書き込み（**挙動不変**・AC4・回帰で固定）。**`src/ui` 差分 0 件**（UI は side＝`boolean` だけを扱い、数値の生値は UI に出ない＝`optimisticMove`/`MatrixView`/`NoteCard` 不変）。
+
+### 書き戻し時の軸 kind 決定（決定: 案B＝読み取りと対称＝値型推論＋absent は threshold・人間承認）
+
+`writeBackAxes` は `processFrontMatter` の `frontmatter`（plain 値）から現在値を読み、per-axis の `AxisSpec` を **#121 の読み取り経路と対称に**決める（`AskUserQuestion` 承認・2026-07-15）:
+
+| 現在値（frontmatter[key]）＼ threshold | threshold あり | threshold=null（off） |
+|---|---|---|
+| **number**（typeof number） | **number spec**（AC1/AC2） | boolean spec だが**下記ガードで温存**（数値を上書きしない） |
+| **absent**（キー欠損・null/undefined） | **number spec**（AC5＝absent 数値軸へ代表値） | boolean spec（v1・両軸 `true/false`） |
+| **boolean**（typeof boolean） | boolean spec（読み取りと対称＝boolean 値は boolean 解釈・誤って数値上書きしない） | boolean spec（v1・AC4） |
+| その他（string/配列/object 等） | boolean spec だが**下記ガードで温存**（型不一致値を上書きしない） | boolean spec だが**下記ガードで温存** |
+
+- **present 値は値型推論**（#121 の「kind は値型推論」を書き込み側でも踏襲）、**absent のみ threshold 有無で解決**（absent は型が無く AC5 の代表値決定に spec の kind が要るため。読み取りでは absent は spec 非依存で常に未分類＋非ロック＝掴めるので到達する）。
+- **案A（軸レベル＝threshold 有無だけで kind 決定）は却下**: threshold 設定軸に boolean 値が入った誤設定カードが、読み取りでは boolean 扱いで掴めるのに書き込みで `planAxisWrite`→locked→`null` になりスナップバックする非対称が残る。案B は読み書き対称でこの事故を作らない（データ安全最優先＝Issue 非機能）。
+- **非 boolean 上書きガード（#122 レビュー対応・データ保護の深層防御）**: 上表で **boolean spec に倒れるが現在値が非 boolean（数値/文字列/配列/object）** のセルは、`planWriteBack` が**その軸の書き込みをスキップして値を温存**する（boolean で既存の非 boolean 値を潰さない）。読み取り側ロック（#34/#121: 非 boolean `note.*` は掴めない）が主ガードだが、**render↔write 間で threshold が乖離**（`config.get` の一過性 throw で write 時に `null` へフォールバック）したり in-flight レースで値が非 boolean に化けても、boolean 上書きによる silent なデータ変換（数値→`true`/`false` 等）を書き戻し側でも断つ（`writeCompletion` の非 boolean 保護と同じ思想）。`boolean`/`absent` は正当な boolean 軸の書き込みなので通す（AC4 挙動不変）。number/select/tag spec の非対応値保護は `planAxisWrite`（locked→`null`）が担うため、本ガードは boolean spec に限定する。
+
+### 書き戻し経路（planWriteBack → 書いた軸だけ書込＋undo）
+
+```mermaid
+flowchart TD
+  DROP["onMoveCard(entryId, sides)（UI＝目標両軸 side・boolean）<br/>※ shouldSkipMove（両軸とも同一象限）は UI が事前 no-op"] --> WB["writeBackAxes（EisenhowerBasesView・extends BasesView＝単体対象外）"]
+  WB --> KEYS["resolveWritableAxisKeys（両軸とも note.* か・同一キー弾き）＋ resolveNumberThresholds"]
+  KEYS -->|null（非 note.*/同一キー）| NOTICE["Notice＋throw → UI ロールバック（AC3 既存・不変）"]
+  KEYS --> PFM["app.fileManager.processFrontMatter(file, fm => …)"]
+  PFM --> PLAN["planWriteBack(fm, keys, sides, thresholds)（新規・純関数）<br/>per-axis: 現在値→AxisRaw 正規化 → axisSpecForWrite（上表）→ 非 boolean 上書きガード（boolean spec×非 boolean present は温存でスキップ）→ planAxisWrite(side, spec, current)<br/>→ 非 null の {key, value} だけ AxisWrite[] に集める（同じ側＝null は落とす＝温存・AC2）"]
+  PLAN -->|writes.length > 0| APPLY["buildUndoEntries(fm, writes)（書いた軸だけ捕捉）→ fm[key]=value を writes 分だけ適用<br/>→ undoManager.record（1〜2 要素）"]
+  PLAN -->|writes.length === 0| NOOP["何も書かない（両軸とも温存・通常は UI が事前 skip 済み）"]
+```
+
+- **`planWriteBack` は純関数**（plain `frontmatter` object を受ける）で単体テスト対象。`writeBackAxes` が `extends BasesView` で単体不能なため、判定純度をここへ逃がす（既存 `resolveWritableAxisKeys`／`viewOptions` と同じ「純ラッパを切り出す」流儀）。
+- **代表値は `planAxisWrite`（#120・不変）に一任**: 越境時 `side ? (highValue ?? threshold) : (lowValue ?? threshold - 1)`。**1b では `highValue`/`lowValue` を設定する GUI を持たない**ため代表値は `threshold` / `threshold - 1` 固定（極大 threshold での `threshold-1===threshold` 丸めは #120 節記載の既知 nit＝現実の優先度しきい値では非発生。任意しきい値露出の後続段で見直す）。
+- **undo は「書いた軸だけ」**: `buildUndoEntries` に**プランされた軸のみ**渡す（number 片側温存なら 1 要素・boolean 両軸なら 2 要素）。`applyUndo`（present→代入・absent→delete）で元の数値へ verbatim 復元、`isUndoApplicable` が書いた軸だけを `wrote` 照合（AC3）。#105 の undo 機構は**拡張不要**（`wrote: unknown` が数値をそのまま保持）。
+- **AC2 の温存は 2 層**: (1) 両軸とも同じ側なら UI の `shouldSkipMove` が `onMoveCard` を呼ばず no-op、(2) 片側だけ越境なら `writeBackAxes` に届くが `planAxisWrite` が同じ側の軸に `null` を返し**その軸を書かない**（数値温存）。
+- **boolean 挙動不変（AC4・回帰）**: threshold 未設定（既定）は両軸 boolean spec → `planAxisWrite` が `current` に依らず `{value: side}` を返す → 従来と同一の両軸 `true/false` 書き込み・undo 2 要素。`resolveNumberThresholds` が `{urgent:null, important:null}` を返す既定経路で v1 と 1 ビットも変わらない。
+
+### 読み取り解禁（1a locked ポリシーの撤去）
+
+`readSingleAxisReading`（`readAxis.ts`）の number 分岐が 1a で無条件 `locked:true` に上書きしていたのを外し、**`interpretAxis` の結果をそのまま返す**（有限数→`locked:false`＝掴める／非有限〔NaN・±Inf〕→`interpretAxis` が `side:undefined,locked:true`／threshold=null の off-sentinel は分岐手前で未分類＋locked を維持）。これで有限数カードがドラッグ可能になり、書き戻し経路が生きる。**boolean/absent/string の読み取りは不変**（#34/#121 の解釈を維持）。
+
+### 新規/変更モジュール（#122・実装済み）
+
+- **新規** `src/bases/writeBackPlan.ts`＝`frontmatterValueToAxisRaw(fm, key): AxisRaw`（plain 値→`AxisRaw`）・`axisSpecForWrite(threshold, current): AxisSpec`（上表・案B）・`planWriteBack(fm, keys, sides, thresholds): AxisWrite[]`（per-axis `planAxisWrite` 配線・非 null だけ集約）。
+- **新規** `src/bases/writeBackPlan.test.ts`＝越境→代表値・同側→温存（null）・absent×threshold→代表値・boolean 両軸無条件・型不一致/off-sentinel の防御既定をテーブル駆動で赤→緑固定。
+- **変更** `src/bases/readAxis.ts`＝`readSingleAxisReading` の number 常時ロック撤去（有限数を unlock）。付随して `readAxis.test.ts` の number 期待を **1a `locked:true` → 1b `locked:false`** に反転（非有限・off-sentinel は locked 維持）。
+- **変更** `src/bases/EisenhowerBasesView.ts`＝`writeBackAxes` が `resolveNumberThresholds` を解決し `processFrontMatter` 内で `planWriteBack` を呼び、プランされた軸だけ書き込み＋`buildUndoEntries`（書いた軸だけ）。
+- **流用（変更なし）** `src/logic/axis.ts`（`planAxisWrite`・#120）・`src/logic/undo.ts`（keylist 機構・#105）・`src/ui/*`（side ベース＝差分 0 件）。
+- **手動/結合（未実施・実機スモークで担保予定）** 掴む→ドロップ→書き戻し→undo の往復（`instanceof`・`processFrontMatter` round-trip はスタブでは検証不能な既存の限界）は実機 Obsidian でのスモークに委ねる。純ロジックの単体（`writeBackPlan.test.ts`／`axis.test.ts`／`undo.test.ts`）で判定・プラン・復元を全数固定済みで、残る実機同値性の確認が `scripts/e2e`（数値フィクスチャ追加）＋手動スモークの範囲。
+
+### 主要な設計判断（現行の理由）
+
+- **書き込み側 kind は読み取りと対称（案B・人間承認）**: present 値は値型推論・absent のみ threshold で解決。誤設定軸で「掴めるのに書き込みだけ失敗（スナップバック）」の非対称を作らずデータ安全を保つ（上記「軸 kind 決定」）。
+- **非 boolean 上書きガード（#122 レビュー対応）**: `planWriteBack` は boolean spec でも現在値が非 boolean（数値/文字列/配列/object）ならその軸をスキップして温存する。read↔write の threshold 乖離（`config.get` の一過性 throw）や in-flight レースで boolean spec に倒れても、boolean 上書きで数値等を silent に変換しない（読み取り側ロックの gap を書き戻し側の深層防御で塞ぐ・上記「軸 kind 決定」の同名項）。
+- **`planWriteBack` を純関数へ切り出す**: `writeBackAxes` が単体不能なため、越境判定・代表値決定・書いた軸集約の純度をアダプタの薄い純モジュールに逃がして単体固定する（`resolveWritableAxisKeys` と同じ流儀）。
+- **undo 機構は拡張しない**: #105 の keylist（`wrote: unknown` verbatim）が数値をそのまま保持できるため、「書いた軸だけ」を渡すだけで数値の完全復元が成立する（型だけの一般化は #105 で完了済み）。
+- **代表値は純ロジックに一任（アダプタは threshold を供給するだけ）**: `highValue`/`lowValue` GUI が無い 1b では代表値は `threshold`/`threshold-1` 固定。任意しきい値・代表値の露出は後続段（実機スパイク後）。
+- **UI 不変（side 抽象の維持）**: `MatrixEntry.urgent/important` は `boolean | undefined`（側）のままで数値生値を UI に出さない。number カードの配置・楽観移動・reconcile は既存の side ベース機構で成立する（`classifyQuadrant`／`axisValuesForQuadrant` 不変）。
+
+### テスト方針（TDD 対象）
+
+- 単体（`src/bases/writeBackPlan.test.ts`・新規）: 越境（低→高／高→低）→代表値・同側→`null`（温存）・absent×threshold→両軸代表値（AC5）・absent×threshold=null→boolean 両軸・boolean spec は `current` 非依存で常に `{value: side}`（AC4）・片側温存＋片側越境で `AxisWrite[]` が 1 要素・**非 boolean 上書きガード**（off-sentinel×number／threshold×string／threshold×配列／config.get throw で write 時 threshold=null に転ぶ finding #1 回帰 → いずれも温存でスキップ・boolean/absent は正当に書ける＝#122 レビュー対応）。
+- 単体（`src/bases/readAxis.test.ts`・変更）: 数値軸（threshold あり）× 有限 `NumberValue` → **`locked:false`（掴める・1b 解禁）**、非有限 → 未分類＋locked、threshold=null → 未分類＋locked、boolean/absent/string の回帰不変。
+- 単体（`src/logic/undo.test.ts`・流用確認）: 数値の verbatim 復元・書いた軸だけの `isUndoApplicable` 照合（既存機構で成立することを固定）。
+- 手動/結合（`scripts/e2e`）: 数値フィクスチャで掴む→ドロップ→書き戻し→undo の実機 round-trip（スタブ非検証域）。
+
 ## 同一キーガードの kind-aware 化（タグ軸基盤・#124・`status: active`）
 
 > **#124（v0.3-3a）で `axesShareWritableKey` を kind を考慮した判定へ改修し `status: active` に確定した（2026-07-15・実装前設計で人間承認済み）**。親 #3「タグ軸の成立条件」に寄与。依存 #120（AxisSpec 基盤）。タグ軸の本命ユースケース「`tags` 1 本に urgent/important の 2 タグ」は**同一キー・異 tagName だが合法**で、現行の 2 軸キー直接比較ガードが設定ミスとして全面ブロックしてしまう問題を解く（外すとタグ軸の価値が半減する）。

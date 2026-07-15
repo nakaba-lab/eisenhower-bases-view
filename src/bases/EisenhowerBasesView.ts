@@ -10,6 +10,8 @@ import { render, unmount } from "../ui/MatrixView";
 import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolvePresentation } from "./presentation";
 import { resolveCompletionKey, resolveWritableAxisKeys } from "./readAxis";
+import { resolveNumberThresholds } from "./numberThreshold";
+import { planWriteBack } from "./writeBackPlan";
 import { runUndo } from "./undoWriteBack";
 import { VIEW_ID } from "./registerView";
 import {
@@ -172,11 +174,14 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
   }
 
   /**
-   * ドラッグ書き戻し（#20 F3）: 両軸を明示 `true/false` で frontmatter へ書き込む（`delete` しない）。
+   * ドラッグ書き戻し（#20 F3・#122 1b で数値しきい値軸へ一般化）: 目標両軸 side を `planWriteBack`
+   *（#122・純関数）に通し、**書き込みが要る軸だけ**を frontmatter へ明示書き込みする（`delete` しない）。
    *
    * 軸 propertyId を解決し（ビュー options 主・設定デフォルト）、`note.<key>` のキーへ
-   * `app.fileManager.processFrontMatter` で書く。`note.` 以外（formula/file）やファイル欠落・
-   * 書き込み失敗は `Notice` を出して reject し、UI 側に楽観移動のロールバックを促す。
+   * `app.fileManager.processFrontMatter` で書く。**boolean 軸は両軸 `true/false` を無条件書き込み（v1 挙動
+   * 不変・AC4）。数値しきい値軸は越境時のみ代表値を書き、同じ側なら書かない（数値温存・AC1/AC2）。absent の
+   * 数値軸は両軸に代表値を書く（新規分類・AC5）。** `note.` 以外（formula/file）やファイル欠落・書き込み失敗は
+   * `Notice` を出して reject し、UI 側に楽観移動のロールバックを促す。
    */
   private async writeBackAxes(
     entryId: string,
@@ -184,40 +189,52 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
   ): Promise<void> {
     // 書込可能な note.* 軸か（両軸）を frontmatter に触れる前に判定して弾く（AC3）。
     const messages = this.getMessages();
-    const keys = resolveWritableAxisKeys(this.config, this.getSettings());
+    const settings = this.getSettings();
+    const keys = resolveWritableAxisKeys(this.config, settings);
     if (keys === null) {
       new Notice(`Eisenhower Matrix: ${messages.axisNotWritable}`);
       throw new Error("axis property is not writable (formula/file)");
     }
+    // 数値しきい値軸の per-axis しきい値を解決する（#121・null＝boolean 軸扱い＝v1 挙動不変）。
+    const thresholds = resolveNumberThresholds(this.config, settings);
 
     const file = this.resolveTargetFile(entryId, messages.fileNotFoundForMove);
     if (!file) {
       throw new Error(`target file not found: ${entryId}`);
     }
 
-    // 上書き前の両軸値を捕捉して undo 記録を組む（present/absent を区別・値は verbatim 保持）。
+    // 上書き前の値を捕捉して undo 記録を組む（present/absent を区別・値は verbatim 保持＝数値もそのまま）。
     // 書き込み成功後に UndoManager へ「直前 1 手」として保存する（undo・最小実装）。
     // なお writeCompletion と違い、ここは非 boolean 実値の inline ガード（書込阻止）を持たない。これは
-    // 意図的な非対称: (1) 非 boolean 軸値のカード（および 1a の数値軸カード）は render 時に軸読み取り
-    // （`toViewModel` が見る `readAxisReadings(...).locked`・#121）でロック＝ドラッグ不可のため通常経路では
-    // 到達しない。(2) 稀な in-flight ドラッグ中の外部書換で非 boolean 化しても、
-    // 上書き前の値をこの undo 記録が verbatim 捕捉するため復元可能。writeCompletion は undo を作らない
-    // ので元値保護を inline ガードで担う＝両経路は「undo 復元／書込阻止」で守り方が異なる（v0.2 レビュー）。
+    // 意図的な非対称: (1) 非 boolean・非対応値のカードは render 時に軸読み取り（`toViewModel` が見る
+    // `readAxisReadings(...).locked`・#121）でロック＝ドラッグ不可のため通常経路では到達しない。
+    // (2) 稀な in-flight ドラッグ中の外部書換で非対応化しても、上書き前の値をこの undo 記録が verbatim
+    // 捕捉するため復元可能。writeCompletion は undo を作らないので元値保護を inline ガードで担う＝両経路は
+    // 「undo 復元／書込阻止」で守り方が異なる（v0.2 レビュー）。
     let undoRecord: UndoRecord | null = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
-        // 両軸を 1 記録（entries 2 要素）に捕捉する（#105 でキーリスト化）。書き込んだ値（value）は
-        // undo 適用前の同一性照合（別ノートへの誤 delete/上書き防止）に使う。
+        // per-axis で planAxisWrite を通し、越境した軸だけを書き込みリストにする（同側の数値は温存・#122 1b）。
+        const writes = planWriteBack(frontmatter, keys, axisValues, thresholds);
+        // 両軸とも温存（数値が同側）で書くものが無ければ何もせず、直前の undo 記録も据え置く（#122 レビュー）。
+        // 到達は TOCTOU 限定（render 後〜drop 前に外部編集で数値が既に目標側へ移動し、UI の shouldSkipMove は
+        // 旧 side で「移動」と判断するが planWriteBack は越境なしと判断する食い違い）。この分岐は書き込みを
+        // 行わないためデータ破壊は無く、新規 undo を記録しないのも正しい（戻す対象が無い）。直前の記録を消さ
+        // ないのは意図的＝過去の実書き込みは依然 undo 可能に保つ（トースト経由 undo は runUndo の
+        // expectedEntryId ガードが別ノートの誤復元を防ぐ）。「書かなかったのに成功トーストが出る」楽観
+        // オーバーレイの UX 齟齬は optimistic + 温存 設計に内在し、完全な解消は onMoveCard が「書いたか」を
+        // 返す UI 契約変更（1b の src/ui 差分 0 件方針を崩す）を要するため、数値軸 GUI 段で総合的に扱う。
+        if (writes.length === 0) return;
+        // 書いた軸だけを 1 記録に捕捉する（#105 keylist）。書き込んだ値（value）は undo 適用前の同一性照合
+        //（別ノートへの誤 delete/上書き防止）に使う。boolean 両軸＝2 要素・数値片側温存＝1 要素。
         undoRecord = {
           entryId,
           title: file.basename,
-          entries: buildUndoEntries(frontmatter, [
-            { key: keys.urgent, value: axisValues.urgent },
-            { key: keys.important, value: axisValues.important },
-          ]),
+          entries: buildUndoEntries(frontmatter, writes),
         };
-        frontmatter[keys.urgent] = axisValues.urgent;
-        frontmatter[keys.important] = axisValues.important;
+        for (const write of writes) {
+          frontmatter[write.key] = write.value;
+        }
       });
     } catch (error) {
       console.error("[Eisenhower Matrix] failed to write back frontmatter", error);

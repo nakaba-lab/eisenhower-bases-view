@@ -28,7 +28,7 @@ import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidi
 import type { EisenhowerSettings } from "../settings";
 import type { AxisValues } from "../logic/quadrant";
 import { interpretAxis } from "../logic/axis";
-import type { AxisRaw, AxisReading } from "../logic/axis";
+import type { AxisRaw, AxisReading, AxisSpec } from "../logic/axis";
 import type { NumberThresholds } from "./numberThreshold";
 
 /**
@@ -182,27 +182,60 @@ export function resolveWritableAxisKeys(
   if (urgent === null || important === null) return null;
   // 両軸が同一 frontmatter キーだと、書き戻しが同じキーを 2 度書いて後勝ちで潰れ（両軸が同値になり）
   // カードが意図しない象限へ飛ぶ。設定ミスなので書き戻し前に弾く（Notice で通知・レビュー指摘の question）。
+  // ⚠️ この同一キーブロックは **kind 非依存**（tag×tag×異 tagName も一律 null）。読み取り側 {@link axesShareWritableKey}
+  // は #124 で kind-aware 化したが、ここは boolean 固定のまま＝タグ軸アダプタ配線の後続 L2 で、tag×tag×異 tagName
+  // を書き込み側でも合法化（別タグの add/remove を許す）よう kind-aware 化して同期する必要がある。
   if (urgent === important) return null;
   return { urgent, important };
 }
 
 /**
- * 両軸が**同一の書き戻し可能 `note.*` キー**を指すか（設定ミス）を判定する。
+ * 両軸が**同一の書き戻し可能 `note.*` キー**を指す設定が「設定ミス」か（＝全カードをロックすべきか）を、
+ * **kind＋tagName を考慮して**判定する（#124 タグ軸基盤）。
  *
- * 同一キーだと両軸値が常に同値になり、カードは do/delete の実象限に載って掴めるのに、書き戻しは
- * `resolveWritableAxisKeys` の `urgent === important` ガードで毎回 `null`→Notice→ロールバックになる
- *（「掴めるのに必ず失敗する」壊れた UI 状態）。UI 側で当該ビューの全カードをドラッグ不可（`locked`）に
- * するために、`toViewModel` がこの述語で検出する（書き込み前ガードと対称の読み取り側ガード・レビュー指摘）。
+ * 同一キーだと（tag 軸の別タグ同居を除き）両軸値が常に同値・相互に潰し合い、カードは do/delete の実象限に
+ * 載って掴めるのに書き戻しは `resolveWritableAxisKeys` の `urgent === important` ガードで毎回 `null`→Notice→
+ * ロールバックになる（「掴めるのに必ず失敗する」壊れた UI 状態）。UI 側で当該ビューの全カードをドラッグ不可
+ *（`locked`）にするために、`toViewModel` がこの述語で検出する（書き込み前ガードと対の読み取り側ガード）。
+ *
+ * ⚠️ **書き込み側との対称性は boolean 既定でのみ成立**（#124 では読み取り側の本述語だけを kind-aware 化した）。
+ * 書き込み側 {@link resolveWritableAxisKeys} は kind 非依存で `urgent === important` を一律ブロックするため、
+ * タグ軸アダプタが配線される後続 L2 では**書き込み側も同じ kind-aware 化で同期**する必要がある（さもないと
+ * tag×tag×異 tagName が「読み取り側は unlock・書き込み側は必ず `null`→Notice→ロールバック」になり、まさに
+ * 本述語が塞ごうとしている「掴めるのに必ず失敗する」状態を書き込み側で再現する）。
+ *
+ * kind 別の扱い（決定・人間承認・設計は `docs/design/bases.md`「同一キーガードの kind-aware 化」節）:
+ * - **boolean/number/select** の同一キー → 設定ミス（同一キーへ 2 度書いて後勝ちで潰れる）。
+ * - **tag×tag** の同一キー → **tagName が異なれば合法**（`tags` 1 本に urgent/important の 2 タグ＝タグ軸の
+ *   本命。タグ配列は別タグが安全に同居でき、`planAxisWrite` が他要素温存で add/remove する非破壊）。
+ *   同一 tagName は互いに toggle し潰し合うため設定ミス。
+ * - **異 kind の同一キー**（例 tag×boolean） → frontmatter の 1 キーは 1 値型しか持てず共存不能のため設定ミス。
+ *
+ * `specs` は各軸の {@link AxisSpec}（`src/logic/axis`＝kind/tagName の真実源）。**省略時は両軸 boolean 既定**で、
+ * v1 の boolean 固定呼び出し（`toViewModel.buildDiagnostics`）は挙動不変（同一キー→衝突）＝非回帰。
  *
  * 2 軸の直接比較で判定する（両軸とも書き戻し可能な `note.*` で同一キー）。かつて N キー汎用ヘルパへ
  * 一般化したが、本番は 2 キー固定のみ・軸×完了の衝突は {@link resolveCompletionId} が pairwise で別途
  * 判定するため、汎用化は使われず YAGNI だった（v0.2 レビューで 2 軸直接比較へ戻した）。
  */
-export function axesShareWritableKey(ids: AxisPropertyIds): boolean {
+export function axesShareWritableKey(
+  ids: AxisPropertyIds,
+  specs: { urgent: AxisSpec; important: AxisSpec } = {
+    urgent: { kind: "boolean" },
+    important: { kind: "boolean" },
+  },
+): boolean {
   const urgent = toFrontmatterKey(ids.urgent);
   const important = toFrontmatterKey(ids.important);
-  // 両軸とも書き戻し可能（非 null）で同一キーのときだけ衝突（非 note.* は書けないため衝突対象外）。
-  return urgent !== null && urgent === important;
+  // 両軸とも書き戻し可能（非 null）で同一キーのときだけ衝突を評価する
+  //（非 note.* は書けないため衝突対象外＝別ガードが弾く）。
+  if (urgent === null || urgent !== important) return false;
+  // 同一の書き戻し可能キー: tag×tag×異 tagName のみ合法（タグ配列の別タグ同居＝非破壊）。
+  // それ以外（tag×tag×同 tagName／非 tag 同 kind／異 kind 同一キー）は全て衝突。
+  if (specs.urgent.kind === "tag" && specs.important.kind === "tag") {
+    return specs.urgent.tag === specs.important.tag;
+  }
+  return true;
 }
 
 /**

@@ -59,6 +59,19 @@ export interface EisenhowerSettings {
   defaultUrgencyThreshold: string;
   /** 重要度軸の数値しきい値（#121 v0.3-1a）。**空文字＝未設定**。設定時は `value >= threshold` で重要側へ配置。 */
   defaultImportanceThreshold: string;
+  /**
+   * 緊急度軸を**選択（select）軸**として扱うときの true 側／false 側の代表文字列（#123 v0.3-2）。
+   * **両方非空かつ互いに異なるとき有効**（片方空・同値は選択軸オフ＝v1 の boolean 軸挙動を維持）。設定時は
+   * 当該軸の文字列値が `trueValue` 一致で緊急側・`falseValue` 一致で非緊急側・それ以外（3 値目 `medium` 等）は
+   * 未分類＋ロック（既存値を保護）。ビュー options 未設定時のグローバル既定（軸プロパティ・数値しきい値と同じハイブリッド）。
+   */
+  defaultUrgencySelectTrueValue: string;
+  /** 緊急度 選択軸の false 側代表文字列（#123 v0.3-2）。**空文字＝未設定**。 */
+  defaultUrgencySelectFalseValue: string;
+  /** 重要度 選択軸の true 側代表文字列（#123 v0.3-2）。**空文字＝未設定**。設定時は `trueValue` 一致で重要側。 */
+  defaultImportanceSelectTrueValue: string;
+  /** 重要度 選択軸の false 側代表文字列（#123 v0.3-2）。**空文字＝未設定**。 */
+  defaultImportanceSelectFalseValue: string;
 }
 
 /** 全象限を空文字で初期化した Record（ラベル/色の既定＝「未カスタム」を表す）。 */
@@ -83,6 +96,10 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   dimCompleted: false,
   defaultUrgencyThreshold: "",
   defaultImportanceThreshold: "",
+  defaultUrgencySelectTrueValue: "",
+  defaultUrgencySelectFalseValue: "",
+  defaultImportanceSelectTrueValue: "",
+  defaultImportanceSelectFalseValue: "",
 };
 
 /**
@@ -193,5 +210,13 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
         : DEFAULT_SETTINGS.dimCompleted,
     defaultUrgencyThreshold: mergeThresholdString(data.defaultUrgencyThreshold),
     defaultImportanceThreshold: mergeThresholdString(data.defaultImportanceThreshold),
+    // 選択軸の代表文字列（#123）: 軸プロパティ名と同型に前後トリム（設定タブのライブ編集と一致）・非文字列は既定（空＝オフ）。
+    defaultUrgencySelectTrueValue: mergePropertyName(data.defaultUrgencySelectTrueValue, ""),
+    defaultUrgencySelectFalseValue: mergePropertyName(data.defaultUrgencySelectFalseValue, ""),
+    defaultImportanceSelectTrueValue: mergePropertyName(data.defaultImportanceSelectTrueValue, ""),
+    defaultImportanceSelectFalseValue: mergePropertyName(
+      data.defaultImportanceSelectFalseValue,
+      "",
+    ),
   };
 }

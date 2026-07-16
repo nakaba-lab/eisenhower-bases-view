@@ -18,7 +18,11 @@ import { planAxisWrite, type AxisRaw, type AxisSpec } from "../logic/axis";
 import type { AxisWrite, FrontmatterLike } from "../logic/undo";
 import type { WritableAxisKeys } from "./readAxis";
 import type { NumberThresholds } from "./numberThreshold";
+import type { AxisSelectValues, SelectValues } from "./selectValues";
 import type { AxisWriteValues } from "./types";
+
+/** 選択軸オフの既定（両軸 `null`）。#123 の select 未指定呼び出し・v1 回帰テスト向け（読取側 `NO_SELECT_VALUES` と対）。 */
+const NO_SELECT_VALUES: AxisSelectValues = { urgent: null, important: null };
 
 /**
  * `processFrontMatter` の plain 値（frontmatter[key]）を純ロジック層の {@link AxisRaw} へ正規化する。
@@ -53,9 +57,23 @@ export function frontmatterValueToAxisRaw(frontmatter: FrontmatterLike, key: str
  * boolean 値・string 値・threshold 未設定（off-sentinel）は boolean spec に倒す（boolean 値は読み書き
  * 対称で boolean のまま扱い数値で上書きしない／off-sentinel・非対応型は読み取りロックで到達しない防御既定）。
  */
-export function axisSpecForWrite(threshold: number | null, current: AxisRaw): AxisSpec {
+export function axisSpecForWrite(
+  threshold: number | null,
+  current: AxisRaw,
+  selectValues: SelectValues | null = null,
+): AxisSpec {
   if (threshold !== null && (current.kind === "number" || current.kind === "absent")) {
     return { kind: "number", threshold };
+  }
+  // 選択（select）軸（#123 v0.3-2）: 現在値が文字列／absent で選択値が設定済みなら select spec を供給する。
+  // absent で数値しきい値と選択値が同一軸に併設された場合は上の number 分岐が先に返す＝**数値軸を優先**
+  //（読み取りが値型で number を選ぶのと整合・決定）。文字列 present は number 分岐に掛からず select spec になる。
+  if (selectValues !== null && (current.kind === "string" || current.kind === "absent")) {
+    return {
+      kind: "select",
+      trueValue: selectValues.trueValue,
+      falseValue: selectValues.falseValue,
+    };
   }
   return { kind: "boolean" };
 }
@@ -81,11 +99,12 @@ export function planWriteBack(
   keys: WritableAxisKeys,
   sides: AxisWriteValues,
   thresholds: NumberThresholds,
+  selectValues: AxisSelectValues = NO_SELECT_VALUES,
 ): AxisWrite[] {
   const writes: AxisWrite[] = [];
   for (const axis of AXES) {
     const current = frontmatterValueToAxisRaw(frontmatter, keys[axis]);
-    const spec = axisSpecForWrite(thresholds[axis], current);
+    const spec = axisSpecForWrite(thresholds[axis], current, selectValues[axis]);
     // 防御的深層防御（データ安全最優先）: boolean spec は boolean/absent 以外の present 値
     //（数値/文字列/配列/object）を上書きしない＝boolean で既存の非 boolean 値を潰さない。
     // 読み取り側ロック（#34/#121: 非 boolean note.* は掴めない）が主ガードだが、render↔write 間で

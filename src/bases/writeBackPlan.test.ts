@@ -307,3 +307,75 @@ describe("planWriteBack — 返り値は AxisWrite 形（buildUndoEntries が消
     }
   });
 });
+
+describe("axisSpecForWrite — 選択（select）軸の spec 供給（#123 v0.3-2）", () => {
+  const selectValues = { trueValue: "high", falseValue: "low" };
+
+  it("axisSpecForWrite — string current + selectValues → select spec", () => {
+    expect(axisSpecForWrite(null, strRaw("high"), selectValues)).toEqual({
+      kind: "select",
+      trueValue: "high",
+      falseValue: "low",
+    });
+  });
+
+  it("axisSpecForWrite — absent + selectValues（threshold なし）→ select spec（新規分類で代表値を書ける）", () => {
+    expect(axisSpecForWrite(null, absent, selectValues)).toEqual({
+      kind: "select",
+      trueValue: "high",
+      falseValue: "low",
+    });
+  });
+
+  it("axisSpecForWrite — absent で threshold と selectValues が両設定 → 数値軸を優先（読み取りと整合・決定）", () => {
+    expect(axisSpecForWrite(3, absent, selectValues)).toEqual({ kind: "number", threshold: 3 });
+  });
+
+  it("axisSpecForWrite — selectValues なしの string は boolean spec（#34 不変・書き込み側で保護）", () => {
+    expect(axisSpecForWrite(null, strRaw("high"))).toEqual({ kind: "boolean" });
+  });
+});
+
+describe("planWriteBack — 選択（select）軸の書き戻し配線（#123 v0.3-2）", () => {
+  const noThresholds: NumberThresholds = { urgent: null, important: null };
+  // 緊急軸だけ select（high/low）、重要軸は select オフ。
+  const selectValues = {
+    urgent: { trueValue: "high", falseValue: "low" },
+    important: null,
+  };
+
+  it("planWriteBack — 越境（low→true）は trueValue を書く（AC2）", () => {
+    const frontmatter: FrontmatterLike = { urgent: "low", important: true };
+    const sides: AxisWriteValues = { urgent: true, important: true };
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    expect(writes).toContainEqual({ key: "urgent", value: "high" });
+  });
+
+  it("planWriteBack — 同じ側（high→true）は書かない（文字列を温存・AC2）", () => {
+    const frontmatter: FrontmatterLike = { urgent: "high", important: true };
+    const sides: AxisWriteValues = { urgent: true, important: true };
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    expect(writes.find((w) => w.key === "urgent")).toBeUndefined();
+  });
+
+  it("planWriteBack — 未知値（medium・locked）へのドロップは書かない（既存値を保護・AC1/決定#3）", () => {
+    const frontmatter: FrontmatterLike = { urgent: "medium", important: true };
+    const sides: AxisWriteValues = { urgent: true, important: true };
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    expect(writes.find((w) => w.key === "urgent")).toBeUndefined();
+  });
+
+  it("planWriteBack — absent の select 軸へ false ドロップは falseValue を書く（新規分類）", () => {
+    const frontmatter: FrontmatterLike = { important: true };
+    const sides: AxisWriteValues = { urgent: false, important: true };
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    expect(writes).toContainEqual({ key: "urgent", value: "low" });
+  });
+
+  it("planWriteBack — selectValues 未指定なら文字列軸は書かない（既定オフ＝v1 不変）", () => {
+    const frontmatter: FrontmatterLike = { urgent: "high", important: true };
+    const sides: AxisWriteValues = { urgent: false, important: true };
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds);
+    expect(writes.find((w) => w.key === "urgent")).toBeUndefined();
+  });
+});

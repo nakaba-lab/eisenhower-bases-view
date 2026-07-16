@@ -252,3 +252,32 @@ describe("数値しきい値軸の設定（#121 v0.3-1a）", () => {
     expect(mergeSettings({ defaultImportanceThreshold: {} }).defaultImportanceThreshold).toBe("");
   });
 });
+
+describe("選択（select）軸の設定（#123 v0.3-2）", () => {
+  it("DEFAULT_SETTINGS — select 値の既定は空文字（未設定＝select 軸オフ・v1 挙動を維持）", () => {
+    expect(DEFAULT_SETTINGS.defaultUrgencySelectTrueValue).toBe("");
+    expect(DEFAULT_SETTINGS.defaultUrgencySelectFalseValue).toBe("");
+    expect(DEFAULT_SETTINGS.defaultImportanceSelectTrueValue).toBe("");
+    expect(DEFAULT_SETTINGS.defaultImportanceSelectFalseValue).toBe("");
+  });
+
+  it("mergeSettings — 保存済みの select 値を per-axis で復元（前後トリム）", () => {
+    const merged = mergeSettings({
+      defaultUrgencySelectTrueValue: " high ",
+      defaultUrgencySelectFalseValue: "low",
+      defaultImportanceSelectTrueValue: "A",
+      defaultImportanceSelectFalseValue: "B",
+    });
+    expect(merged.defaultUrgencySelectTrueValue).toBe("high");
+    expect(merged.defaultUrgencySelectFalseValue).toBe("low");
+    expect(merged.defaultImportanceSelectTrueValue).toBe("A");
+    expect(merged.defaultImportanceSelectFalseValue).toBe("B");
+  });
+
+  it("mergeSettings — 欠損・非文字列は既定（空文字＝オフ）へ", () => {
+    expect(mergeSettings({}).defaultUrgencySelectTrueValue).toBe("");
+    expect(
+      mergeSettings({ defaultUrgencySelectFalseValue: 42 }).defaultUrgencySelectFalseValue,
+    ).toBe("");
+  });
+});

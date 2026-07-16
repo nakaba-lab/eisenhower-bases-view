@@ -356,3 +356,21 @@ describe("messagesFor — カード上の完了トグルの i18n（#105 F10・AC
     expect(messagesFor("ja").completionOption).not.toBe(messagesFor("en").completionOption);
   });
 });
+
+describe("messagesFor — 選択（select）軸の設定タブ i18n（#123 v0.3-2・AC5）", () => {
+  it("messagesFor — select 設定文言が en/ja 両方で欠けなく定義され翻訳されている", () => {
+    const selectKeys = [
+      "urgencySelectTrueName",
+      "urgencySelectFalseName",
+      "urgencySelectDesc",
+      "importanceSelectTrueName",
+      "importanceSelectFalseName",
+      "importanceSelectDesc",
+    ] as const;
+    for (const key of selectKeys) {
+      expect(messagesFor("ja").settings[key].length).toBeGreaterThan(0);
+      expect(messagesFor("en").settings[key].length).toBeGreaterThan(0);
+      expect(messagesFor("ja").settings[key]).not.toBe(messagesFor("en").settings[key]);
+    }
+  });
+});

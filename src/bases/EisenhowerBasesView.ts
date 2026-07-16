@@ -11,6 +11,7 @@ import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolvePresentation } from "./presentation";
 import { resolveCompletionKey, resolveWritableAxisKeys } from "./readAxis";
 import { resolveNumberThresholds } from "./numberThreshold";
+import { resolveSelectValues } from "./selectValues";
 import { planWriteBack } from "./writeBackPlan";
 import { runUndo } from "./undoWriteBack";
 import { VIEW_ID } from "./registerView";
@@ -197,6 +198,9 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     }
     // 数値しきい値軸の per-axis しきい値を解決する（#121・null＝boolean 軸扱い＝v1 挙動不変）。
     const thresholds = resolveNumberThresholds(this.config, settings);
+    // 選択（select）軸の per-axis 選択値を解決する（#123・null＝選択軸オフ＝v1 挙動不変）。
+    // 読み取り（`toViewModel`）と同じ解決器で対称に供給し、越境時のみ trueValue/falseValue を書く。
+    const selectValues = resolveSelectValues(this.config, settings);
 
     const file = this.resolveTargetFile(entryId, messages.fileNotFoundForMove);
     if (!file) {
@@ -215,7 +219,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
         // per-axis で planAxisWrite を通し、越境した軸だけを書き込みリストにする（同側の数値は温存・#122 1b）。
-        const writes = planWriteBack(frontmatter, keys, axisValues, thresholds);
+        const writes = planWriteBack(frontmatter, keys, axisValues, thresholds, selectValues);
         // 両軸とも温存（数値が同側）で書くものが無ければ何もせず、直前の undo 記録も据え置く（#122 レビュー）。
         // 到達は TOCTOU 限定（render 後〜drop 前に外部編集で数値が既に目標側へ移動し、UI の shouldSkipMove は
         // 旧 side で「移動」と判断するが planWriteBack は越境なしと判断する食い違い）。この分岐は書き込みを

@@ -860,3 +860,67 @@ describe("obsidianStub — NumberValue/ErrorValue の整合（#121 AC4）", () =
     expect(errorValue instanceof BooleanValue).toBe(false);
   });
 });
+
+describe("readAxisReadings — 選択（select）軸の読み取り配線（#123 v0.3-2）", () => {
+  const ids: AxisPropertyIds = {
+    urgent: "note.urgent" as BasesPropertyId,
+    important: "note.important" as BasesPropertyId,
+  };
+  const noThresholds = { urgent: null, important: null };
+  // 緊急軸だけ select（high/low）、重要軸は select オフ。
+  const selectValues = {
+    urgent: { trueValue: "high", falseValue: "low" },
+    important: null,
+  };
+
+  it("AC1 — trueValue 一致の文字列は true 側・unlock（掴める）", () => {
+    // given: 緊急軸に "high"（trueValue）
+    const entry = mockEntry({ "note.urgent": new StringValue("high"), "note.important": TRUE });
+    // when
+    const reading = readAxisReadings(entry, ids, noThresholds, selectValues).urgent;
+    // then
+    expect(reading.side).toBe(true);
+    expect(reading.locked).toBe(false);
+  });
+
+  it("AC1 — falseValue 一致の文字列は false 側・unlock", () => {
+    const entry = mockEntry({ "note.urgent": new StringValue("low"), "note.important": TRUE });
+    const reading = readAxisReadings(entry, ids, noThresholds, selectValues).urgent;
+    expect(reading.side).toBe(false);
+    expect(reading.locked).toBe(false);
+  });
+
+  it("AC3 — 未知の 3 値目（medium）は未分類＋locked（採択 A・二値割り切り・書き潰さない）", () => {
+    const entry = mockEntry({ "note.urgent": new StringValue("medium"), "note.important": TRUE });
+    const reading = readAxisReadings(entry, ids, noThresholds, selectValues).urgent;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(true);
+  });
+
+  it("select 未設定の文字列軸は従来どおり未分類＋locked（#34 不変・回帰）", () => {
+    // given: selectValues 未指定（既定＝両軸オフ）で文字列軸
+    const entry = mockEntry({ "note.urgent": new StringValue("high"), "note.important": TRUE });
+    // when
+    const reading = readAxisReadings(entry, ids, noThresholds).urgent;
+    // then: #34 の boolean 軸限定で未分類＋locked（既存挙動不変）
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(true);
+  });
+
+  it("absent は select 軸でも未分類・非ロック（新規分類で代表値を書ける）", () => {
+    const entry = mockEntry({ "note.urgent": ABSENT, "note.important": TRUE });
+    const reading = readAxisReadings(entry, ids, noThresholds, selectValues).urgent;
+    expect(reading.side).toBeUndefined();
+    expect(reading.locked).toBe(false);
+  });
+
+  it("hasUnsupportedAxisValue — 未知値の select 軸は locked 判定に含まれ、一致値は unlock", () => {
+    const unknownEntry = mockEntry({
+      "note.urgent": new StringValue("medium"),
+      "note.important": TRUE,
+    });
+    expect(hasUnsupportedAxisValue(unknownEntry, ids, noThresholds, selectValues)).toBe(true);
+    const okEntry = mockEntry({ "note.urgent": new StringValue("high"), "note.important": TRUE });
+    expect(hasUnsupportedAxisValue(okEntry, ids, noThresholds, selectValues)).toBe(false);
+  });
+});

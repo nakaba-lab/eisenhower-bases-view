@@ -2,8 +2,8 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121, 122, 124]
-updated: 2026-07-15
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121, 122, 123, 124]
+updated: 2026-07-16
 kind: api
 ---
 
@@ -547,6 +547,53 @@ export function axesShareWritableKey(
 - **変更** `src/bases/readAxis.ts`＝`axesShareWritableKey` を AxisSpec 任意引数付き（`specs` 省略時は両軸 boolean 既定）・kind-aware 判定へ拡張（`AxisSpec` を `../logic/axis` から `import type`）。2 軸直接比較は維持。
 - **変更** `src/bases/readAxis.test.ts`＝AC1（tag×tag×異 tagName→false）・AC2（tag×tag×同 tagName→true）・AC3 回帰（boolean/number/select 同一キー→true）・異 kind 同一キー→true（対称）・tagName 大小区別→false・異キー→false・非 note.* →false・specs 省略の挙動不変→true の 10 ケースを赤→緑固定。
 - **不変** `src/bases/toViewModel.ts`（`buildDiagnostics` は `axesShareWritableKey(ids)` を boolean 既定で呼び続ける＝挙動不変）・`src/logic/axis.ts`（`AxisSpec` 型を流用・変更なし）・UI（UI 変更なし＝`frontend-reviewer` 対象外）。
+
+## 選択（select）軸アダプタ配線（#123 v0.3-2・`status: active`）
+
+> **#123（v0.3-2）で文字列値（select）軸をアダプタ層に配線した。実装前設計で 3 値以上運用の扱いを人間承認で確定（2026-07-15・採択 A＝二値割り切り）**。親 #3「選択軸」に寄与（親AC 2番目）。依存 #122（数値軸書き戻し＋undo）。純ロジック（`interpretAxis`／`planAxisWrite` の `select` 分岐）は #120 で**実装済み・単体固定済み**（`axis.test.ts`）のため、本 Issue は**アダプタ/設定/i18n の配線のみ**（数値軸 #121/#122 のハイブリッド解決を select 用に写した）。
+
+### 責務（このユニットは何をするか）
+
+`priority: high/low` のような**文字列値**での分類・再分類を可能にする。per-axis の `{trueValue, falseValue}` を解決し、`StringValue`（読み取り）／frontmatter 文字列（書き込み）を `select` `AxisSpec` として `interpretAxis`／`planAxisWrite` へ供給する。`trueValue`／`falseValue` 完全一致で象限側を決め、**それ以外の文字列（3 値目 `medium` 等）は未分類＋locked**（既存値を保護し書き潰さない＝#120 決定#3）。書き戻しは越境時のみ `trueValue`／`falseValue` を書き、同じ側なら書かない（文字列温存）。
+
+### spec の供給源（決定: per-axis 選択値ハイブリッド・数値しきい値軸と対称）
+
+- **新規モジュール `src/bases/selectValues.ts`**（`numberThreshold.ts` の写し）: ビュー options（`config.get(KEY)`）を主とし、未設定なら設定既定（`defaultUrgencySelectTrueValue` 等）へフォールバックする。option キーは `urgentSelectTrueValue`／`urgentSelectFalseValue`／`importantSelectTrueValue`／`importantSelectFalseValue`。
+- **「選択軸オン」の条件**: `trueValue` と `falseValue` が**両方とも非空**かつ**互いに異なる**とき当該軸の `SelectValues`（`{trueValue, falseValue}`）を返し、それ以外は `null`（＝選択軸オフ＝当該軸は v1 の boolean 軸挙動を維持）。空・同値は off-sentinel（`null`）。`config.get` は churn 対象のため `numberThreshold.safeGetOption` と対称に try/catch で境界退避する。
+
+### 読み取り経路（Value → AxisRaw → interpretAxis の select 分岐）
+
+`readSingleAxisReading` に **select 分岐**を追加する。`raw.kind === "string"` かつ当該軸の `SelectValues` が非 `null` のとき `interpretAxis(raw, { kind: "select", trueValue, falseValue })` を返す（一致→象限配置＋非ロック／未知値→未分類＋locked）。**select 未設定の文字列は従来どおり boolean spec 経由で未分類＋locked**（#34 不変）。数値しきい値軸との併設は**値型で自然に排他**（`NumberValue`→number 分岐／`StringValue`→select 分岐）。absent は全 kind で未分類・非ロック（書き込み経路で代表値を書ける）。
+
+### 書き戻し経路（axisSpecForWrite の select 分岐 → planWriteBack）
+
+`writeBackPlan.ts` の spec 決定を select 対応へ拡張する。現在値が `string`／`absent` で当該軸に `SelectValues` があるとき `select` spec を供給し、`planAxisWrite` が越境時のみ `trueValue`／`falseValue` を書く（同じ側は `null`＝温存・AC2／未知値 current は locked→`null` で保護・AC1）。undo は #105 keylist を流用し「書いた軸だけ」を verbatim 復元（AC4）。**absent で数値しきい値と選択値が同一軸に併設された場合は数値軸を優先**（読み取りが値型で number を選ぶのと整合。併設は設定ミス寄りの周辺ケースとして数値優先で決定的に解決）。
+
+### 主要な設計判断（現行の理由）
+
+- **3 値以上運用の扱い＝採択 A（二値割り切り）・却下 C/D（2026-07-15・人間承認）**: `trueValue`／`falseValue` の 2 値のみを象限に対応させ、**未知の 3 値目（`medium` 等）は未分類＋locked**（掴めない・書き潰さない）。基盤 `interpretAxis` の既定挙動（決定#3）と一致し、データ安全（既存文字列を破壊しない）を最優先する。**却下 C（未知値を false 側へ寄せる）**＝ドラッグで `medium`→`high`/`low` に silent 破壊し、非破壊思想に反する。**却下 D（順序リスト＋分割点で序数軸化）**＝新 spec と書き戻し代表値の曖昧さで大幅増（別 Issue 相当）・本 M サイズの範囲外。v0.3 の select は**二値運用向けの割り切り**と位置づけ、N 値の序数軸は v2 送り（README／設定説明に明記する）。
+- **数値しきい値軸（#121/#122）と対称のハイブリッド解決**: `selectValues.ts` は `numberThreshold.ts` と同じ「ビュー options 主＋設定既定フォールバック・per-axis・境界 try/catch」を踏襲する（Base ごとに真偽の語彙が違う＝`status: done/todo` 等のため per-axis で持つ）。off-sentinel は「両値非空かつ異なる」で表し、`null` で v1 挙動を維持（v0.3 アップグレードで既存の文字列 `note.*` が不意に象限へ現れる驚きを防ぐ＝数値軸の off-sentinel と同じ思想）。
+- **pair をアトミックに解決する（数値軸との唯一の非対称・レビュー指摘で確定）**: 数値しきい値は 1 軸 1 値のため per-value フォールバックがそのまま pair フォールバックだが、**select は 2 値の結合ペア**である。ビュー options が `trueValue`／`falseValue` の**どちらか一方でも指定していればビューの pair をそのまま採り**（未設定の片側を設定既定から借りない）、**両方未設定のときだけ設定既定の pair 全体**へフォールバックする。per-value に独立フォールバックすると、ビューが片側だけ指定したとき設定既定のトークンが混入して `{done, low}` のような**混成語彙 pair**を生み（越境ドロップで意図しないグローバル値を frontmatter へ書く／ビュー値が設定既定値と一致して無言でオフ）データ非安全になるため。片側だけの不完全なビュー pair は `toSelectValues` が `null`（当該軸オフ）に倒す＝ビューで有効化するなら両値の指定が要る（`resolveOneAxis`）。
+- **絵文字ではなく完全一致・大小区別**: `interpretAxis` の `raw.value === spec.trueValue`（厳密等価）に揃え、解釈層と設定層の乖離を防ぐ（`axesShareWritableKey` の tagName 完全一致と同じ規律）。
+
+### 新規/変更モジュール（#123・実装済み）
+
+- **新規** `src/bases/selectValues.ts`＝`resolveSelectValues(config, settings)`（`SelectValues | null` を両軸で返す）・option キー定数・`normalizeSelectValue`（トリム・空/非文字列は `null`）・`toSelectValues`（両値非空＋異なるを検証）。`numberThreshold.ts` の写し。
+- **変更** `src/bases/readAxis.ts`＝`readSingleAxisReading` に string×select 分岐を追加（`SelectValues` を引数で受け取る）。`readAxisReadings`／`readAxisValues`／`hasUnsupportedAxisValue` の署名に `selectValues` を透過（既定は両軸 `null`＝v1 挙動不変）。
+- **変更** `src/bases/writeBackPlan.ts`＝`axisSpecForWrite` に select 分岐（現在値 string／absent＋`SelectValues` → select spec）。`planWriteBack` の署名に `selectValues` を追加。
+- **変更** `src/bases/EisenhowerBasesView.ts`／`src/bases/toViewModel.ts`＝`resolveSelectValues` を解決して読み取り／書き戻し経路へ渡す配線。
+- **変更** `src/settings.ts`＝`defaultUrgencySelectTrueValue`／`defaultUrgencySelectFalseValue`／`defaultImportanceSelectTrueValue`／`defaultImportanceSelectFalseValue`（既定空文字＝オフ）＋`mergeSettings` の復元（`mergePropertyName` 同型のトリム）。
+- **変更** `src/settingsTab.ts`＝しきい値入力と同型の text 入力 4 つ（軸見出し配下）。
+- **変更** `src/i18n.ts`＝`SettingsMessages` に select 設定の name/desc（en/ja 両方・`i18n.test.ts` が完全性を固定）。
+- **不変** `src/logic/axis.ts`（`select` 分岐は #120 で実装済み・**変更なし**）・`src/ui`（UI 変更なし＝`frontend-reviewer` 対象外）。
+
+### テスト方針（TDD 対象）
+
+- `src/bases/selectValues.test.ts`（新規）＝両値非空＋異なる→`SelectValues`／空・同値・片方欠け→`null`／options 主・設定既定フォールバック／`config.get` throw の境界退避。
+- `src/bases/readAxis.test.ts`＝string×select 設定→一致で象限側・未知値 locked・absent 非ロック／select 未設定の string は #34 locked（回帰）。
+- `src/bases/writeBackPlan.test.ts`＝越境で `trueValue`／`falseValue`・同じ側は書かない・未知値 current は保護（`null`）・absent で代表値。
+- `src/settings.test.ts`＝新規 4 フィールドの既定・復元（トリム・非文字列は既定）。
+- `src/i18n.test.ts`＝select 新規文言が en/ja 両方で欠けなく定義（AC5）。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

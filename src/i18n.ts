@@ -162,6 +162,18 @@ export interface SettingsMessages {
   importanceThresholdName: string;
   /** 重要度しきい値設定の説明（#121）。 */
   importanceThresholdDesc: string;
+  /** 緊急度 選択軸の緊急側の値設定の名前（#123 v0.3-2）。 */
+  urgencySelectTrueName: string;
+  /** 緊急度 選択軸の非緊急側の値設定の名前（#123 v0.3-2）。 */
+  urgencySelectFalseName: string;
+  /** 緊急度 選択軸の説明（trueValue=緊急側／falseValue=非緊急側・両方必須・未知値はロック・#123）。 */
+  urgencySelectDesc: string;
+  /** 重要度 選択軸の重要側の値設定の名前（#123 v0.3-2）。 */
+  importanceSelectTrueName: string;
+  /** 重要度 選択軸の非重要側の値設定の名前（#123 v0.3-2）。 */
+  importanceSelectFalseName: string;
+  /** 重要度 選択軸の説明（#123 v0.3-2）。 */
+  importanceSelectDesc: string;
   displayHeading: string;
   showUnclassifiedName: string;
   showUnclassifiedDesc: string;
@@ -266,6 +278,14 @@ const JA: Messages = {
     importanceThresholdName: "重要度しきい値（数値軸）",
     importanceThresholdDesc:
       "重要度軸を数値で判定するときのしきい値（値がこの値以上なら重要側）。空で無効。数値軸のカードは現在ドラッグできません（表示のみ）。ビュー未設定時のデフォルト。",
+    urgencySelectTrueName: "緊急度 選択軸: 緊急側の値",
+    urgencySelectFalseName: "緊急度 選択軸: 非緊急側の値",
+    urgencySelectDesc:
+      "緊急度軸を文字列（選択）で判定するときの 2 値。緊急側の値と非緊急側の値を両方指定すると有効（片方空・同値は無効）。どちらとも一致しない値（3 値目の medium 等）は未分類のままドラッグできません（既存の値を保護）。ビュー未設定時のデフォルト。",
+    importanceSelectTrueName: "重要度 選択軸: 重要側の値",
+    importanceSelectFalseName: "重要度 選択軸: 非重要側の値",
+    importanceSelectDesc:
+      "重要度軸を文字列（選択）で判定するときの 2 値。重要側の値と非重要側の値を両方指定すると有効（片方空・同値は無効）。どちらとも一致しない値は未分類のままドラッグできません。ビュー未設定時のデフォルト。",
     displayHeading: "表示",
     showUnclassifiedName: "欠損ノートを未分類に表示",
     showUnclassifiedDesc: "軸プロパティを持たないノートを未分類ゾーンに表示する。",
@@ -378,6 +398,14 @@ const EN: Messages = {
     importanceThresholdName: "Importance threshold (numeric axis)",
     importanceThresholdDesc:
       "Threshold for treating the importance axis as numeric (important when the value is at or above it). Empty disables it. Numeric-axis cards can't be dragged yet (display only). Default when the view has none set.",
+    urgencySelectTrueName: "Urgency select: urgent value",
+    urgencySelectFalseName: "Urgency select: not-urgent value",
+    urgencySelectDesc:
+      'Two string values for treating the urgency axis as a select axis. Set both the urgent value and the not-urgent value to enable it (leaving one empty, or making them equal, disables it). Any other value (a third value like "medium") stays unclassified and can\'t be dragged (its value is protected). Default when the view has none set.',
+    importanceSelectTrueName: "Importance select: important value",
+    importanceSelectFalseName: "Importance select: not-important value",
+    importanceSelectDesc:
+      "Two string values for treating the importance axis as a select axis. Set both the important value and the not-important value to enable it (leaving one empty, or making them equal, disables it). Any other value stays unclassified and can't be dragged. Default when the view has none set.",
     displayHeading: "Display",
     showUnclassifiedName: "Show notes with missing axes as unclassified",
     showUnclassifiedDesc: "Show notes without axis properties in the unclassified zone.",

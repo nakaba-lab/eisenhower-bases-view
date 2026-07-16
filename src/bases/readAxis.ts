@@ -31,6 +31,7 @@ import type { AxisValues } from "../logic/quadrant";
 import { interpretAxis } from "../logic/axis";
 import type { AxisRaw, AxisReading, AxisSpec } from "../logic/axis";
 import type { NumberThresholds } from "./numberThreshold";
+import type { AxisSelectValues, SelectValues } from "./selectValues";
 
 /**
  * Bases ビュー options のキー。F4（#21）の軸プロパティ設定 UI がこのキーに書き込み、
@@ -388,6 +389,8 @@ export interface AxisReadings {
 
 /** しきい値未指定（両軸 boolean 扱い＝v1）の既定。従来 2 引数呼び出し・boolean 軸の回帰用。 */
 const NO_THRESHOLDS: NumberThresholds = { urgent: null, important: null };
+/** 選択軸オフの既定（両軸 `null`）。#123 の select 未指定呼び出し・v1 回帰テスト向け（`NO_THRESHOLDS` と対）。 */
+const NO_SELECT_VALUES: AxisSelectValues = { urgent: null, important: null };
 
 /**
  * 1 軸を読み、配置側（`side`）とロック（`locked`）を返す（#121 v0.3-1a→#122 1b・{@link interpretAxis} へ配線）。
@@ -406,6 +409,7 @@ function readSingleAxisReading(
   entry: BasesEntry,
   id: BasesPropertyId,
   threshold: number | null,
+  selectValues: SelectValues | null,
 ): AxisReading {
   if (toFrontmatterKey(id) === null) return { side: undefined, locked: false };
   const result = readAxisValueSafely(entry, id);
@@ -420,7 +424,17 @@ function readSingleAxisReading(
     // 未分類＋locked に倒す（掴ませない）。数値の書き戻し経路は `writeBackAxes`→`planWriteBack`（#120/#122）。
     return interpretAxis(raw, { kind: "number", threshold });
   }
-  // boolean/absent/string 等は boolean spec で v1 と同じ解釈（#34 不変）。
+  // 選択（select）軸（#123 v0.3-2）: 文字列値かつ当該軸に選択値が設定済みなら trueValue/falseValue で
+  // 象限側を決める。未知値（3 値目 medium 等）は interpretAxis の select 分岐が未分類＋locked へ倒す
+  //（採択 A・二値割り切り＝既存文字列を書き潰さない）。選択値の書き戻し経路は `writeBackAxes`→`planWriteBack`。
+  if (raw.kind === "string" && selectValues !== null) {
+    return interpretAxis(raw, {
+      kind: "select",
+      trueValue: selectValues.trueValue,
+      falseValue: selectValues.falseValue,
+    });
+  }
+  // boolean/absent/選択軸未設定の文字列等は boolean spec で v1 と同じ解釈（#34 不変）。
   return interpretAxis(raw, { kind: "boolean" });
 }
 
@@ -429,10 +443,16 @@ export function readAxisReadings(
   entry: BasesEntry,
   ids: AxisPropertyIds,
   thresholds: NumberThresholds,
+  selectValues: AxisSelectValues = NO_SELECT_VALUES,
 ): AxisReadings {
   return {
-    urgent: readSingleAxisReading(entry, ids.urgent, thresholds.urgent),
-    important: readSingleAxisReading(entry, ids.important, thresholds.important),
+    urgent: readSingleAxisReading(entry, ids.urgent, thresholds.urgent, selectValues.urgent),
+    important: readSingleAxisReading(
+      entry,
+      ids.important,
+      thresholds.important,
+      selectValues.important,
+    ),
   };
 }
 
@@ -446,8 +466,9 @@ export function readAxisValues(
   entry: BasesEntry,
   ids: AxisPropertyIds,
   thresholds: NumberThresholds = NO_THRESHOLDS,
+  selectValues: AxisSelectValues = NO_SELECT_VALUES,
 ): AxisValues {
-  const readings = readAxisReadings(entry, ids, thresholds);
+  const readings = readAxisReadings(entry, ids, thresholds, selectValues);
   return { urgent: readings.urgent.side, important: readings.important.side };
 }
 
@@ -481,7 +502,8 @@ export function hasUnsupportedAxisValue(
   entry: BasesEntry,
   ids: AxisPropertyIds,
   thresholds: NumberThresholds = NO_THRESHOLDS,
+  selectValues: AxisSelectValues = NO_SELECT_VALUES,
 ): boolean {
-  const readings = readAxisReadings(entry, ids, thresholds);
+  const readings = readAxisReadings(entry, ids, thresholds, selectValues);
   return readings.urgent.locked || readings.important.locked;
 }

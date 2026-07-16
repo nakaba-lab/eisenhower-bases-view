@@ -94,6 +94,43 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+    // 選択（select）軸（#123 v0.3-2）: 文字列値での分類。緊急側／非緊急側の 2 値を両方指定すると有効
+    //（片方空・同値はオフ）。設定は raw 文字列で持ち、成立判定（両値非空かつ異なる）は resolveSelectValues
+    // に一本化する（数値しきい値・プロパティ名入力と同型）。
+    new Setting(containerEl)
+      .setName(messages.settings.urgencySelectTrueName)
+      .setDesc(messages.settings.urgencySelectDesc)
+      .addText((text) =>
+        text.setValue(settings.defaultUrgencySelectTrueValue).onChange(async (value) => {
+          settings.defaultUrgencySelectTrueValue = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
+    new Setting(containerEl)
+      .setName(messages.settings.urgencySelectFalseName)
+      .addText((text) =>
+        text.setValue(settings.defaultUrgencySelectFalseValue).onChange(async (value) => {
+          settings.defaultUrgencySelectFalseValue = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
+    new Setting(containerEl)
+      .setName(messages.settings.importanceSelectTrueName)
+      .setDesc(messages.settings.importanceSelectDesc)
+      .addText((text) =>
+        text.setValue(settings.defaultImportanceSelectTrueValue).onChange(async (value) => {
+          settings.defaultImportanceSelectTrueValue = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
+    new Setting(containerEl)
+      .setName(messages.settings.importanceSelectFalseName)
+      .addText((text) =>
+        text.setValue(settings.defaultImportanceSelectFalseValue).onChange(async (value) => {
+          settings.defaultImportanceSelectFalseValue = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
 
     // ▸ 表示
     new Setting(containerEl).setName(messages.settings.displayHeading).setHeading();

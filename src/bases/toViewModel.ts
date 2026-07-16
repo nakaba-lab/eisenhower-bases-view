@@ -15,6 +15,7 @@ import { readBadges, resolveBadgePropertyIds } from "./readBadges";
 import { resolvePresentation } from "./presentation";
 import { resolveStagnationThresholdDays } from "./stagnationThreshold";
 import { resolveNumberThresholds } from "./numberThreshold";
+import { resolveSelectValues } from "./selectValues";
 import { evaluateStagnation } from "../logic/stagnation";
 import type {
   MatrixDiagnostics,
@@ -143,10 +144,13 @@ export function toViewModel(
   // 数値しきい値軸（#121 v0.3-1a）: per-axis しきい値を 1 度解決する（ビュー options 主・設定既定＝ハイブリッド）。
   // 全カードで共通のため map の外で 1 度だけ（null＝当該軸の数値軸オフ＝v1 挙動）。
   const numberThresholds = resolveNumberThresholds(config, settings);
+  // 選択（select）軸（#123 v0.3-2）: per-axis 選択値を 1 度解決する（ビュー options 主・設定既定＝ハイブリッド）。
+  // 全カードで共通のため map の外で 1 度だけ（null＝当該軸の選択軸オフ＝v1 挙動）。
+  const selectValues = resolveSelectValues(config, settings);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
-    // 両軸を 1 経路で読み、配置側（side）とロック（locked）を同時に得る（#121）。
-    const readings = readAxisReadings(entry, ids, numberThresholds);
+    // 両軸を 1 経路で読み、配置側（side）とロック（locked）を同時に得る（#121 数値・#123 選択）。
+    const readings = readAxisReadings(entry, ids, numberThresholds, selectValues);
     const axis = { urgent: readings.urgent.side, important: readings.important.side };
     const quadrant = classifyQuadrant(axis);
     const matrixEntry: MatrixEntry = {

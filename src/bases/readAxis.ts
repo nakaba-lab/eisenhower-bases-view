@@ -24,13 +24,14 @@
  * 実機成立は `scripts/e2e` の placements 検証で担保）。`ErrorValue` は obsidian が型を export しないため
  * `toAxisRaw` の既定ロック（未対応型）で吸収し、個別 `instanceof` はしない（設計は `docs/design/bases.md`）。
  */
-import { BooleanValue, NullValue, NumberValue, StringValue } from "obsidian";
+import { BooleanValue, ListValue, NullValue, NumberValue, StringValue, TagValue } from "obsidian";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
 import type { EisenhowerSettings } from "../settings";
 import type { AxisValues } from "../logic/quadrant";
 import { interpretAxis } from "../logic/axis";
 import type { AxisRaw, AxisReading, AxisSpec } from "../logic/axis";
 import type { NumberThresholds } from "./numberThreshold";
+import type { TagNames } from "./tagAxis";
 
 /**
  * Bases ビュー options のキー。F4（#21）の軸プロパティ設定 UI がこのキーに書き込み、
@@ -176,17 +177,22 @@ export interface WritableAxisKeys {
 export function resolveWritableAxisKeys(
   config: Pick<BasesViewConfig, "getAsPropertyId"> | undefined | null,
   settings: EisenhowerSettings,
+  tagNames: TagNames = NO_TAGS,
 ): WritableAxisKeys | null {
   const ids = resolveAxisPropertyIds(config, settings);
   const urgent = toFrontmatterKey(ids.urgent);
   const important = toFrontmatterKey(ids.important);
   if (urgent === null || important === null) return null;
-  // 両軸が同一 frontmatter キーだと、書き戻しが同じキーを 2 度書いて後勝ちで潰れ（両軸が同値になり）
-  // カードが意図しない象限へ飛ぶ。設定ミスなので書き戻し前に弾く（Notice で通知・レビュー指摘の question）。
-  // ⚠️ この同一キーブロックは **kind 非依存**（tag×tag×異 tagName も一律 null）。読み取り側 {@link axesShareWritableKey}
-  // は #124 で kind-aware 化したが、ここは boolean 固定のまま＝タグ軸アダプタ配線の後続 L2 で、tag×tag×異 tagName
-  // を書き込み側でも合法化（別タグの add/remove を許す）よう kind-aware 化して同期する必要がある。
-  if (urgent === important) return null;
+  // 両軸が同一 frontmatter キーだと、書き戻しが同じキーを潰し合い、カードが意図しない象限へ飛ぶため
+  // 原則は設定ミスとして弾く。**ただし tag×tag×異 tagName の同一キー（tags 1 本に urgent/important の 2 タグ）
+  // だけは合法**（別タグの add/remove は非破壊で共存でき、`planWriteBack` が同一キーへ累積書き込みする）。
+  // #124 で読み取り側 {@link axesShareWritableKey} を kind-aware 化した書き込み側同期（#125）。tagNames は
+  // 呼び出し側（`writeBackAxes`）が `resolveTagNames` で解決して渡す（循環 import を避けるため引数注入）。
+  if (urgent === important) {
+    const bothTagAxes = tagNames.urgent !== null && tagNames.important !== null;
+    const differentTags = tagNames.urgent !== tagNames.important;
+    return bothTagAxes && differentTags ? { urgent, important } : null;
+  }
   return { urgent, important };
 }
 
@@ -389,6 +395,9 @@ export interface AxisReadings {
 /** しきい値未指定（両軸 boolean 扱い＝v1）の既定。従来 2 引数呼び出し・boolean 軸の回帰用。 */
 const NO_THRESHOLDS: NumberThresholds = { urgent: null, important: null };
 
+/** タグ名未指定（両軸タグ軸オフ）の既定。従来 3 引数呼び出し・非タグ軸の回帰用（#125）。 */
+const NO_TAGS: TagNames = { urgent: null, important: null };
+
 /**
  * 1 軸を読み、配置側（`side`）とロック（`locked`）を返す（#121 v0.3-1a→#122 1b・{@link interpretAxis} へ配線）。
  *
@@ -406,12 +415,25 @@ function readSingleAxisReading(
   entry: BasesEntry,
   id: BasesPropertyId,
   threshold: number | null,
+  tagName: string | null,
 ): AxisReading {
   if (toFrontmatterKey(id) === null) return { side: undefined, locked: false };
   const result = readAxisValueSafely(entry, id);
   if (!result.ok) return { side: undefined, locked: true };
+  // タグ軸（tagName 設定済み・kind 優先順位 tag > number > boolean）: ネイティブ `ListValue.includes(new
+  // TagValue(name))`（loose-equals）でタグ包含を判定する（`.data` を手パースしない・AC1・#125）。
+  // absent（NullValue）は未分類・非ロック＝ドロップで新規付与（決定A・要件 §9）。ListValue でない present 値
+  // （型不一致）は保護ロック＝ドラッグ上書きでの破壊を防ぐ（interpretAxis の tag×非配列→locked と同型）。
+  if (tagName !== null) {
+    const value = result.value;
+    if (value == null || value instanceof NullValue) return { side: undefined, locked: false };
+    if (value instanceof ListValue) {
+      return { side: value.includes(new TagValue(tagName)), locked: false };
+    }
+    return { side: undefined, locked: true };
+  }
   const raw = toAxisRaw(result.value);
-  if (raw === null) return { side: undefined, locked: true }; // 未対応 Value 型（ErrorValue 等）
+  if (raw === null) return { side: undefined, locked: true }; // 未対応 Value 型（ErrorValue・ListValue 等）
   if (raw.kind === "number") {
     // off-sentinel ゲート: しきい値未設定の軸は数値を配置せず v1（未分類＋locked）を維持する。
     if (threshold === null) return { side: undefined, locked: true };
@@ -424,15 +446,21 @@ function readSingleAxisReading(
   return interpretAxis(raw, { kind: "boolean" });
 }
 
-/** 1 エントリの両軸を読み、配置側＋ロックを返す（数値しきい値軸対応・#121）。 */
+/** 1 エントリの両軸を読み、配置側＋ロックを返す（数値しきい値軸・#121／タグ軸・#125 対応）。 */
 export function readAxisReadings(
   entry: BasesEntry,
   ids: AxisPropertyIds,
   thresholds: NumberThresholds,
+  tagNames: TagNames = NO_TAGS,
 ): AxisReadings {
   return {
-    urgent: readSingleAxisReading(entry, ids.urgent, thresholds.urgent),
-    important: readSingleAxisReading(entry, ids.important, thresholds.important),
+    urgent: readSingleAxisReading(entry, ids.urgent, thresholds.urgent, tagNames.urgent),
+    important: readSingleAxisReading(
+      entry,
+      ids.important,
+      thresholds.important,
+      tagNames.important,
+    ),
   };
 }
 

@@ -94,6 +94,27 @@ export class EisenhowerSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+    // タグ軸（#125 v0.3-3b）: 軸プロパティ（配列）に当該タグを含むノートを配置し、ドラッグで add/remove する。
+    // 設定は raw 文字列で持ち（"" = オフ）、`#` 剥がし・空判定は resolveTagNames（toTagName）に一本化する。
+    // inline tag 非対応は説明文（*TagDesc）で明示する（AC5）。
+    new Setting(containerEl)
+      .setName(messages.settings.urgencyTagName)
+      .setDesc(messages.settings.urgencyTagDesc)
+      .addText((text) =>
+        text.setValue(settings.defaultUrgencyTag).onChange(async (value) => {
+          settings.defaultUrgencyTag = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
+    new Setting(containerEl)
+      .setName(messages.settings.importanceTagName)
+      .setDesc(messages.settings.importanceTagDesc)
+      .addText((text) =>
+        text.setValue(settings.defaultImportanceTag).onChange(async (value) => {
+          settings.defaultImportanceTag = value.trim();
+          await this.plugin.saveSettings();
+        }),
+      );
 
     // ▸ 表示
     new Setting(containerEl).setName(messages.settings.displayHeading).setHeading();

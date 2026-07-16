@@ -15,7 +15,9 @@ import { readBadges, resolveBadgePropertyIds } from "./readBadges";
 import { resolvePresentation } from "./presentation";
 import { resolveStagnationThresholdDays } from "./stagnationThreshold";
 import { resolveNumberThresholds } from "./numberThreshold";
+import { resolveTagNames, type TagNames } from "./tagAxis";
 import { evaluateStagnation } from "../logic/stagnation";
+import type { AxisSpec } from "../logic/axis";
 import type {
   MatrixDiagnostics,
   MatrixEntry,
@@ -61,8 +63,23 @@ export function emptyPlacements(): QuadrantPlacements {
  *（利用者が設定タブ・Bases options で編集する表記）で持ち、非 `note.*`（`formula.*`／`file.*`＝
  * `toFrontmatterKey` が `null`）は生の propertyId をフォールバック表示する（"null" を出さない）。
  */
-function buildDiagnostics(ids: AxisPropertyIds): MatrixDiagnostics {
-  const shared = axesShareWritableKey(ids);
+/**
+ * tagNames から `axesShareWritableKey` 用の per-axis {@link AxisSpec} を導く（#125）。tag 軸は
+ * `{kind:"tag", tag}`・非タグ軸は `{kind:"boolean"}`（数値/選択の別 kind は同一キー衝突の可否に影響しない＝
+ * tag∧tag∧異 tagName のみ合法で他は衝突のため boolean 既定で十分）。これで tag×tag×異 tagName の同一キーが
+ * 「設定ミス」判定に落ちず、全カードロックを回避する（読み取り側と書き込み側 `resolveWritableAxisKeys` を同期）。
+ */
+function tagAwareSpecs(tagNames: TagNames): { urgent: AxisSpec; important: AxisSpec } {
+  const specFor = (tag: string | null): AxisSpec =>
+    tag !== null ? { kind: "tag", tag } : { kind: "boolean" };
+  return { urgent: specFor(tagNames.urgent), important: specFor(tagNames.important) };
+}
+
+function buildDiagnostics(
+  ids: AxisPropertyIds,
+  specs: { urgent: AxisSpec; important: AxisSpec },
+): MatrixDiagnostics {
+  const shared = axesShareWritableKey(ids, specs);
   const urgentAxis = toFrontmatterKey(ids.urgent) ?? String(ids.urgent);
   const importantAxis = toFrontmatterKey(ids.important) ?? String(ids.important);
   const diagnostics: MatrixDiagnostics = {
@@ -113,7 +130,10 @@ export function toViewModel(
   const notes = entries ? entries.filter(isPlaceableNote) : [];
   // 軸解決と診断は notes 有無に依らず行う（空状態でも軸名・設定ミスを提示する＝#103 F7）。
   const ids = resolveAxisPropertyIds(config, settings);
-  const diagnostics = buildDiagnostics(ids);
+  // タグ軸（#125）: per-axis tagName を 1 度解決する（ビュー options 主・設定既定＝ハイブリッド）。
+  // null＝当該軸はタグ軸オフ。診断（同一キー kind-aware 判定）と読み取りの両方で共有する。
+  const tagNames = resolveTagNames(config, settings);
+  const diagnostics = buildDiagnostics(ids, tagAwareSpecs(tagNames));
   // カード上の完了トグル（#105 F10）: 完了プロパティを解決する（既定 done で有効・非 note.*/軸衝突/明示空は null＝無効）。
   // 有効なら UI がチェックボタンを描画する（completionEnabled）。null のときは機能オフ。
   // 解決済み ids を渡して 3 キー衝突ガードの軸再解決（1 レンダーでの二重解決）を避ける（レビュー指摘）。
@@ -145,8 +165,8 @@ export function toViewModel(
   const numberThresholds = resolveNumberThresholds(config, settings);
   const placements = emptyPlacements();
   const mapped: MatrixEntry[] = notes.map((entry) => {
-    // 両軸を 1 経路で読み、配置側（side）とロック（locked）を同時に得る（#121）。
-    const readings = readAxisReadings(entry, ids, numberThresholds);
+    // 両軸を 1 経路で読み、配置側（side）とロック（locked）を同時に得る（#121・タグ軸は #125）。
+    const readings = readAxisReadings(entry, ids, numberThresholds, tagNames);
     const axis = { urgent: readings.urgent.side, important: readings.important.side };
     const quadrant = classifyQuadrant(axis);
     const matrixEntry: MatrixEntry = {

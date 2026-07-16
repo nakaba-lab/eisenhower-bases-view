@@ -18,7 +18,11 @@ import { planAxisWrite, type AxisRaw, type AxisSpec } from "../logic/axis";
 import type { AxisWrite, FrontmatterLike } from "../logic/undo";
 import type { WritableAxisKeys } from "./readAxis";
 import type { NumberThresholds } from "./numberThreshold";
+import type { TagNames } from "./tagAxis";
 import type { AxisWriteValues } from "./types";
+
+/** 両軸ともタグ軸オフの既定（従来 5 引数なし呼び出し・非タグ軸の回帰用・#125）。 */
+const NO_TAGS: TagNames = { urgent: null, important: null };
 
 /**
  * `processFrontMatter` の plain 値（frontmatter[key]）を純ロジック層の {@link AxisRaw} へ正規化する。
@@ -53,7 +57,15 @@ export function frontmatterValueToAxisRaw(frontmatter: FrontmatterLike, key: str
  * boolean 値・string 値・threshold 未設定（off-sentinel）は boolean spec に倒す（boolean 値は読み書き
  * 対称で boolean のまま扱い数値で上書きしない／off-sentinel・非対応型は読み取りロックで到達しない防御既定）。
  */
-export function axisSpecForWrite(threshold: number | null, current: AxisRaw): AxisSpec {
+export function axisSpecForWrite(
+  threshold: number | null,
+  current: AxisRaw,
+  tagName: string | null = null,
+): AxisSpec {
+  // kind 優先順位 tag > number > boolean（#125）: tagName が設定済みなら**常に** tag spec を採る
+  //（タグ軸は明示 tagName が唯一のスイッチ・読み取り側 readSingleAxisReading の tagName 優先と対称）。
+  // current が配列でなくても planAxisWrite（tag×非配列→locked→null）が上書き破壊を防ぐため安全。
+  if (tagName !== null) return { kind: "tag", tag: tagName };
   if (threshold !== null && (current.kind === "number" || current.kind === "absent")) {
     return { kind: "number", threshold };
   }
@@ -81,11 +93,20 @@ export function planWriteBack(
   keys: WritableAxisKeys,
   sides: AxisWriteValues,
   thresholds: NumberThresholds,
+  tagNames: TagNames = NO_TAGS,
 ): AxisWrite[] {
-  const writes: AxisWrite[] = [];
+  // 同一キーに 2 軸が載る本命（tags 1 本に urgent/important の 2 タグ・#124/#125）に対応するため、
+  // 各軸を**キー単位の作業コピー `working`** に対して順に適用し、後段の軸は前段の適用結果を current に読む
+  //（後勝ちで潰し合わない＝累積）。frontmatter 自体は変更せず（undo の前値は元 frontmatter から捕捉するため）、
+  // 触れたキーだけを最終値で 1 write ずつ返す。異キー（従来の boolean/number 軸）はキーごと 1 軸で、
+  // 挙動は従来と不変（AXES 順に 1 write ずつ）。working は shallow copy で、配列値は planAxisWrite が新配列へ
+  // 置換する（元配列は mutate しない）ため元 frontmatter の配列は保全される。
+  const working: FrontmatterLike = { ...frontmatter };
+  const touchedKeys: string[] = [];
   for (const axis of AXES) {
-    const current = frontmatterValueToAxisRaw(frontmatter, keys[axis]);
-    const spec = axisSpecForWrite(thresholds[axis], current);
+    const key = keys[axis];
+    const current = frontmatterValueToAxisRaw(working, key);
+    const spec = axisSpecForWrite(thresholds[axis], current, tagNames[axis]);
     // 防御的深層防御（データ安全最優先）: boolean spec は boolean/absent 以外の present 値
     //（数値/文字列/配列/object）を上書きしない＝boolean で既存の非 boolean 値を潰さない。
     // 読み取り側ロック（#34/#121: 非 boolean note.* は掴めない）が主ガードだが、render↔write 間で
@@ -98,7 +119,10 @@ export function planWriteBack(
       continue;
     }
     const plan = planAxisWrite(sides[axis], spec, current);
-    if (plan !== null) writes.push({ key: keys[axis], value: plan.value });
+    if (plan !== null) {
+      working[key] = plan.value;
+      if (!touchedKeys.includes(key)) touchedKeys.push(key);
+    }
   }
-  return writes;
+  return touchedKeys.map((key) => ({ key, value: working[key] }));
 }

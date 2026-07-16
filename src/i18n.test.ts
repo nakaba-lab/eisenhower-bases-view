@@ -177,6 +177,28 @@ describe("messagesFor — カード追加プロパティ表示（バッジ）の
     }
   });
 
+  it("messagesFor — 設定タブのタグ軸文言（名前・説明）が en/ja で欠けなく定義される（#125 AC6）", () => {
+    // given: #125 で追加したタグ軸の設定タブ文言
+    const tagKeys = [
+      "urgencyTagName",
+      "urgencyTagDesc",
+      "importanceTagName",
+      "importanceTagDesc",
+    ] as const;
+    for (const key of tagKeys) {
+      // then: 両言語で非空・翻訳されている（同一文字列で取り残されていない）
+      expect(messagesFor("ja").settings[key].length).toBeGreaterThan(0);
+      expect(messagesFor("en").settings[key].length).toBeGreaterThan(0);
+      expect(messagesFor("ja").settings[key]).not.toBe(messagesFor("en").settings[key]);
+    }
+  });
+
+  it("messagesFor — タグ軸説明は inline tag 非対応を明示する（#125 AC5）", () => {
+    // then: 本文中の #tag（inline）は frontmatter に乗らず対象外であることを UI 文言で示す
+    expect(messagesFor("en").settings.urgencyTagDesc.toLowerCase()).toContain("inline");
+    expect(messagesFor("ja").settings.urgencyTagDesc).toContain("inline");
+  });
+
   it("messagesFor — カード表示プロパティ説明は読み取り専用（formula/file も可）を明示する", () => {
     // then: 軸（書き戻し note.* 限定）と違い別サーフェスであることを UI 文言で示す
     expect(messagesFor("en").settings.cardBadgePropertiesDesc.toLowerCase()).toContain(

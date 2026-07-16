@@ -11,6 +11,7 @@ import { emptyPlacements, toViewModel } from "./toViewModel";
 import { resolvePresentation } from "./presentation";
 import { resolveCompletionKey, resolveWritableAxisKeys } from "./readAxis";
 import { resolveNumberThresholds } from "./numberThreshold";
+import { resolveTagNames } from "./tagAxis";
 import { planWriteBack } from "./writeBackPlan";
 import { runUndo } from "./undoWriteBack";
 import { VIEW_ID } from "./registerView";
@@ -190,7 +191,10 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     // 書込可能な note.* 軸か（両軸）を frontmatter に触れる前に判定して弾く（AC3）。
     const messages = this.getMessages();
     const settings = this.getSettings();
-    const keys = resolveWritableAxisKeys(this.config, settings);
+    // タグ軸（#125）: per-axis tagName を解決し、書き戻しキー解決（同一キー kind-aware）と
+    // 書き込みプラン（tag add/remove）の双方へ渡す（読み取り側 toViewModel と同期）。
+    const tagNames = resolveTagNames(this.config, settings);
+    const keys = resolveWritableAxisKeys(this.config, settings, tagNames);
     if (keys === null) {
       new Notice(`Eisenhower Matrix: ${messages.axisNotWritable}`);
       throw new Error("axis property is not writable (formula/file)");
@@ -215,7 +219,7 @@ export class EisenhowerBasesView extends BasesView implements HoverParent {
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: FrontmatterLike) => {
         // per-axis で planAxisWrite を通し、越境した軸だけを書き込みリストにする（同側の数値は温存・#122 1b）。
-        const writes = planWriteBack(frontmatter, keys, axisValues, thresholds);
+        const writes = planWriteBack(frontmatter, keys, axisValues, thresholds, tagNames);
         // 両軸とも温存（数値が同側）で書くものが無ければ何もせず、直前の undo 記録も据え置く（#122 レビュー）。
         // 到達は TOCTOU 限定（render 後〜drop 前に外部編集で数値が既に目標側へ移動し、UI の shouldSkipMove は
         // 旧 side で「移動」と判断するが planWriteBack は越境なしと判断する食い違い）。この分岐は書き込みを

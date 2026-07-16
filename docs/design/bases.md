@@ -2,8 +2,8 @@
 title: Bases アダプタ層 設計
 area: bases
 status: active
-relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121, 122, 124]
-updated: 2026-07-15
+relatedIssues: [18, 19, 20, 21, 22, 33, 34, 103, 104, 105, 106, 120, 121, 122, 124, 125]
+updated: 2026-07-16
 kind: api
 ---
 
@@ -547,6 +547,83 @@ export function axesShareWritableKey(
 - **変更** `src/bases/readAxis.ts`＝`axesShareWritableKey` を AxisSpec 任意引数付き（`specs` 省略時は両軸 boolean 既定）・kind-aware 判定へ拡張（`AxisSpec` を `../logic/axis` から `import type`）。2 軸直接比較は維持。
 - **変更** `src/bases/readAxis.test.ts`＝AC1（tag×tag×異 tagName→false）・AC2（tag×tag×同 tagName→true）・AC3 回帰（boolean/number/select 同一キー→true）・異 kind 同一キー→true（対称）・tagName 大小区別→false・異キー→false・非 note.* →false・specs 省略の挙動不変→true の 10 ケースを赤→緑固定。
 - **不変** `src/bases/toViewModel.ts`（`buildDiagnostics` は `axesShareWritableKey(ids)` を boolean 既定で呼び続ける＝挙動不変）・`src/logic/axis.ts`（`AxisSpec` 型を流用・変更なし）・UI（UI 変更なし＝`frontend-reviewer` 対象外）。
+
+## タグ軸（ListValue 包含・配列 add/remove・#125 v0.3-3b・`status: active`）
+
+> **#125（v0.3-3b）で実装し `status: active` に確定した（2026-07-16・実装前設計で人間承認済み）**。親 #3「タグ軸」（寄与親AC: 3番目）。依存 #122（数値軸 書き戻し＋undo）・#124（同一キーガード kind-aware 化）。タグ（frontmatter リスト）軸＝`tags` への tagName 包含で分類・再分類する。純ロジック（`interpretAxis`／`planAxisWrite` の tag 分岐）は #120 の基盤で既に実装済みで、本 Issue は **Bases アダプタ層への配線**（読み取りの `ListValue.includes` 判定・tagName 供給・書き込み側同一キー同期・undo の配列値等価）が主眼。
+
+### 責務（このユニットは何をするか）
+
+frontmatter の `tags`（`ListValue`＝要素 `TagValue`）に、軸ごとに設定した tagName が**含まれるか**で象限の側を決め、ドラッグ再分類では配列に tagName を **add/remove して他要素を温存**（全置換しない）する。純解釈・書き戻しプランは `src/logic/axis.ts`（Obsidian 非依存）が担い、本層は ①読み取りの `ListValue.includes(new TagValue(name))` 判定、②各軸の tagName 解決（`tagAxis.ts`）、③書き込み側の同一キー kind-aware 同期、④undo の配列値等価を配線する。
+
+### absent/false 意味論（決定: 案 A・人間承認 2026-07-16）
+
+| 状態 | 扱い | 根拠 |
+|------|------|------|
+| `tags` キー無し（absent） | **未分類ゾーン**（ドロップで新規付与） | boolean/number 軸と対称（absent→`side:undefined, locked:false`）。新規ノートが最低象限へ溢れない。CLAUDE.md「absent と false を区別」原則。 |
+| `tags` 有り・当該 tagName 無し | **false 側（最低象限）** | `ListValue.includes(tag)===false`。最低象限が到達可能。 |
+| `tags` 有り・当該 tagName 有り | **true 側** | 同上 `includes===true`。 |
+
+- **却下 C（非所属は一律 false）**: `tags` キー無しも false にすると全未タグノートが最低象限に殺到する（本命の「2 タグ／同一 `tags`」構成で顕著）。absent と false を区別する原則に反する。
+- **却下 B（非所属は一律 未分類）**: 最低象限が到達不能になり 2×2 マトリクスが「タグ有り vs 非表示」に退化する。ドラッグで最低象限へ落とせない。
+
+### 読み取り経路（native `ListValue.includes`・`readSingleAxisReading` の tag 分岐）
+
+- タグ軸（tagName 設定済み）は `readSingleAxisReading` の tag 分岐で判定する: 値が **`instanceof ListValue`** なら **ネイティブ `value.includes(new TagValue(tagName))`（loose-equals）**で包含を求め `{side, locked:false}` を返す（`.data` の内部表現は手パースしない＝実装メモの「includes(new TagValue(name))」に忠実）。`absent`（`NullValue`）は未分類・非ロック（ドロップで新規付与＝決定A）。`ListValue` でない present 値（型不一致）は保護ロック（ドラッグ上書きでの破壊を防ぐ）。
+- ⚠️ **`#` 前置・大文字小文字の吸収は実機確認事項（要件 §9）**: Value 層の `ListValue.includes(new TagValue(name))`（loose-equals）は `#`/大小差を吸収しうる。`toTagName` は入力側で `#` を剥がして bare 名を渡すが、実機 `TagValue` 表現（`#` 有無・大小・入れ子 `#a/b`）の loose-equals 挙動は CI（obsidianStub＝bare exact 代役）で検証できないため、`scripts/e2e` プローブでの実機確認をマージ後スモークに残す（#122 の「手動/結合で担保」と同じ整理）。実機で `#`/大小の扱いが確定したら本節へ反映する。
+- 書き戻し側は `planAxisWrite` の tag 分岐が **bare 文字列配列**（`processFrontMatter` の plain `frontmatter.tags`）に対し `array.includes(spec.tag)` の完全一致で判定する。読み（native loose-equals）と書き（bare exact）の非対称は上記実機確認の対象で、frontmatter tags が bare 保存・tagName が bare（`toTagName`）である限り整合する。
+
+### tagName 供給（決定: #121 の per-axis ハイブリッドを踏襲・kind 優先順位）
+
+タグ軸は**明示の tagName が必須**（数値の threshold と違い値型推論では kind を決められない＝`tags` は常に配列）。#121 の per-axis しきい値ハイブリッドを踏襲し、**設定タブのデフォルト（`defaultUrgencyTag`／`defaultImportanceTag`＝空文字は未設定）＋ビュー options** で各軸の tagName を供給する。**`src/bases/tagAxis.ts` の `resolveTagNames(config, settings) → { urgent, important }`**（`numberThreshold.ts` のミラー）を新設し、解決した `tagNames` を読み取り（`readAxisReadings`／`toViewModel`）・書き込み（`writeBackAxes`→`planWriteBack`）・書込前ガード（`resolveWritableAxisKeys`）・診断（`toViewModel` が `tagAwareSpecs` で `axesShareWritableKey` へ渡す）へ**引数注入**する（読み書きで同一 tagName を共有。`readAxis`↔`tagAxis` の循環 import を避けるため spec 一本化ではなく引数注入を採る）。
+
+- **kind 優先順位（軸ごと・決定）**: tagName が非空 → **tag**／ else threshold 設定済み → **number**／ else **boolean**。tag を最優先にするのは「明示 tagName ＝ 利用者の意図が最も具体的」だから。両方設定した誤設定では tag を採る。書き込み側は `axisSpecForWrite(threshold, current, tagName)` が tagName 非 null で常に tag spec を返して同順位を実現する。
+- `readSingleAxisReading`／`readAxisReadings` は `threshold` に加え `tagName`／`tagNames` を受け取り、**値の型で dispatch**（`ListValue`＝tag／`NumberValue`＝number／その他＝boolean）する（number 経路は非回帰＝threshold 未設定は従来の off-sentinel を維持）。
+
+### 書き込み経路（planAxisWrite の tag 分岐＋同一キー累積＋kind-aware 同期）
+
+- 書き戻しは `planAxisWrite`（既実装）の tag 分岐＝現配列から当該 tag を `filter` で除いた新配列に、true 側なら add・false 側なら add せず（remove）。**他要素温存・全置換しない**（AC3）。`axisSpecForWrite` は tagName 非 null で tag spec を返す。
+- **同一キーへの累積書き込み（`planWriteBack`）**: 本命「`tags` 1 本に urgent/important の 2 タグ」は両軸が同一キー `tags` を指す。`planWriteBack` は**キー単位の作業コピー `working`** に各軸を順に適用し（後段の軸は前段の適用結果を current に読む）、触れたキーだけを**最終値で 1 write** に集約する（後勝ちで潰し合わない・undo エントリもキー 1 個）。異キー（従来の boolean/number 軸）はキーごと 1 軸で挙動不変。`frontmatter` 自体は変更せず（undo 前値は元 frontmatter から捕捉）、配列は新配列へ置換して元配列を mutate しない。
+- **書き込み側の同一キーガードを kind-aware 化（#124 が本 L2 の作業項目として明記した前方整合）**: `resolveWritableAxisKeys(config, settings, tagNames)` は同一書き戻しキーを原則 `null`（ブロック）にするが、**tag×tag×異 tagName の同一キーは合法**（別タグの add/remove は非破壊で共存可）として書き込みを通す。読み取り側 `axesShareWritableKey`（#124）と対称化する。tagNames は呼び出し側（`writeBackAxes`／`toViewModel`）が `resolveTagNames` で解決して渡す（循環 import 回避の引数注入）。
+
+### undo（配列の値等価で照合）
+
+- `applyUndo`／`buildUndoEntries`／`capturePreviousValue` は verbatim 保持のためタグ配列でもそのまま機能する（AC の「元配列へ復元」）。
+- **`isUndoApplicable` の同一性照合を配列対応にする（AC4）**: 現行は `frontmatter[key] === wrote`（参照比較）。`processFrontMatter` の round-trip 後、frontmatter の `tags` 配列は記録した `wrote` 配列とは**別オブジェクト**になり `===` が常に false ＝タグ軸の undo が一度も適用されない。両辺とも配列のときだけ**要素単位の値等価**（長さ＋各要素 `===`＝`isSameWrittenValue`）で比較し、非配列は従来どおり `===`（挙動不変・プリミティブ回帰）。tagName は文字列のため浅い `===` で足りる。
+
+### inline tag の非対応（明示）
+
+本文中の `#tag`（inline tag）は `note.*`（frontmatter）に乗らず `entry.getValue("note.tags")` では読めないため**非対応**。frontmatter `tags` のみを対象とする旨を設定 UI（タグ軸設定の説明文＝`*TagDesc`）に明示する（AC5・`i18n.test.ts` が inline 明示を検証）。
+
+### 主要な設計判断（現行の理由）
+
+- **absent/false = 案 A**（上記表）: absent=未分類・非所属=false で boolean/number 軸および「absent と false を区別」原則と一貫。foundation 既実装を活かす。
+- **読み取りは native `ListValue.includes(new TagValue)`（`.data` を手パースしない）**: 実装メモの明示指針に忠実で、Value 層の loose-equals（`#`/大小吸収）をそのまま活かす。純ロジック `interpretAxis` の tag 分岐（bare 文字列 exact）へ寄せず native を使うのは、この loose-equals を失わないため（code-simplifier も同理由でこの分岐の interpretAxis 統合を却下）。読み書きの `#`/大小整合は §9 の実機確認へ委ねる。
+- **tagName 供給は `tagAxis.resolveTagNames` ＋引数注入**: `numberThreshold` と対称の per-axis ハイブリッド。spec 一本化（`resolveAxisSpecs`）ではなく tagNames の引数注入にしたのは、`readAxis`↔`tagAxis` の循環 import を避けつつ読み書き・ガードで同一 tagName を共有するため（kind は各接触点が値型 dispatch と tagName 優先で決める）。tag>number>boolean の優先順位で誤設定も決定的に解決する。
+- **書き込み側同一キーの kind-aware 化＋累積書き込みを本 L2 に含める**: #124 が読み取り側のみ kind-aware 化し、書き込み側同期を「後続 L2（＝本 Issue）の作業項目」と明記したため。含めないと本命 2 タグ構成が「掴めるのに必ず失敗」する。同一キーは `planWriteBack` の working 累積で 1 write に集約し undo 整合を保つ。
+- **undo は配列値等価**: `===` は配列に効かず round-trip 後に別オブジェクトになるため、値等価補強が無いとタグ軸 undo が機能しない（AC4）。
+
+### 新規/変更モジュール（#125・実装済み）
+
+- **新規** `src/bases/tagAxis.ts`＝`toTagName`（`#` 剥がし・空判定）・`resolveTagNames`（ビュー options 主・設定既定・churn 耐性）・option キー。`numberThreshold.ts` のミラー。
+- **変更** `src/bases/readAxis.ts`＝`readSingleAxisReading`／`readAxisReadings` に `tagName`／`tagNames` を追加し native `ListValue.includes` の tag 分岐を配線／`resolveWritableAxisKeys` に `tagNames` を追加し tag×tag×異 tagName 合法へ kind-aware 化（引数注入・`toAxisRaw` は不変＝ListValue は非タグ軸で従来どおりロック）。
+- **変更** `src/bases/writeBackPlan.ts`＝`axisSpecForWrite` に `tagName` 引数（tag 優先）を追加／`planWriteBack` に `tagNames` を追加しキー単位 working 累積（同一キー 2 タグを 1 write に集約）。
+- **変更** `src/bases/toViewModel.ts`＝`resolveTagNames` を解決し `tagAwareSpecs` で診断（`axesShareWritableKey`）と読み取り（`readAxisReadings`）へ渡す。
+- **変更** `src/bases/EisenhowerBasesView.ts`＝`writeBackAxes` で `resolveTagNames` を解決し `resolveWritableAxisKeys`／`planWriteBack` へ渡す。
+- **変更** `src/logic/undo.ts`＝`isUndoApplicable` を配列の値等価対応（`isSameWrittenValue`・非配列は `===` 不変）。
+- **変更** `src/settings.ts`＝`defaultUrgencyTag`／`defaultImportanceTag`（空文字＝未設定）＋`mergeTagString`。`src/settingsTab.ts`＝タグ軸設定 UI（テキスト入力・inline 非対応注記は説明文）。
+- **変更** `src/i18n.ts`＝タグ軸の en/ja 文言（`urgencyTagName/Desc`・`importanceTagName/Desc`・inline 非対応明示）。
+- **変更** `src/test-support/obsidianStub.ts`＝`ListValue`（`includes`/`length`/`get`）／`TagValue`（`StringValue` 継承相当）を追加（bare 正規化で loose-equals を代役）。
+- **不変**: `src/logic/axis.ts`（tag 分岐は #120 で既実装・変更なし）・`src/bases/viewOptions.ts`（タグ名 GUI は numberThreshold と同型で未登録＝`.base` view config で効く）・UI コンポーネント（象限配置・ドラッグは既存経路＝boolean/number と同型・差分 0 件）。
+
+### テスト方針（TDD 対象・実装済み）
+
+- `src/logic/undo.test.ts`＝`isUndoApplicable` の配列値等価（同値配列→true・要素差/順序差→false・空配列→true・非配列→false・非配列 `===` 回帰）。
+- `src/bases/tagAxis.test.ts`＝`toTagName`（`#` 剥がし・空→null・非文字列→null）・`resolveTagNames`（options 主・設定既定フォールバック・churn 耐性）。
+- `src/bases/readAxis.test.ts`＝タグ軸読み取り（includes→true/false・absent→未分類・非リスト→ロック・`#` 前置吸収）／`resolveWritableAxisKeys` の tag×tag×異 tagName 合法・同 tagName ブロック・異 kind 同一キー→null・回帰。
+- `src/bases/writeBackPlan.test.ts`＝`axisSpecForWrite` の tag 優先／`planWriteBack` の add/remove 他要素温存・absent 新規・同一キー累積。
+- `src/i18n.test.ts`＝タグ軸新規キーが en/ja 両方に存在（欠落検出）・inline 非対応明示。
+- 実機往復（タグ軸の掴み→ドロップ→add/remove→undo・他要素温存・`#`/大小吸収）は実機 Obsidian 必須＝**マージ後の手動スモーク**に残す（`scripts/e2e` にタグフィクスチャ）。
 
 ## UI/画面設計（F1 範囲＝シェル＋状態表示）
 

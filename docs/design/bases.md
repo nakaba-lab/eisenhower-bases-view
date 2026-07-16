@@ -571,6 +571,7 @@ frontmatter の `tags`（`ListValue`＝要素 `TagValue`）に、軸ごとに設
 
 - タグ軸（tagName 設定済み）は `readSingleAxisReading` の tag 分岐で判定する: 値が **`instanceof ListValue`** なら **ネイティブ `value.includes(new TagValue(tagName))`（loose-equals）**で包含を求め `{side, locked:false}` を返す（`.data` の内部表現は手パースしない＝実装メモの「includes(new TagValue(name))」に忠実）。`absent`（`NullValue`）は未分類・非ロック（ドロップで新規付与＝決定A）。`ListValue` でない present 値（型不一致）は保護ロック（ドラッグ上書きでの破壊を防ぐ）。
 - ⚠️ **`#` 前置・大文字小文字の吸収は実機確認事項（要件 §9）**: Value 層の `ListValue.includes(new TagValue(name))`（loose-equals）は `#`/大小差を吸収しうる。`toTagName` は入力側で `#` を剥がして bare 名を渡すが、実機 `TagValue` 表現（`#` 有無・大小・入れ子 `#a/b`）の loose-equals 挙動は CI（obsidianStub＝bare exact 代役）で検証できないため、`scripts/e2e` プローブでの実機確認をマージ後スモークに残す（#122 の「手動/結合で担保」と同じ整理）。実機で `#`/大小の扱いが確定したら本節へ反映する。
+- ⚠️ **同一キー 2 タグ軸の loose-equals 衝突（マージ後スモークで確認・code-reviewer 指摘）**: `resolveWritableAxisKeys` の合法判定は tagName の **exact 文字列比較**（`differentTags`）だが、実 read は loose-equals。両軸を `#`/大小のみ差のある tagName（例 `urgent`／`Urgent`）で同一キーに設定すると、ガードは「異 tagName＝合法」と通すのに実機の case-fold で単一の格納タグが両軸を同時点灯させ、片方ドラッグが他方へ波及（スナップバック）しうる。データ破壊ではなく分類の食い違いで severity は低いが、実機で loose-equals の `#`/大小挙動が確定したら、必要に応じてガードの tagName 比較も同じ正規化へ揃える。`scripts/e2e` の同一キー 2 タグフィクスチャにこの loose-collision ケースを含める。
 - 書き戻し側は `planAxisWrite` の tag 分岐が **bare 文字列配列**（`processFrontMatter` の plain `frontmatter.tags`）に対し `array.includes(spec.tag)` の完全一致で判定する。読み（native loose-equals）と書き（bare exact）の非対称は上記実機確認の対象で、frontmatter tags が bare 保存・tagName が bare（`toTagName`）である限り整合する。
 
 ### tagName 供給（決定: #121 の per-axis ハイブリッドを踏襲・kind 優先順位）

@@ -312,7 +312,7 @@ describe("axisSpecForWrite — 選択（select）軸の spec 供給（#123 v0.3-
   const selectValues = { trueValue: "high", falseValue: "low" };
 
   it("axisSpecForWrite — string current + selectValues → select spec", () => {
-    expect(axisSpecForWrite(null, strRaw("high"), selectValues)).toEqual({
+    expect(axisSpecForWrite(null, strRaw("high"), null, selectValues)).toEqual({
       kind: "select",
       trueValue: "high",
       falseValue: "low",
@@ -320,7 +320,7 @@ describe("axisSpecForWrite — 選択（select）軸の spec 供給（#123 v0.3-
   });
 
   it("axisSpecForWrite — absent + selectValues（threshold なし）→ select spec（新規分類で代表値を書ける）", () => {
-    expect(axisSpecForWrite(null, absent, selectValues)).toEqual({
+    expect(axisSpecForWrite(null, absent, null, selectValues)).toEqual({
       kind: "select",
       trueValue: "high",
       falseValue: "low",
@@ -328,7 +328,7 @@ describe("axisSpecForWrite — 選択（select）軸の spec 供給（#123 v0.3-
   });
 
   it("axisSpecForWrite — absent で threshold と selectValues が両設定 → 数値軸を優先（読み取りと整合・決定）", () => {
-    expect(axisSpecForWrite(3, absent, selectValues)).toEqual({ kind: "number", threshold: 3 });
+    expect(axisSpecForWrite(3, absent, null, selectValues)).toEqual({ kind: "number", threshold: 3 });
   });
 
   it("axisSpecForWrite — selectValues なしの string は boolean spec（#34 不変・書き込み側で保護）", () => {
@@ -338,6 +338,7 @@ describe("axisSpecForWrite — 選択（select）軸の spec 供給（#123 v0.3-
 
 describe("planWriteBack — 選択（select）軸の書き戻し配線（#123 v0.3-2）", () => {
   const noThresholds: NumberThresholds = { urgent: null, important: null };
+  const noTags = { urgent: null, important: null };
   // 緊急軸だけ select（high/low）、重要軸は select オフ。
   const selectValues = {
     urgent: { trueValue: "high", falseValue: "low" },
@@ -347,28 +348,28 @@ describe("planWriteBack — 選択（select）軸の書き戻し配線（#123 v0
   it("planWriteBack — 越境（low→true）は trueValue を書く（AC2）", () => {
     const frontmatter: FrontmatterLike = { urgent: "low", important: true };
     const sides: AxisWriteValues = { urgent: true, important: true };
-    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, noTags, selectValues);
     expect(writes).toContainEqual({ key: "urgent", value: "high" });
   });
 
   it("planWriteBack — 同じ側（high→true）は書かない（文字列を温存・AC2）", () => {
     const frontmatter: FrontmatterLike = { urgent: "high", important: true };
     const sides: AxisWriteValues = { urgent: true, important: true };
-    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, noTags, selectValues);
     expect(writes.find((w) => w.key === "urgent")).toBeUndefined();
   });
 
   it("planWriteBack — 未知値（medium・locked）へのドロップは書かない（既存値を保護・AC1/決定#3）", () => {
     const frontmatter: FrontmatterLike = { urgent: "medium", important: true };
     const sides: AxisWriteValues = { urgent: true, important: true };
-    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, noTags, selectValues);
     expect(writes.find((w) => w.key === "urgent")).toBeUndefined();
   });
 
   it("planWriteBack — absent の select 軸へ false ドロップは falseValue を書く（新規分類）", () => {
     const frontmatter: FrontmatterLike = { important: true };
     const sides: AxisWriteValues = { urgent: false, important: true };
-    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, selectValues);
+    const writes = planWriteBack(frontmatter, keys, sides, noThresholds, noTags, selectValues);
     expect(writes).toContainEqual({ key: "urgent", value: "low" });
   });
 
@@ -377,5 +378,93 @@ describe("planWriteBack — 選択（select）軸の書き戻し配線（#123 v0
     const sides: AxisWriteValues = { urgent: false, important: true };
     const writes = planWriteBack(frontmatter, keys, sides, noThresholds);
     expect(writes.find((w) => w.key === "urgent")).toBeUndefined();
+  });
+});
+
+describe("axisSpecForWrite — タグ軸（tagName 優先・#125）", () => {
+  const arrRaw = (value: readonly unknown[]): AxisRaw => ({ kind: "array", value });
+
+  it("axisSpecForWrite — tagName あり × 配列 current → tag spec", () => {
+    expect(axisSpecForWrite(null, arrRaw(["work"]), "urgent")).toEqual({
+      kind: "tag",
+      tag: "urgent",
+    });
+  });
+
+  it("axisSpecForWrite — tagName あり × absent → tag spec（absent もタグ軸として代表値を書ける）", () => {
+    expect(axisSpecForWrite(null, absent, "urgent")).toEqual({ kind: "tag", tag: "urgent" });
+  });
+
+  it("axisSpecForWrite — kind 優先順位 tag > number: tagName と threshold の両方設定でも tag を採る", () => {
+    expect(axisSpecForWrite(3, numRaw(5), "urgent")).toEqual({ kind: "tag", tag: "urgent" });
+  });
+
+  it("axisSpecForWrite — tagName null は従来どおり number/boolean（回帰）", () => {
+    expect(axisSpecForWrite(3, numRaw(5), null)).toEqual({ kind: "number", threshold: 3 });
+    expect(axisSpecForWrite(null, boolRaw(true), null)).toEqual({ kind: "boolean" });
+  });
+});
+
+describe("planWriteBack — タグ軸の add/remove（他要素温存・#125 AC3）", () => {
+  const NO_THRESHOLDS: NumberThresholds = { urgent: null, important: null };
+  // urgent 軸を tag 軸（key=utags・tag=urgent）、important を boolean 軸（key=important）に設定。
+  const tagKeys: WritableAxisKeys = { urgent: "utags", important: "important" };
+  const tagNames = { urgent: "urgent", important: null };
+
+  it("planWriteBack — true 側ドロップで配列に tagName を add（他要素 work を温存・全置換しない）", () => {
+    const frontmatter: FrontmatterLike = { utags: ["work"], important: false };
+    const sides: AxisWriteValues = { urgent: true, important: false };
+    const writes = planWriteBack(frontmatter, tagKeys, sides, NO_THRESHOLDS, tagNames);
+    const utagsWrite = writes.find((w) => w.key === "utags");
+    expect(utagsWrite?.value).toEqual(["work", "urgent"]);
+  });
+
+  it("planWriteBack — false 側ドロップで tagName を remove（work は温存）", () => {
+    const frontmatter: FrontmatterLike = { utags: ["work", "urgent"], important: false };
+    const sides: AxisWriteValues = { urgent: false, important: false };
+    const writes = planWriteBack(frontmatter, tagKeys, sides, NO_THRESHOLDS, tagNames);
+    expect(writes.find((w) => w.key === "utags")?.value).toEqual(["work"]);
+  });
+
+  it("planWriteBack — 既に目標側なら書かない（値温存・AC4）", () => {
+    const frontmatter: FrontmatterLike = { utags: ["work", "urgent"], important: false };
+    const sides: AxisWriteValues = { urgent: true, important: false };
+    const writes = planWriteBack(frontmatter, tagKeys, sides, NO_THRESHOLDS, tagNames);
+    // urgent は既に true 側 → utags は書かれない（important のみ）
+    expect(writes.some((w) => w.key === "utags")).toBe(false);
+  });
+
+  it("planWriteBack — absent のタグ軸を true 側へ → [tagName] を新規に書く（新規分類）", () => {
+    const frontmatter: FrontmatterLike = { important: false };
+    const sides: AxisWriteValues = { urgent: true, important: false };
+    const writes = planWriteBack(frontmatter, tagKeys, sides, NO_THRESHOLDS, tagNames);
+    expect(writes.find((w) => w.key === "utags")?.value).toEqual(["urgent"]);
+  });
+});
+
+describe("planWriteBack — 同一キー 2 タグ軸の累積書き込み（#125・#124 の書き込み側同期）", () => {
+  const NO_THRESHOLDS: NumberThresholds = { urgent: null, important: null };
+  // 本命: tags 1 本に urgent/important の 2 タグ（同一キー・異 tagName）。
+  const sameKey: WritableAxisKeys = { urgent: "tags", important: "tags" };
+  const tagNames = { urgent: "urgent", important: "important" };
+
+  it("planWriteBack — 両タグ add は同一キーに累積し 1 write（後勝ちで潰し合わない）", () => {
+    const frontmatter: FrontmatterLike = { tags: ["work"] };
+    const sides: AxisWriteValues = { urgent: true, important: true };
+    const writes = planWriteBack(frontmatter, sameKey, sides, NO_THRESHOLDS, tagNames);
+    // then: tags キーは 1 回だけ書かれ、work + urgent + important を全て持つ
+    const tagsWrites = writes.filter((w) => w.key === "tags");
+    expect(tagsWrites).toHaveLength(1);
+    expect(tagsWrites[0].value).toEqual(["work", "urgent", "important"]);
+  });
+
+  it("planWriteBack — 片方 remove・片方据え置きも累積で正しく解決する", () => {
+    const frontmatter: FrontmatterLike = { tags: ["work", "urgent", "important"] };
+    const sides: AxisWriteValues = { urgent: false, important: true };
+    const writes = planWriteBack(frontmatter, sameKey, sides, NO_THRESHOLDS, tagNames);
+    const tagsWrites = writes.filter((w) => w.key === "tags");
+    expect(tagsWrites).toHaveLength(1);
+    // urgent 除去・important/work 温存
+    expect(tagsWrites[0].value).toEqual(["work", "important"]);
   });
 });

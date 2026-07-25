@@ -123,6 +123,26 @@ export function applyUndo(frontmatter: FrontmatterLike, record: UndoRecord): voi
 }
 
 /**
+ * 記録した書込値と現在値が同一かを判定する（#125 AC4 で配列＝タグ軸に対応）。
+ *
+ * プリミティブ（boolean/number/string 等）は `===`（参照＝値）で足りるが、**タグ軸の書き戻しは
+ * frontmatter の `tags` 配列を add/remove した新配列を書く**ため、`processFrontMatter` の round-trip 後の
+ * `frontmatter[key]` は記録した `wrote` とは**別オブジェクト**になり `===` が常に不一致になる（undo が
+ * 一度も適用されない）。よって**両辺とも配列のときだけ要素単位の値等価**（長さ＋各要素 `===`）で比較し、
+ * それ以外は従来どおり `===`（プリミティブ回帰・型が変わった場合は不一致）。tagName は文字列のため要素の
+ * 浅い `===` で足りる（ネストした配列/オブジェクトの深い等価は tags 軸では発生しない）。
+ */
+function isSameWrittenValue(current: unknown, wrote: unknown): boolean {
+  if (Array.isArray(current) && Array.isArray(wrote)) {
+    return (
+      current.length === wrote.length &&
+      current.every((element, index) => element === wrote[index])
+    );
+  }
+  return current === wrote;
+}
+
+/**
  * 記録した「書き込んだ値」（各 {@link UndoEntry.wrote}）がいまも全キーに残っているか
  *（＝この記録が指すノートが、記録時に自分が書き込んだ状態のままか）を判定する純関数。
  *
@@ -130,12 +150,15 @@ export function applyUndo(frontmatter: FrontmatterLike, record: UndoRecord): voi
  * ユーザー/他プラグインがキー値を書き換えていた場合、記録した `previous` を適用すると無関係な値を
  * 上書き/`delete` しうる（undo は唯一の delete 経路のため影響が大きい）。適用前に本判定で「全キーが
  * 自分の書いた値のままか」を照合し、一つでも不一致なら復元しない（呼び出し側は記録を破棄する）。
+ * 配列（タグ軸）は値等価で照合する（{@link isSameWrittenValue}・#125 AC4）。
  */
 export function isUndoApplicable(
   frontmatter: FrontmatterLike,
   record: UndoRecord,
 ): boolean {
-  return record.entries.every((entry) => frontmatter[entry.key] === entry.wrote);
+  return record.entries.every((entry) =>
+    isSameWrittenValue(frontmatter[entry.key], entry.wrote),
+  );
 }
 
 /**

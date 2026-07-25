@@ -60,6 +60,16 @@ export interface EisenhowerSettings {
   /** 重要度軸の数値しきい値（#121 v0.3-1a）。**空文字＝未設定**。設定時は `value >= threshold` で重要側へ配置。 */
   defaultImportanceThreshold: string;
   /**
+   * 緊急度軸を**タグ軸**として扱うときの tagName（#125 v0.3-3b）。**空文字＝未設定（タグ軸オフ）**。
+   * 設定時は軸プロパティ（`tags` 等の配列プロパティ）に当該タグを含むノートを緊急側へ配置し、ドラッグ
+   * 再分類で配列に tagName を add/remove（他要素温存）する。`#` 前置は `toTagName` が bare 形へ正規化する。
+   * ビュー options 未設定時のグローバル既定（軸プロパティ・数値しきい値と同じハイブリッド）。**inline tag
+   *（本文 `#tag`）は frontmatter に乗らないため非対応**（frontmatter `tags` のみ対象）。
+   */
+  defaultUrgencyTag: string;
+  /** 重要度軸の tagName（#125 v0.3-3b）。**空文字＝未設定**。設定時は配列プロパティへの当該タグ包含で重要側へ配置。 */
+  defaultImportanceTag: string;
+  /**
    * 緊急度軸を**選択（select）軸**として扱うときの true 側／false 側の代表文字列（#123 v0.3-2）。
    * **両方非空かつ互いに異なるとき有効**（片方空・同値は選択軸オフ＝v1 の boolean 軸挙動を維持）。設定時は
    * 当該軸の文字列値が `trueValue` 一致で緊急側・`falseValue` 一致で非緊急側・それ以外（3 値目 `medium` 等）は
@@ -96,6 +106,8 @@ export const DEFAULT_SETTINGS: EisenhowerSettings = {
   dimCompleted: false,
   defaultUrgencyThreshold: "",
   defaultImportanceThreshold: "",
+  defaultUrgencyTag: "",
+  defaultImportanceTag: "",
   defaultUrgencySelectTrueValue: "",
   defaultUrgencySelectFalseValue: "",
   defaultImportanceSelectTrueValue: "",
@@ -137,6 +149,15 @@ function mergeThresholdString(raw: unknown): string {
   if (typeof raw === "string") return raw.trim();
   if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
   return "";
+}
+
+/**
+ * `loadData()` 由来のタグ名（#125 v0.3-3b）を文字列へ整える。設定は string（`""`＝未設定＝タグ軸オフ）で
+ * 持ち、前後空白をトリムする。`#` の剥がし・空判定など実際の解釈は解決側 `tagAxis.toTagName` に一本化する
+ *（`mergeThresholdString` と同じ「永続層は string 化のみ・解釈は解決側」流儀）。非文字列・欠損は既定（空文字）へ。
+ */
+function mergeTagString(raw: unknown): string {
+  return typeof raw === "string" ? raw.trim() : "";
 }
 
 const LANGUAGE_SETTINGS: readonly LanguageSetting[] = ["auto", "en", "ja"];
@@ -210,6 +231,8 @@ export function mergeSettings(loaded: unknown): EisenhowerSettings {
         : DEFAULT_SETTINGS.dimCompleted,
     defaultUrgencyThreshold: mergeThresholdString(data.defaultUrgencyThreshold),
     defaultImportanceThreshold: mergeThresholdString(data.defaultImportanceThreshold),
+    defaultUrgencyTag: mergeTagString(data.defaultUrgencyTag),
+    defaultImportanceTag: mergeTagString(data.defaultImportanceTag),
     // 選択軸の代表文字列（#123）: 軸プロパティ名と同型に前後トリム（設定タブのライブ編集と一致）・非文字列は既定（空＝オフ）。
     defaultUrgencySelectTrueValue: mergePropertyName(data.defaultUrgencySelectTrueValue, ""),
     defaultUrgencySelectFalseValue: mergePropertyName(data.defaultUrgencySelectFalseValue, ""),

@@ -97,6 +97,61 @@ export class ErrorValue {
   }
 }
 
+/** タグ表記から先頭の `#` を 1 つ剥がして bare 名にする（`#urgent`→`urgent`・`urgent`→`urgent`）。 */
+function toBareTag(raw: string): string {
+  return raw.startsWith("#") ? raw.slice(1) : raw;
+}
+
+/**
+ * タグ値（実機 `TagValue extends StringValue` 相当・#125 v0.3-3b）。frontmatter `tags` リストの 1 要素。
+ * 実機は `constructor(value: string)`・`toString()` は値を verbatim で返す（StringValue 継承）。タグを Value 層で
+ * `#` 前置（`#urgent`）で表すことがあり、`ListValue.includes` の loose-equals が `#`/大小差を吸収しうる
+ *（要件 §9・実機確認事項）。本スタブは `toString()` を verbatim（実機 StringValue と同じ）にし、包含比較の
+ * `#` 正規化は {@link ListValue.includes} 側に置く（決定論的・単体テスト可能）。⚠️ 実機 loose-equals の
+ * `#`/大小 fold 同値性は単体では検証不能（`NullValue`/`BooleanValue` と同型の限界）＝`scripts/e2e` プローブで担保。
+ */
+export class TagValue {
+  constructor(private readonly value: string) {}
+  /** 実機 StringValue 同様に値を verbatim で返す（`new TagValue("urgent")`→`"urgent"`）。 */
+  toString(): string {
+    return this.value;
+  }
+  isTruthy(): boolean {
+    return this.value.length > 0;
+  }
+}
+
+/**
+ * リスト値（実機 `ListValue extends NotNullValue` 相当・#125 v0.3-3b）。frontmatter の `tags`（配列プロパティ）。
+ * `readAxis.readSingleAxisReading` が **`instanceof ListValue`** で振り分け、**ネイティブ
+ * `includes(new TagValue(name))`**（`.data` を手パースしない）でタグ包含を判定する（AC1・要件 §9）。実機 API に
+ * 合わせ `constructor(value)`・`includes(value): boolean`・`length()`・`get(index)`・`isTruthy()`・`toString()` を持つ。
+ * `includes` は要素・引数を **bare 正規化**（`#` を剥がす）してから完全一致で比較する＝実機 loose-equals の
+ * 「`#` 吸収」を決定論的に代役する（大小 fold は実機依存＝`scripts/e2e` で確認）。要素は文字列 or `Value`（`TagValue` 等）。
+ */
+export class ListValue {
+  private readonly elements: readonly unknown[];
+  constructor(value: readonly unknown[]) {
+    this.elements = value;
+  }
+  /** 引数タグを bare 正規化して含むか（実機 loose-equals の代役＝`#` 吸収・exact case）。 */
+  includes(target: unknown): boolean {
+    const wanted = toBareTag(String(target));
+    return this.elements.some((element) => toBareTag(String(element)) === wanted);
+  }
+  /** 要素数（実機 `length(): number`）。 */
+  length(): number {
+    return this.elements.length;
+  }
+  /** index の要素（実機は範囲外で `NullValue`。スタブは undefined を返す最小実装）。 */
+  get(index: number): unknown {
+    return this.elements[index];
+  }
+  isTruthy(): boolean {
+    return this.elements.length > 0;
+  }
+}
+
 /**
  * `Notice` スタブ（実機 `new Notice(message)` 相当）。実機はトーストを表示するが単体では
  * 描画できないため、生成メッセージを静的配列に記録して検証に使う（`runUndo` 等の Notice 経路を

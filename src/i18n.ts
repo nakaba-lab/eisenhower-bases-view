@@ -162,6 +162,14 @@ export interface SettingsMessages {
   importanceThresholdName: string;
   /** 重要度しきい値設定の説明（#121）。 */
   importanceThresholdDesc: string;
+  /** 緊急度タグ（タグ軸）設定の名前（#125 v0.3-3b）。 */
+  urgencyTagName: string;
+  /** 緊急度タグ設定の説明（配列プロパティに当該タグを含むノートを緊急側へ・空で無効・inline tag 非対応・#125）。 */
+  urgencyTagDesc: string;
+  /** 重要度タグ（タグ軸）設定の名前（#125 v0.3-3b）。 */
+  importanceTagName: string;
+  /** 重要度タグ設定の説明（#125）。 */
+  importanceTagDesc: string;
   displayHeading: string;
   showUnclassifiedName: string;
   showUnclassifiedDesc: string;
@@ -266,6 +274,12 @@ const JA: Messages = {
     importanceThresholdName: "重要度しきい値（数値軸）",
     importanceThresholdDesc:
       "重要度軸を数値で判定するときのしきい値（値がこの値以上なら重要側）。空で無効。数値軸のカードは現在ドラッグできません（表示のみ）。ビュー未設定時のデフォルト。",
+    urgencyTagName: "緊急度タグ（タグ軸）",
+    urgencyTagDesc:
+      "緊急度軸をタグで判定するときのタグ名（軸プロパティの配列にこのタグを含むノートを緊急側へ）。空で無効。ドラッグで配列にタグを付け外しし、他のタグは温存します。本文中の #タグ（inline tag）は frontmatter に乗らないため非対応です（frontmatter の tags 等のみ対象）。ビュー未設定時のデフォルト。",
+    importanceTagName: "重要度タグ（タグ軸）",
+    importanceTagDesc:
+      "重要度軸をタグで判定するときのタグ名（軸プロパティの配列にこのタグを含むノートを重要側へ）。空で無効。本文中の #タグ（inline tag）は非対応（frontmatter の tags 等のみ対象）。ビュー未設定時のデフォルト。",
     displayHeading: "表示",
     showUnclassifiedName: "欠損ノートを未分類に表示",
     showUnclassifiedDesc: "軸プロパティを持たないノートを未分類ゾーンに表示する。",
@@ -378,6 +392,12 @@ const EN: Messages = {
     importanceThresholdName: "Importance threshold (numeric axis)",
     importanceThresholdDesc:
       "Threshold for treating the importance axis as numeric (important when the value is at or above it). Empty disables it. Numeric-axis cards can't be dragged yet (display only). Default when the view has none set.",
+    urgencyTagName: "Urgency tag (tag axis)",
+    urgencyTagDesc:
+      "Tag name for treating the urgency axis as a tag axis (notes whose axis-property list contains this tag go to the urgent side). Empty disables it. Dragging adds or removes the tag in the list and preserves other tags. Inline tags in the note body (#tag) are not supported because they aren't stored in frontmatter (only frontmatter lists such as tags). Default when the view has none set.",
+    importanceTagName: "Importance tag (tag axis)",
+    importanceTagDesc:
+      "Tag name for treating the importance axis as a tag axis (notes whose axis-property list contains this tag go to the important side). Empty disables it. Inline tags in the note body (#tag) are not supported (only frontmatter lists such as tags). Default when the view has none set.",
     displayHeading: "Display",
     showUnclassifiedName: "Show notes with missing axes as unclassified",
     showUnclassifiedDesc: "Show notes without axis properties in the unclassified zone.",

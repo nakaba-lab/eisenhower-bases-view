@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasesEntry, BasesPropertyId, BasesViewConfig, Value } from "obsidian";
-import { BooleanValue, NullValue, NumberValue, StringValue } from "obsidian";
+import { BooleanValue, ListValue, NullValue, NumberValue, StringValue, TagValue } from "obsidian";
 import { DEFAULT_SETTINGS } from "../settings";
 import {
   COMPLETION_OPTION_KEY,
@@ -858,5 +858,118 @@ describe("obsidianStub — NumberValue/ErrorValue の整合（#121 AC4）", () =
     expect(errorValue instanceof ErrorValue).toBe(true);
     expect(errorValue instanceof NumberValue).toBe(false);
     expect(errorValue instanceof BooleanValue).toBe(false);
+  });
+});
+
+describe("readAxisReadings — タグ軸の kind-aware 読み取り（#125 v0.3-3b）", () => {
+  const ids: AxisPropertyIds = {
+    urgent: "note.tags" as BasesPropertyId,
+    important: "note.tags" as BasesPropertyId,
+  };
+  const NO_THRESHOLDS = { urgent: null, important: null };
+  // urgent 軸だけタグ軸（tag=urgent）、important は非タグ軸（null）で回帰用に固定する。
+  const readUrgent = (value: Value | null) =>
+    readAxisReadings(
+      mockEntry({ "note.tags": value, "note.important": TRUE }),
+      { urgent: "note.tags" as BasesPropertyId, important: "note.important" as BasesPropertyId },
+      NO_THRESHOLDS,
+      { urgent: "urgent", important: null },
+    ).urgent;
+
+  it("AC1 — tags に当該タグを含む ListValue は true 側・非ロック（includes 包含判定）", () => {
+    const reading = readUrgent(new ListValue([new TagValue("urgent"), new TagValue("work")]));
+    expect(reading).toEqual({ side: true, locked: false });
+  });
+
+  it("AC2（決定A）— tags 有りで当該タグ無しは false 側・非ロック（非所属＝false）", () => {
+    const reading = readUrgent(new ListValue([new TagValue("work")]));
+    expect(reading).toEqual({ side: false, locked: false });
+  });
+
+  it("AC2（決定A）— tags キー無し（absent＝NullValue）は未分類・非ロック（ドロップ可）", () => {
+    const reading = readUrgent(NullValue.value);
+    expect(reading).toEqual({ side: undefined, locked: false });
+  });
+
+  it("AC1 — Value 層で # 前置（#urgent）のタグでも bare 名で包含一致する（loose-equals の # 吸収を代役）", () => {
+    const reading = readUrgent(new ListValue([new TagValue("#urgent")]));
+    expect(reading.side).toBe(true);
+  });
+
+  it("タグ軸に非リスト値（boolean 等）が入っていたら保護ロック（型不一致・上書き破壊を防ぐ）", () => {
+    expect(readUrgent(TRUE)).toEqual({ side: undefined, locked: true });
+    expect(readUrgent(new NumberValue(3))).toEqual({ side: undefined, locked: true });
+  });
+
+  it("空 tags（要素なし ListValue）は false 側・非ロック（非所属）", () => {
+    expect(readUrgent(new ListValue([]))).toEqual({ side: false, locked: false });
+  });
+
+  it("tagName 未設定（null）の軸に ListValue が入っていたら未対応で保護ロック（タグ軸として扱わない）", () => {
+    // given: important 軸は tagName=null（非タグ軸）だが値は ListValue
+    const readings = readAxisReadings(
+      mockEntry({ "note.tags": new ListValue([new TagValue("work")]) }),
+      ids,
+      NO_THRESHOLDS,
+      { urgent: "urgent", important: null },
+    );
+    // then: important（tagName=null）は ListValue を解釈できず locked
+    expect(readings.important).toEqual({ side: undefined, locked: true });
+    // urgent（tag=urgent）は work 非所属で false 側
+    expect(readings.urgent).toEqual({ side: false, locked: false });
+  });
+
+  it("tagNames 省略（従来 3 引数）は boolean 軸の挙動不変（回帰）", () => {
+    const booleanIds: AxisPropertyIds = {
+      urgent: "note.urgent" as BasesPropertyId,
+      important: "note.important" as BasesPropertyId,
+    };
+    const entry = mockEntry({ "note.urgent": TRUE, "note.important": FALSE });
+    // 4 引数なし＝タグ軸オフ。BooleanValue は従来どおり配置される。
+    const readings = readAxisReadings(entry, booleanIds, NO_THRESHOLDS);
+    expect(readings.urgent.side).toBe(true);
+    expect(readings.important.side).toBe(false);
+  });
+});
+
+describe("resolveWritableAxisKeys — 同一キーの kind-aware 化（#125・#124 の書き込み側同期）", () => {
+  // 両軸が同一 note.tags を指す設定（本命: tags 1 本に urgent/important の 2 タグ）。
+  const sameKeyConfig = mockConfig({
+    [URGENT_OPTION_KEY]: "note.tags" as BasesPropertyId,
+    [IMPORTANT_OPTION_KEY]: "note.tags" as BasesPropertyId,
+  });
+
+  it("tag×tag・同一キー・異 tagName は合法＝キーを返す（書き込みを通す）", () => {
+    const tagNames = { urgent: "urgent", important: "important" };
+    expect(resolveWritableAxisKeys(sameKeyConfig, DEFAULT_SETTINGS, tagNames)).toEqual({
+      urgent: "tags",
+      important: "tags",
+    });
+  });
+
+  it("tag×tag・同一キー・同一 tagName は設定ミスで null（互いに潰し合う）", () => {
+    const tagNames = { urgent: "urgent", important: "urgent" };
+    expect(resolveWritableAxisKeys(sameKeyConfig, DEFAULT_SETTINGS, tagNames)).toBeNull();
+  });
+
+  it("片軸のみタグ軸（他方非タグ）で同一キーは null（異 kind 同一キーは共存不能）", () => {
+    const tagNames = { urgent: "urgent", important: null };
+    expect(resolveWritableAxisKeys(sameKeyConfig, DEFAULT_SETTINGS, tagNames)).toBeNull();
+  });
+
+  it("tagNames 省略（従来 2 引数）は同一キーを従来どおり null（回帰）", () => {
+    expect(resolveWritableAxisKeys(sameKeyConfig, DEFAULT_SETTINGS)).toBeNull();
+  });
+
+  it("異なるキーはタグ軸でもそのままキーを返す（同一キーガードの対象外）", () => {
+    const config = mockConfig({
+      [URGENT_OPTION_KEY]: "note.utags" as BasesPropertyId,
+      [IMPORTANT_OPTION_KEY]: "note.itags" as BasesPropertyId,
+    });
+    const tagNames = { urgent: "urgent", important: "important" };
+    expect(resolveWritableAxisKeys(config, DEFAULT_SETTINGS, tagNames)).toEqual({
+      urgent: "utags",
+      important: "itags",
+    });
   });
 });

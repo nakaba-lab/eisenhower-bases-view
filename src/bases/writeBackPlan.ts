@@ -19,10 +19,14 @@ import type { AxisWrite, FrontmatterLike } from "../logic/undo";
 import type { WritableAxisKeys } from "./readAxis";
 import type { NumberThresholds } from "./numberThreshold";
 import type { TagNames } from "./tagAxis";
+import type { AxisSelectValues, SelectValues } from "./selectValues";
 import type { AxisWriteValues } from "./types";
 
 /** 両軸ともタグ軸オフの既定（従来 5 引数なし呼び出し・非タグ軸の回帰用・#125）。 */
 const NO_TAGS: TagNames = { urgent: null, important: null };
+
+/** 選択軸オフの既定（両軸 `null`）。#123 の select 未指定呼び出し・v1 回帰テスト向け（読取側 `NO_SELECT_VALUES` と対）。 */
+const NO_SELECT_VALUES: AxisSelectValues = { urgent: null, important: null };
 
 /**
  * `processFrontMatter` の plain 値（frontmatter[key]）を純ロジック層の {@link AxisRaw} へ正規化する。
@@ -61,13 +65,24 @@ export function axisSpecForWrite(
   threshold: number | null,
   current: AxisRaw,
   tagName: string | null = null,
+  selectValues: SelectValues | null = null,
 ): AxisSpec {
-  // kind 優先順位 tag > number > boolean（#125）: tagName が設定済みなら**常に** tag spec を採る
+  // kind 優先順位 tag > number > select > boolean（#125／#123）: tagName が設定済みなら**常に** tag spec を採る
   //（タグ軸は明示 tagName が唯一のスイッチ・読み取り側 readSingleAxisReading の tagName 優先と対称）。
   // current が配列でなくても planAxisWrite（tag×非配列→locked→null）が上書き破壊を防ぐため安全。
   if (tagName !== null) return { kind: "tag", tag: tagName };
   if (threshold !== null && (current.kind === "number" || current.kind === "absent")) {
     return { kind: "number", threshold };
+  }
+  // 選択（select）軸（#123 v0.3-2）: 現在値が文字列／absent で選択値が設定済みなら select spec を供給する。
+  // absent で数値しきい値と選択値が同一軸に併設された場合は上の number 分岐が先に返す＝**数値軸を優先**
+  //（読み取りが値型で number を選ぶのと整合・決定）。文字列 present は number 分岐に掛からず select spec になる。
+  if (selectValues !== null && (current.kind === "string" || current.kind === "absent")) {
+    return {
+      kind: "select",
+      trueValue: selectValues.trueValue,
+      falseValue: selectValues.falseValue,
+    };
   }
   return { kind: "boolean" };
 }
@@ -94,6 +109,7 @@ export function planWriteBack(
   sides: AxisWriteValues,
   thresholds: NumberThresholds,
   tagNames: TagNames = NO_TAGS,
+  selectValues: AxisSelectValues = NO_SELECT_VALUES,
 ): AxisWrite[] {
   // 同一キーに 2 軸が載る本命（tags 1 本に urgent/important の 2 タグ・#124/#125）に対応するため、
   // 各軸を**キー単位の作業コピー `working`** に対して順に適用し、後段の軸は前段の適用結果を current に読む
@@ -106,7 +122,7 @@ export function planWriteBack(
   for (const axis of AXES) {
     const key = keys[axis];
     const current = frontmatterValueToAxisRaw(working, key);
-    const spec = axisSpecForWrite(thresholds[axis], current, tagNames[axis]);
+    const spec = axisSpecForWrite(thresholds[axis], current, tagNames[axis], selectValues[axis]);
     // 防御的深層防御（データ安全最優先）: boolean spec は boolean/absent 以外の present 値
     //（数値/文字列/配列/object）を上書きしない＝boolean で既存の非 boolean 値を潰さない。
     // 読み取り側ロック（#34/#121: 非 boolean note.* は掴めない）が主ガードだが、render↔write 間で

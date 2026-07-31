@@ -47,7 +47,7 @@ jobs:
       # GitHub Artifact Attestations で生成する。利用者は `gh attestation verify <file> --repo <repo>`
       # で検証できる（Obsidian レビューの Releases 推奨事項）。
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             main.js
